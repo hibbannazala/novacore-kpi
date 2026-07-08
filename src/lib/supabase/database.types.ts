@@ -108,12 +108,17 @@ export interface Database {
       feedbacks: {
         Row: {
           id: string;
-          assignment_id: string;
-          from_user_id: string | null;
+          user_id: string;
+          user_name: string;
+          department: string;
+          role: string;
+          type: "bug" | "feature" | "other";
+          status: "open" | "in_progress" | "resolved" | "rejected";
           message: string;
           created_at: string;
+          updated_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["feedbacks"]["Row"], "id" | "created_at"> & { id?: string; created_at?: string };
+        Insert: Omit<Database["public"]["Tables"]["feedbacks"]["Row"], "id" | "created_at" | "updated_at"> & { id?: string; created_at?: string; updated_at?: string };
         Update: Partial<Database["public"]["Tables"]["feedbacks"]["Insert"]>;
       };
       kpi_histories: {

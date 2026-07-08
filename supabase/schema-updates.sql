@@ -26,7 +26,43 @@ alter table public.kpi_settings
   add column if not exists result_weight   numeric not null default 40,
   add column if not exists activity_weight numeric not null default 30;
 
--- 4. Enable Supabase Realtime pada tabel-tabel kritis
+-- 4. Recreate feedbacks table sebagai bug/feature report system
+-- (tabel lama: assignment_id FK, tidak cocok dengan app)
+drop table if exists public.feedbacks cascade;
+
+create table public.feedbacks (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid references public.users(id) on delete set null,
+  user_name   text not null,
+  department  text not null default '',
+  role        text not null default 'tim',
+  type        text not null default 'other'
+    check (type in ('bug','feature','other')),
+  status      text not null default 'open'
+    check (status in ('open','in_progress','resolved','rejected')),
+  message     text not null,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+alter table public.feedbacks enable row level security;
+
+create policy "feedbacks_read" on public.feedbacks
+  for select using (true);
+
+create policy "feedbacks_insert" on public.feedbacks
+  for insert with check (auth.uid() = user_id);
+
+create policy "feedbacks_update" on public.feedbacks
+  for update using (
+    (select kpi_role from public.users where id = auth.uid()) = 'developer'
+  );
+
+create trigger set_updated_at_feedbacks
+  before update on public.feedbacks
+  for each row execute function public.set_updated_at();
+
+-- 5. Enable Supabase Realtime pada tabel-tabel kritis
 alter publication supabase_realtime add table public.kpi_assignments;
 alter publication supabase_realtime add table public.daily_reports;
 alter publication supabase_realtime add table public.monthly_scores;
