@@ -2,16 +2,16 @@
  * NovaCore KPI — Firebase Firestore → Supabase Migration Script
  *
  * Setup:
- *   1. npm install firebase-admin tsx --save-dev
- *   2. Place firebase-service-account.json in this folder (from Firebase Console → Project Settings → Service Accounts)
- *   3. Get Supabase service_role key from: Supabase Dashboard → Settings → API → service_role
+ * 1. npm install firebase-admin tsx --save-dev
+ * 2. Place firebase-service-account.json in this folder (from Firebase Console → Project Settings → Service Accounts)
+ * 3. Get Supabase service_role key from: Supabase Dashboard → Settings → API → service_role
  *
  * Run:
- *   SUPABASE_SERVICE_ROLE_KEY=your_key npx tsx migrate-to-supabase.ts
+ * SUPABASE_SERVICE_ROLE_KEY=your_key npx tsx migrate-to-supabase.ts
  *
  * Optional flags:
- *   --dry-run    Print what would be migrated without writing to Supabase
- *   --skip-auth  Skip creating Supabase auth users (if they already exist)
+ * --dry-run   Print what would be migrated without writing to Supabase
+ * --skip-auth Skip creating Supabase auth users (if they already exist)
  */
 
 import { initializeApp, cert } from "firebase-admin/app";
@@ -342,7 +342,13 @@ async function migrateAssignments(
 
   for (const ch of chunk(rows, 50)) {
     const dbRows = ch.map(({ _fbId, _monthlyScores, ...rest }) => rest);
-    const { data, error } = await supabase.from("kpi_assignments").insert(dbRows).select("id");
+    
+    // 🔥 PERUBAHAN DI SINI: Gunakan upsert agar data kembar dari Firebase otomatis ditimpa (overwrite)
+    const { data, error } = await supabase
+      .from("kpi_assignments")
+      .upsert(dbRows, { onConflict: "user_id,kpi_id,year,month" })
+      .select("id");
+      
     if (error) { console.error(`  ⚠️  Assignments chunk error: ${error.message}`); continue; }
 
     ch.forEach((item, i) => {
@@ -416,7 +422,11 @@ async function migrateDailyReports(
   if (!DRY_RUN) {
     let count = 0;
     for (const ch of chunk(rows, 200)) {
-      const { error } = await supabase.from("daily_reports").insert(ch);
+      // 🔥 PERUBAHAN DI SINI: Gunakan upsert untuk daily_reports agar aman dari error duplikat
+      const { error } = await supabase
+        .from("daily_reports")
+        .upsert(ch, { onConflict: "assignment_id,date" });
+        
       if (error) console.warn(`  ⚠️  Daily reports chunk error: ${error.message}`);
       else count += ch.length;
     }
@@ -472,7 +482,7 @@ async function migrateFeedbacks(uidMap: Map<string, string>): Promise<void> {
       user_name: data.userName ?? "",
       department: data.department ?? null,
       role: data.role ?? null,
-      type: data.type ?? "general",
+      type: ["bug", "feature", "other"].includes(data.type) ? data.type : "other",
       message: data.message ?? "",
       status: data.status ?? "open",
       created_at: tsToIso(data.createdAt) ?? new Date().toISOString(),
