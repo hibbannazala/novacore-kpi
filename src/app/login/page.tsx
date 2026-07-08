@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
-export default function LoginPage() {
+function LoginContent() {
   const { signInWithGoogle, user, kpiRole, isLoading, devMode } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -30,9 +30,7 @@ export default function LoginPage() {
 
   async function handleGoogleLogin() {
     setSubmitting(true);
-    // signInWithGoogle redirects the page — no return value or error here
     await signInWithGoogle();
-    // If we get here, redirect was blocked (e.g., popup blocker on some environments)
     setSubmitting(false);
   }
 
@@ -97,5 +95,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
   );
 }

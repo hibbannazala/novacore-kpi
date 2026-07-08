@@ -180,7 +180,7 @@ export default function NewAssignmentPage() {
         return;
       }
 
-      const { error: insertErr } = await supabase.from("kpi_assignments").insert(toInsert);
+      const { error: insertErr } = await supabase.from("kpi_assignments").insert(toInsert as any);
       if (insertErr) throw insertErr;
 
       // Auto-activate KPIs that were draft/hold

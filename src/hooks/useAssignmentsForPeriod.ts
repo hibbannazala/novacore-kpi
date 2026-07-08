@@ -72,7 +72,7 @@ export function useAssignmentsForPeriod(period: Period, department?: string | st
         if (filterByDept) q = q.in("department_id", deptIds);
 
         const { data } = await q;
-        const rows = (data ?? []).map(rowToAssignmentWithDetails as any);
+        const rows = (data ?? []).map(rowToAssignmentWithDetails as any) as KpiAssignment[];
         setAssignments(rows);
 
         const map: Record<string, KPI> = {};
@@ -134,7 +134,7 @@ export function useAssignmentsForPeriod(period: Period, department?: string | st
           return true;
         });
 
-        setAssignments(unique);
+        setAssignments(unique as KpiAssignment[]);
 
         const map: Record<string, KPI> = {};
         unique.forEach((a: any) => { if (a.kpi) map[a.kpiId] = a.kpi; });

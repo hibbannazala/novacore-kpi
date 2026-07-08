@@ -1,16 +1,7 @@
-// ─── Local Timestamp compat (replaces firebase/firestore Timestamp)
-// Hooks will return ISO strings in Phase 3; this keeps existing code compiling.
-export interface Timestamp {
-  seconds: number;
-  nanoseconds: number;
-  toDate(): Date;
-}
-
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 export type KpiRole = "executive" | "hr" | "head" | "tim" | "developer";
 
-// Kept for compat — not used in Supabase schema
 export type AbsensiRole = "admin" | "staff";
 
 export type KpiType = "result" | "activity" | "quality";
@@ -35,6 +26,15 @@ export type PerformanceCategory =
 
 export type NoteType = "general" | "kpi" | "performance" | "warning";
 
+// ─── Timestamp compat shim ────────────────────────────────────────────────────
+// Quality pages build KpiAssignment objects with createdAt/updatedAt as strings.
+// This shim lets `string` satisfy the Timestamp interface at runtime.
+export interface Timestamp {
+  seconds: number;
+  nanoseconds: number;
+  toDate(): Date;
+}
+
 // ─── User (maps to public.users table in Supabase) ───────────────────────────
 
 export interface User {
@@ -44,15 +44,15 @@ export interface User {
   kpiRole: KpiRole;
   departmentId: string | null;
   departmentName: string | null;
-  department: string | null;   // alias for departmentName — compat with existing components
+  department: string | null;
   position: string | null;
   photoUrl: string | null;
   createdAt: string;
   updatedAt: string;
-  // Optional compat fields — not stored in Supabase, kept so TS doesn't error
   role?: AbsensiRole;
   status?: string;
   managedDepartments?: string[];
+  isHidden?: boolean;
 }
 
 export function getKpiRole(user: User): KpiRole {
@@ -70,7 +70,7 @@ export function getManagedDepartments(user: User): string[] {
 }
 
 export function canAccessKpi(user: User): boolean {
-  return true; // In Supabase, all users in the table are active
+  return true;
 }
 
 // ─── KPI ──────────────────────────────────────────────────────────────────────
@@ -89,9 +89,9 @@ export interface KPI {
   monthlyTarget: number;
   year: number;
   month: number;
-  deletedAt?: Timestamp | null;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  deletedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ─── KPI Assignment ───────────────────────────────────────────────────────────
@@ -101,7 +101,7 @@ export interface QualityMonthScore {
   achievementPercentage: number;
   performanceCategory: PerformanceCategory;
   qualityNotes?: string;
-  updatedAt?: Timestamp;
+  updatedAt?: string;
 }
 
 export interface KpiAssignment {
@@ -111,6 +111,7 @@ export interface KpiAssignment {
   department: string;
   kpiType?: KpiType;
   status: AssignmentStatus;
+  weight?: number;
   monthlyTarget: number;
   currentDailyTarget: number;
   actualTotal: number;
@@ -123,11 +124,12 @@ export interface KpiAssignment {
   activeDays: number;
   year: number;
   month: number;
-  heldAt: Timestamp | null;
-  cancelledAt: Timestamp | null;
-  completedAt: Timestamp | null;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  heldAt: string | null;
+  cancelledAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  notes?: string;
   qualityNotes?: string;
   monthlyScores?: Record<string, QualityMonthScore>;
 }
@@ -139,14 +141,14 @@ export interface DailyReport {
   assignmentId: string;
   kpiId: string;
   userId: string;
-  department: string;
+  department?: string;
   date: string;
   actualValue: number;
   notes: string;
-  isHolidayRollover: boolean;
-  originalDate: string | null;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  isHolidayRollover?: boolean;
+  originalDate?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ─── KPI History ──────────────────────────────────────────────────────────────
@@ -166,7 +168,7 @@ export interface KpiHistory {
   newValue: Record<string, unknown>;
   triggeredBy: string;
   notes: string;
-  createdAt: Timestamp;
+  createdAt: string;
 }
 
 // ─── Note ─────────────────────────────────────────────────────────────────────
@@ -181,8 +183,8 @@ export interface Note {
   targetAssignmentId: string | null;
   department: string | null;
   isPrivate: boolean;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ─── Performance Summary ──────────────────────────────────────────────────────
@@ -208,8 +210,8 @@ export interface PerformanceSummary {
   resultAvg?: number;
   activityAvg?: number;
   qualityAvg?: number;
-  generatedAt: Timestamp;
-  createdAt: Timestamp;
+  generatedAt: string;
+  createdAt: string;
 }
 
 // ─── KPI User Settings (weighted scores) ─────────────────────────────────────
@@ -221,7 +223,7 @@ export interface KpiUserSettings {
   resultWeight: number;
   activityWeight: number;
   qualityWeight: number;
-  updatedAt: Timestamp;
+  updatedAt: string;
   updatedBy: string;
 }
 
@@ -290,8 +292,8 @@ export interface Feedback {
   type: "bug" | "feature" | "other";
   message: string;
   status: "open" | "in_progress" | "resolved" | "rejected";
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: { seconds: number; nanoseconds: number; toDate: () => Date };
+  updatedAt: { seconds: number; nanoseconds: number; toDate: () => Date };
 }
 
 // ─── API Response Types ───────────────────────────────────────────────────────

@@ -293,7 +293,7 @@ export default function HrKpiPage() {
           type: k.type,
           unit: k.unit,
           period: k.period ?? "monthly",
-          department: k.department,
+          department_id: k.department_id ?? null,
           monthly_target: k.monthly_target,
           year,
           month,

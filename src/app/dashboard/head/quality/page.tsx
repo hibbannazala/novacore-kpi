@@ -204,7 +204,7 @@ export default function HeadQualityPage() {
         actual_total: value,
         achievement_percentage: pct,
         quality_notes: notes,
-      }).eq("id", assignmentId);
+      } as any).eq("id", assignmentId);
 
       setInputValues((prev) => ({ ...prev, [assignmentId]: "" }));
       setQualityItems((prev) =>

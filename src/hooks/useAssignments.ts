@@ -27,7 +27,7 @@ export function useMyAssignments(userId: string | undefined, year: number, month
       const { data } = await supabase
         .from("kpi_assignments")
         .select(ASSIGNMENT_SELECT)
-        .eq("user_id", userId)
+        .eq("user_id", userId!)
         .eq("year", year)
         .eq("month", month)
         .in("status", statusFilter);

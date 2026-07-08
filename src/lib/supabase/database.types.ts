@@ -3,6 +3,14 @@ export type Json = string | number | boolean | null | { [key: string]: Json } | 
 export type KpiRole = "tim" | "head" | "hr" | "executive" | "developer";
 export type KpiCategory = "quantity" | "quality";
 
+type GenericRelationship = {
+  foreignKeyName: string;
+  columns: string[];
+  isOneToOne: boolean;
+  referencedRelation: string;
+  referencedColumns: string[];
+};
+
 export interface Database {
   public: {
     Tables: {
@@ -22,6 +30,7 @@ export interface Database {
           name?: string;
           created_at?: string;
         };
+        Relationships: GenericRelationship[];
       };
       users: {
         Row: {
@@ -60,6 +69,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: GenericRelationship[];
       };
       kpis: {
         Row: {
@@ -119,6 +129,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: GenericRelationship[];
       };
       kpi_assignments: {
         Row: {
@@ -175,6 +186,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: GenericRelationship[];
       };
       monthly_scores: {
         Row: {
@@ -213,6 +225,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: GenericRelationship[];
       };
       daily_reports: {
         Row: {
@@ -248,6 +261,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: GenericRelationship[];
       };
       kpi_settings: {
         Row: {
@@ -277,6 +291,7 @@ export interface Database {
           updated_by?: string | null;
           updated_at?: string;
         };
+        Relationships: GenericRelationship[];
       };
       feedbacks: {
         Row: {
@@ -315,6 +330,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: GenericRelationship[];
       };
       kpi_histories: {
         Row: {
@@ -344,6 +360,7 @@ export interface Database {
           new_value?: Json | null;
           created_at?: string;
         };
+        Relationships: GenericRelationship[];
       };
     };
     Views: Record<string, never>;

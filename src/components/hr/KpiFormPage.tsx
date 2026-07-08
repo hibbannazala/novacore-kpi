@@ -79,7 +79,7 @@ export function KpiFormPage({ kpiId, allowedDepartments, backHref }: KpiFormPage
         setType(data.type);
         setUnit(data.unit);
         setPeriod(data.period);
-        setDepartment(data.department);
+        setDepartment((data as any).department || "");
         setMonthlyTarget(String(data.monthly_target));
         setSelectedMonth(`${data.year}-${String(data.month).padStart(2, "0")}`);
       }
@@ -98,15 +98,19 @@ export function KpiFormPage({ kpiId, allowedDepartments, backHref }: KpiFormPage
     setSubmitting(true);
     try {
       const supabase = createClient();
+      const { data: deptData } = await supabase.from("departments").select("id").eq("name", department).single();
+      const departmentId = deptData?.id ?? null;
+      const kpiType = type as "result" | "activity" | "quality";
+
       if (isEdit && kpiId) {
         const { error: updateErr } = await supabase.from("kpis").update({
           title: title.trim(),
           brand: brand.trim(),
           description: description.trim(),
-          type,
+          type: kpiType,
           unit,
           period,
-          department,
+          department_id: departmentId,
           monthly_target: target,
         }).eq("id", kpiId);
         if (updateErr) throw updateErr;
@@ -117,10 +121,10 @@ export function KpiFormPage({ kpiId, allowedDepartments, backHref }: KpiFormPage
           title: title.trim(),
           brand: brand.trim(),
           description: description.trim(),
-          type,
+          type: kpiType,
           unit,
           period,
-          department,
+          department_id: departmentId,
           monthly_target: target,
           year,
           month,

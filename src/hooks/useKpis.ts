@@ -71,7 +71,7 @@ export function useDepartmentKpis(
       const { data: deptRow } = await supabase
         .from("departments")
         .select("id")
-        .eq("name", department)
+        .eq("name", department!)
         .single();
 
       if (!deptRow) {

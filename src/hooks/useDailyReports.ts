@@ -41,8 +41,8 @@ export function useDailyReportsForAssignment(
       const { data } = await supabase
         .from("daily_reports")
         .select("*")
-        .eq("assignment_id", assignmentId)
-        .eq("user_id", userId)
+        .eq("assignment_id", assignmentId!)
+        .eq("user_id", userId!)
         .order("date", { ascending: false });
       setReports((data ?? []).map(rowToReport as any));
       setIsLoading(false);

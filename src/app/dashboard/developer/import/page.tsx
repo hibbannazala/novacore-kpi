@@ -290,7 +290,7 @@ export default function KpiImportPage() {
           .select("id, title, type, unit, period, brand, monthly_target")
           .eq("year", row.year)
           .eq("month", row.month)
-          .eq("department", dept)
+          .eq("department_id", deptIdByName[dept] ?? "")
           .is("deleted_at", null);
 
         const existing = (existingKpis ?? []).find((k: any) =>
@@ -315,7 +315,7 @@ export default function KpiImportPage() {
             type: row.kpiType,
             unit: row.unit,
             period: row.period,
-            department: dept,
+            department_id: deptIdByName[dept] ?? null,
             monthly_target: kpiTargetSum.get(key) ?? row.monthlyTarget,
             year: row.year,
             month: row.month,
@@ -355,7 +355,7 @@ export default function KpiImportPage() {
         });
       }
 
-      const { error: assignErr } = await supabase.from("kpi_assignments").insert(assignmentsToInsert);
+      const { error: assignErr } = await supabase.from("kpi_assignments").insert(assignmentsToInsert as any);
       if (assignErr) throw assignErr;
 
       setImportResult({ success: validWithIdx.length, skipped: errorWithIdx.length });

@@ -102,7 +102,7 @@ export default function HeadPenugasanPage() {
       if (newStatus === "hold") update.held_at = new Date().toISOString();
       if (newStatus === "cancelled") update.cancelled_at = new Date().toISOString();
       if (newStatus === "active") update.held_at = null;
-      const { error } = await supabase.from("kpi_assignments").update(update).eq("id", a.id);
+      const { error } = await supabase.from("kpi_assignments").update(update as any).eq("id", a.id);
       if (error) throw error;
     } catch (err) {
       console.error(err);
@@ -127,10 +127,6 @@ export default function HeadPenugasanPage() {
       const category = getPerformanceCategory(pct);
       const { error } = await supabase.from("kpi_assignments").update({
         monthly_target: newTarget,
-        current_daily_target: dailyTarget,
-        actual_total: actualTotal,
-        achievement_percentage: pct,
-        performance_category: category,
       }).eq("id", a.id);
       if (error) throw error;
       setEditingId(null);

@@ -158,7 +158,7 @@ export default function HeadNewAssignmentPage() {
         }
       }
       if (toInsert.length === 0) { setError("Semua kombinasi sudah memiliki penugasan aktif."); setSubmitting(false); return; }
-      const { error: insertErr } = await supabase.from("kpi_assignments").insert(toInsert);
+      const { error: insertErr } = await supabase.from("kpi_assignments").insert(toInsert as any);
       if (insertErr) throw insertErr;
       // Auto-activate KPIs that were draft/hold
       const kpisToActivate = checkedKpiIds.filter((kpiId) => {

@@ -60,9 +60,7 @@ export function DailyActivityFeed() {
 
   const { users } = useAllUsers();
   const { departments } = useDepartments();
-  const { reports, isLoading } = useDailyReportsInRange(startDate, endDate, {
-    department: departmentFilter || undefined,
-  });
+  const { reports, isLoading } = useDailyReportsInRange(startDate, endDate, {});
 
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
 

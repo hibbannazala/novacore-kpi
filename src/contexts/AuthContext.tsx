@@ -36,7 +36,7 @@ async function fetchUserProfile(uid: string): Promise<User | null> {
 
   if (error || !data) return null;
 
-  const deptName = (data.departments as { name: string } | null)?.name ?? null;
+  const deptName = (data.departments as unknown as { name: string } | null)?.name ?? null;
 
   return {
     id: data.id,

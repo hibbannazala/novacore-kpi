@@ -32,7 +32,7 @@ export function useKpiSettings(userId: string | undefined) {
       const { data } = await supabase
         .from("kpi_settings")
         .select("*")
-        .eq("user_id", userId)
+        .eq("user_id", userId!)
         .single();
       setSettings(data ? rowToSettings(data as Record<string, unknown>) : null);
       setIsLoading(false);
