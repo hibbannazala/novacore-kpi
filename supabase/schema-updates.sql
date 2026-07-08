@@ -63,8 +63,21 @@ create trigger set_updated_at_feedbacks
   for each row execute function public.set_updated_at();
 
 -- 5. Enable Supabase Realtime pada tabel-tabel kritis
-alter publication supabase_realtime add table public.kpi_assignments;
-alter publication supabase_realtime add table public.daily_reports;
-alter publication supabase_realtime add table public.monthly_scores;
-alter publication supabase_realtime add table public.kpi_settings;
-alter publication supabase_realtime add table public.users;
+do $$ begin
+  alter publication supabase_realtime add table public.kpi_assignments;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table public.daily_reports;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table public.monthly_scores;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table public.kpi_settings;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table public.users;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table public.feedbacks;
+exception when duplicate_object then null; end $$;
