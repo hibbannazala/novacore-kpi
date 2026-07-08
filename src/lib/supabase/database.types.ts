@@ -12,8 +12,16 @@ export interface Database {
           name: string;
           created_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["departments"]["Row"], "id" | "created_at"> & { id?: string; created_at?: string };
-        Update: Partial<Database["public"]["Tables"]["departments"]["Insert"]>;
+        Insert: {
+          id?: string;
+          name: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          created_at?: string;
+        };
       };
       users: {
         Row: {
@@ -24,26 +32,93 @@ export interface Database {
           department_id: string | null;
           position: string | null;
           photo_url: string | null;
+          managed_departments: string[] | null;
           created_at: string;
           updated_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["users"]["Row"], "created_at" | "updated_at"> & { created_at?: string; updated_at?: string };
-        Update: Partial<Database["public"]["Tables"]["users"]["Insert"]>;
+        Insert: {
+          id?: string;
+          name: string;
+          email: string;
+          kpi_role?: KpiRole;
+          department_id?: string | null;
+          position?: string | null;
+          photo_url?: string | null;
+          managed_departments?: string[] | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          email?: string;
+          kpi_role?: KpiRole;
+          department_id?: string | null;
+          position?: string | null;
+          photo_url?: string | null;
+          managed_departments?: string[] | null;
+          created_at?: string;
+          updated_at?: string;
+        };
       };
       kpis: {
         Row: {
           id: string;
           title: string;
           description: string | null;
+          type: "result" | "activity" | "quality";
           unit: string;
+          period: string;
           category: KpiCategory;
+          brand: string | null;
+          status: string;
+          monthly_target: number;
+          year: number;
+          month: number;
           created_by: string | null;
           department_id: string | null;
+          deleted_at: string | null;
           created_at: string;
           updated_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["kpis"]["Row"], "id" | "created_at" | "updated_at"> & { id?: string; created_at?: string; updated_at?: string };
-        Update: Partial<Database["public"]["Tables"]["kpis"]["Insert"]>;
+        Insert: {
+          id?: string;
+          title: string;
+          description?: string | null;
+          type?: "result" | "activity" | "quality";
+          unit?: string;
+          period?: string;
+          category?: KpiCategory;
+          brand?: string | null;
+          status?: string;
+          monthly_target?: number;
+          year?: number;
+          month?: number;
+          created_by?: string | null;
+          department_id?: string | null;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          description?: string | null;
+          type?: "result" | "activity" | "quality";
+          unit?: string;
+          period?: string;
+          category?: KpiCategory;
+          brand?: string | null;
+          status?: string;
+          monthly_target?: number;
+          year?: number;
+          month?: number;
+          created_by?: string | null;
+          department_id?: string | null;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
       };
       kpi_assignments: {
         Row: {
@@ -57,12 +132,49 @@ export interface Database {
           achievement_percentage: number;
           weight: number;
           notes: string | null;
+          status: string;
+          department_id: string | null;
           assigned_by: string | null;
+          cancelled_at: string | null;
           created_at: string;
           updated_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["kpi_assignments"]["Row"], "id" | "actual_total" | "achievement_percentage" | "created_at" | "updated_at"> & { id?: string; actual_total?: number; achievement_percentage?: number; created_at?: string; updated_at?: string };
-        Update: Partial<Database["public"]["Tables"]["kpi_assignments"]["Insert"]>;
+        Insert: {
+          id?: string;
+          user_id: string;
+          kpi_id: string;
+          year: number;
+          month: number;
+          monthly_target?: number;
+          actual_total?: number;
+          achievement_percentage?: number;
+          weight?: number;
+          notes?: string | null;
+          status?: string;
+          department_id?: string | null;
+          assigned_by?: string | null;
+          cancelled_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          kpi_id?: string;
+          year?: number;
+          month?: number;
+          monthly_target?: number;
+          actual_total?: number;
+          achievement_percentage?: number;
+          weight?: number;
+          notes?: string | null;
+          status?: string;
+          department_id?: string | null;
+          assigned_by?: string | null;
+          cancelled_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
       };
       monthly_scores: {
         Row: {
@@ -77,13 +189,36 @@ export interface Database {
           created_at: string;
           updated_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["monthly_scores"]["Row"], "id" | "created_at" | "updated_at"> & { id?: string; created_at?: string; updated_at?: string };
-        Update: Partial<Database["public"]["Tables"]["monthly_scores"]["Insert"]>;
+        Insert: {
+          id?: string;
+          assignment_id: string;
+          year: number;
+          month: number;
+          actual_total: number;
+          monthly_target?: number;
+          achievement_percentage?: number;
+          inputted_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          assignment_id?: string;
+          year?: number;
+          month?: number;
+          actual_total?: number;
+          monthly_target?: number;
+          achievement_percentage?: number;
+          inputted_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
       };
       daily_reports: {
         Row: {
           id: string;
           assignment_id: string;
+          kpi_id: string | null;
           user_id: string;
           date: string;
           value: number;
@@ -91,19 +226,57 @@ export interface Database {
           created_at: string;
           updated_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["daily_reports"]["Row"], "id" | "created_at" | "updated_at"> & { id?: string; created_at?: string; updated_at?: string };
-        Update: Partial<Database["public"]["Tables"]["daily_reports"]["Insert"]>;
+        Insert: {
+          id?: string;
+          assignment_id: string;
+          kpi_id?: string | null;
+          user_id: string;
+          date: string;
+          value: number;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          assignment_id?: string;
+          kpi_id?: string | null;
+          user_id?: string;
+          date?: string;
+          value?: number;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
       };
       kpi_settings: {
         Row: {
           id: string;
           user_id: string;
-          quantity_weight: number;
+          result_weight: number;
+          activity_weight: number;
           quality_weight: number;
+          updated_by: string | null;
           updated_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["kpi_settings"]["Row"], "id" | "updated_at"> & { id?: string; updated_at?: string };
-        Update: Partial<Database["public"]["Tables"]["kpi_settings"]["Insert"]>;
+        Insert: {
+          id?: string;
+          user_id: string;
+          result_weight?: number;
+          activity_weight?: number;
+          quality_weight?: number;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          result_weight?: number;
+          activity_weight?: number;
+          quality_weight?: number;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
       };
       feedbacks: {
         Row: {
@@ -118,8 +291,30 @@ export interface Database {
           created_at: string;
           updated_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["feedbacks"]["Row"], "id" | "created_at" | "updated_at"> & { id?: string; created_at?: string; updated_at?: string };
-        Update: Partial<Database["public"]["Tables"]["feedbacks"]["Insert"]>;
+        Insert: {
+          id?: string;
+          user_id: string;
+          user_name: string;
+          department: string;
+          role: string;
+          type: "bug" | "feature" | "other";
+          status?: "open" | "in_progress" | "resolved" | "rejected";
+          message: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          user_name?: string;
+          department?: string;
+          role?: string;
+          type?: "bug" | "feature" | "other";
+          status?: "open" | "in_progress" | "resolved" | "rejected";
+          message?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
       };
       kpi_histories: {
         Row: {
@@ -131,8 +326,24 @@ export interface Database {
           new_value: Json | null;
           created_at: string;
         };
-        Insert: Omit<Database["public"]["Tables"]["kpi_histories"]["Row"], "id" | "created_at"> & { id?: string; created_at?: string };
-        Update: Partial<Database["public"]["Tables"]["kpi_histories"]["Insert"]>;
+        Insert: {
+          id?: string;
+          assignment_id?: string | null;
+          user_id?: string | null;
+          action: string;
+          old_value?: Json | null;
+          new_value?: Json | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          assignment_id?: string | null;
+          user_id?: string | null;
+          action?: string;
+          old_value?: Json | null;
+          new_value?: Json | null;
+          created_at?: string;
+        };
       };
     };
     Views: Record<string, never>;
