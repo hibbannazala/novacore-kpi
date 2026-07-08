@@ -1,0 +1,337 @@
+"use client";
+
+import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { useKpis } from "@/hooks/useKpis";
+import { useAllUsers } from "@/hooks/useUsers";
+import { useAllAssignments } from "@/hooks/useAssignments";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { PerformanceBadge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import {
+  getWorkingDaysInMonth,
+  formatPercentage,
+  formatNumber,
+  getPerformanceCategory,
+  getBrandColor,
+  monthName,
+} from "@/lib/utils";
+import { Plus, PauseCircle, XCircle, CheckCircle, Search, Pencil, Check } from "lucide-react";
+import type { KpiAssignment } from "@/types";
+
+const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality" };
+const typeColor: Record<string, string> = {
+  result: "text-blue-600 bg-blue-50",
+  activity: "text-amber-600 bg-amber-50",
+  quality: "text-purple-600 bg-purple-50",
+};
+
+export default function HeadPenugasanPage() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const now = new Date();
+
+  const managedDepartments: string[] =
+    user?.managedDepartments && user.managedDepartments.length > 0
+      ? user.managedDepartments
+      : user?.department ? [user.department] : [];
+
+  const [selectedMonth, setSelectedMonth] = useState(
+    () => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+  );
+  const [year, month] = selectedMonth.split("-").map(Number);
+
+  const { kpis } = useKpis(year, month);
+  const { users } = useAllUsers();
+  const { assignments, isLoading } = useAllAssignments(year, month);
+
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [listSearch, setListSearch] = useState("");
+
+  const workingDays = getWorkingDaysInMonth(year, month);
+
+  const deptUserIds = useMemo(
+    () => new Set(users.filter((u) => managedDepartments.includes(u.department ?? "")).map((u) => u.id)),
+    [users, managedDepartments]
+  );
+  const userMap = Object.fromEntries(users.map((u) => [u.id, u]));
+  const kpiMap = Object.fromEntries(kpis.map((k) => [k.id, k]));
+
+  const groupedByUser = useMemo(() => {
+    const map: Record<string, KpiAssignment[]> = {};
+    assignments
+      .filter((a) => deptUserIds.has(a.userId))
+      .forEach((a) => {
+        if (!map[a.userId]) map[a.userId] = [];
+        map[a.userId].push(a);
+      });
+    return map;
+  }, [assignments, deptUserIds]);
+
+  const userGroups = useMemo(() => {
+    const userIds = Object.keys(groupedByUser);
+    let filtered = userIds;
+    if (listSearch.trim()) {
+      const q = listSearch.trim().toLowerCase();
+      filtered = userIds.filter((uid) => {
+        const u = userMap[uid];
+        const kpiTitles = groupedByUser[uid].map((a) => kpiMap[a.kpiId]?.title ?? "").join(" ");
+        return (
+          (u?.name ?? uid).toLowerCase().includes(q) ||
+          (u?.department ?? "").toLowerCase().includes(q) ||
+          kpiTitles.toLowerCase().includes(q)
+        );
+      });
+    }
+    return filtered.sort((a, b) => (userMap[a]?.name ?? a).localeCompare(userMap[b]?.name ?? b));
+  }, [groupedByUser, userMap, kpiMap, listSearch]);
+
+  async function handleStatusChange(a: KpiAssignment, newStatus: "active" | "hold" | "cancelled") {
+    setActionLoading(a.id);
+    setActionError(null);
+    try {
+      const supabase = createClient();
+      const update: Record<string, unknown> = { status: newStatus };
+      if (newStatus === "hold") update.held_at = new Date().toISOString();
+      if (newStatus === "cancelled") update.cancelled_at = new Date().toISOString();
+      if (newStatus === "active") update.held_at = null;
+      const { error } = await supabase.from("kpi_assignments").update(update).eq("id", a.id);
+      if (error) throw error;
+    } catch (err) {
+      console.error(err);
+      setActionError("Gagal memperbarui status. Coba lagi.");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleEditTarget(a: KpiAssignment, newTarget: number) {
+    setActionLoading(a.id);
+    setActionError(null);
+    try {
+      const supabase = createClient();
+      const dailyTarget = workingDays > 0 ? Math.ceil(newTarget / workingDays) : 0;
+      const { data: reports } = await supabase
+        .from("daily_reports")
+        .select("value")
+        .eq("assignment_id", a.id);
+      const actualTotal = (reports ?? []).reduce((sum, r) => sum + ((r.value as number) ?? 0), 0);
+      const pct = newTarget > 0 ? (actualTotal / newTarget) * 100 : 0;
+      const category = getPerformanceCategory(pct);
+      const { error } = await supabase.from("kpi_assignments").update({
+        monthly_target: newTarget,
+        current_daily_target: dailyTarget,
+        actual_total: actualTotal,
+        achievement_percentage: pct,
+        performance_category: category,
+      }).eq("id", a.id);
+      if (error) throw error;
+      setEditingId(null);
+    } catch (err) {
+      console.error(err);
+      setActionError("Gagal memperbarui target. Coba lagi.");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        <div className="flex justify-between items-center">
+          <div className="h-5 w-40 bg-slate-200 rounded" />
+          <div className="h-9 w-32 bg-slate-200 rounded-md" />
+        </div>
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => <div key={i} className="h-32 w-full bg-slate-200 rounded-xl" />)}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-base font-semibold">Penugasan KPI Tim</h2>
+          <p className="text-sm text-muted-foreground">
+            {Object.keys(groupedByUser).length} karyawan · {managedDepartments.join(", ")} · {monthName(month)} {year}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Input
+            type="month"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="h-9 w-[155px]"
+          />
+          <Button size="sm" onClick={() => router.push("/dashboard/head/penugasan/new")}>
+            <Plus className="h-4 w-4" />
+            Tugaskan KPI
+          </Button>
+        </div>
+      </div>
+
+      {actionError && (
+        <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-2 text-sm text-destructive flex items-center justify-between gap-2">
+          <span>{actionError}</span>
+          <button onClick={() => setActionError(null)} className="text-destructive/60 hover:text-destructive text-xs font-medium">✕</button>
+        </div>
+      )}
+
+      {Object.keys(groupedByUser).length > 0 && (
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Cari nama, divisi, atau KPI..."
+            value={listSearch}
+            onChange={(e) => setListSearch(e.target.value)}
+            className="pl-8 h-8 text-sm"
+          />
+        </div>
+      )}
+
+      {userGroups.length === 0 ? (
+        <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-border">
+          <p className="text-sm text-muted-foreground">
+            {assignments.filter((a) => deptUserIds.has(a.userId)).length === 0
+              ? `Belum ada penugasan ${monthName(month)} ${year} untuk tim ini`
+              : "Tidak ada hasil yang cocok"}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {userGroups.map((userId) => {
+            const userAssignments = groupedByUser[userId];
+            const u = userMap[userId];
+            const initials = (u?.name ?? userId).slice(0, 2).toUpperCase();
+            const avgPct = userAssignments.length > 0
+              ? userAssignments.reduce((s, a) => s + (a.achievementPercentage || 0), 0) / userAssignments.length
+              : 0;
+
+            const byType: Record<string, KpiAssignment[]> = { result: [], activity: [], quality: [] };
+            userAssignments.forEach((a) => {
+              const t = a.kpiType ?? "result";
+              if (!byType[t]) byType[t] = [];
+              byType[t].push(a);
+            });
+
+            return (
+              <div key={userId} className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="flex items-center gap-3 px-4 py-3 bg-muted/30 border-b border-border">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    {initials}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{u?.name ?? userId}</p>
+                    <p className="text-xs text-muted-foreground">{u?.department ?? "—"}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm font-semibold tabular-nums">{formatPercentage(avgPct)}</span>
+                    <PerformanceBadge category={getPerformanceCategory(avgPct) as KpiAssignment["performanceCategory"]} />
+                  </div>
+                </div>
+
+                <div className="divide-y divide-border">
+                  {(["result", "activity", "quality"] as const).map((type) => {
+                    const typeAssignments = byType[type];
+                    if (!typeAssignments || typeAssignments.length === 0) return null;
+                    return typeAssignments.map((a) => {
+                      const k = kpiMap[a.kpiId];
+                      if (!k) return null;
+                      return (
+                        <div key={a.id} className="px-4 py-2.5 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${typeColor[type]}`}>
+                                {typeLabel[type]}
+                              </span>
+                              <span className={`text-xs px-1.5 py-0.5 rounded border shrink-0 font-medium ${getBrandColor(k.brand)}`}>
+                                {k.brand || "Umum"}
+                              </span>
+                              <p className="text-sm truncate">{k.title}</p>
+                              {a.status !== "active" && (
+                                <Badge variant="outline" className="text-xs shrink-0 px-2 py-0.5">
+                                  {a.status === "hold" ? <><PauseCircle className="mr-1 h-3 w-3 inline" />Hold</> : <><XCircle className="mr-1 h-3 w-3 inline" />Batal</>}
+                                </Badge>
+                              )}
+                            </div>
+                            <span className="text-xs font-medium tabular-nums shrink-0">
+                              {formatPercentage(a.achievementPercentage)}
+                            </span>
+                          </div>
+                          {a.status !== "cancelled" && (
+                            <Progress value={Math.min(a.achievementPercentage, 100)} category={a.performanceCategory} className="h-1.5" />
+                          )}
+                          <div className="flex items-center justify-between">
+                            <div>
+                              {a.status !== "cancelled" && (
+                                editingId === a.id ? (
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs text-muted-foreground">{formatNumber(a.actualTotal)} /</span>
+                                    <input
+                                      type="number" min="0.01" step="any" value={editValue}
+                                      onChange={(e) => setEditValue(e.target.value)} autoFocus
+                                      className="w-24 rounded border border-primary px-1.5 py-0.5 text-xs text-right tabular-nums focus:outline-none"
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") { const v = parseFloat(editValue); if (v > 0) handleEditTarget(a, v); }
+                                        if (e.key === "Escape") setEditingId(null);
+                                      }}
+                                    />
+                                    <button onClick={() => { const v = parseFloat(editValue); if (v > 0) handleEditTarget(a, v); }} disabled={!editValue || parseFloat(editValue) <= 0 || actionLoading === a.id} className="text-green-600 hover:text-green-700 disabled:opacity-50">
+                                      <Check className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground">
+                                      <XCircle className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatNumber(a.actualTotal)} / {formatNumber(a.monthlyTarget)}
+                                  </span>
+                                )
+                              )}
+                            </div>
+                            <div className="flex gap-1">
+                              {a.status !== "cancelled" && (
+                                <button onClick={() => { setEditingId(a.id); setEditValue(String(a.monthlyTarget)); }} disabled={actionLoading === a.id} className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-50">
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                              )}
+                              {a.status === "active" && (
+                                <button onClick={() => handleStatusChange(a, "hold")} disabled={actionLoading === a.id} className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-amber-600 hover:bg-amber-50 disabled:opacity-50">
+                                  <PauseCircle className="h-3 w-3" /> Hold
+                                </button>
+                              )}
+                              {(a.status === "hold" || a.status === "cancelled") && (
+                                <button onClick={() => handleStatusChange(a, "active")} disabled={actionLoading === a.id} className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-green-600 hover:bg-green-50 disabled:opacity-50">
+                                  <CheckCircle className="h-3 w-3" /> Aktifkan
+                                </button>
+                              )}
+                              {a.status !== "cancelled" && (
+                                <button onClick={() => handleStatusChange(a, "cancelled")} disabled={actionLoading === a.id} className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50">
+                                  <XCircle className="h-3 w-3" /> Batal
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

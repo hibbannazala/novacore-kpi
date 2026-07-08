@@ -1,0 +1,291 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
+import { todayISODate, formatNumber, formatCurrency, formatPercentage, getLiveWorkingDaysRemaining } from "@/lib/utils";
+import type { KpiAssignmentWithDetails } from "@/types";
+import { CalendarDays } from "lucide-react";
+
+function formatValue(value: number, unit: string): string {
+  if (unit === "currency") return formatCurrency(value);
+  if (unit === "percentage") return formatPercentage(value);
+  return formatNumber(value);
+}
+
+interface DailyInputFormProps {
+  assignment: KpiAssignmentWithDetails;
+  open: boolean;
+  onClose: () => void;
+  userId: string;
+}
+
+export function DailyInputForm({
+  assignment,
+  open,
+  onClose,
+  userId,
+}: DailyInputFormProps) {
+  const today = todayISODate();
+  const minDate = today.slice(0, 7) + "-01";
+
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [value, setValue] = useState("");
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [existingReportId, setExistingReportId] = useState<string | null>(null);
+  const [isChecking, setIsChecking] = useState(true);
+
+  const { kpi } = assignment;
+
+  const workingDaysRemaining = getLiveWorkingDaysRemaining(assignment.year, assignment.month);
+  const remainingTarget = Math.max(0, assignment.monthlyTarget - assignment.actualTotal);
+  const dynamicDailyTarget = workingDaysRemaining > 0 ? remainingTarget / workingDaysRemaining : 0;
+  const finalDailyTarget = dynamicDailyTarget || assignment.currentDailyTarget || 0;
+
+  const isBelowTarget = value !== "" && !isNaN(parseFloat(value)) && parseFloat(value) < finalDailyTarget;
+
+  useEffect(() => {
+    if (open && assignment.id) {
+      async function checkExisting() {
+        setIsChecking(true);
+        try {
+          const supabase = createClient();
+          const { data } = await supabase
+            .from("daily_reports")
+            .select("id, value, notes")
+            .eq("assignment_id", assignment.id)
+            .eq("user_id", userId)
+            .eq("date", selectedDate)
+            .maybeSingle();
+          if (data) {
+            setExistingReportId(data.id);
+            setValue(String(data.value));
+            setNotes((data.notes as string) ?? "");
+          } else {
+            setExistingReportId(null);
+            setValue("");
+            setNotes("");
+          }
+        } catch (e) {
+          console.error("Error checking existing report", e);
+        } finally {
+          setIsChecking(false);
+        }
+      }
+      checkExisting();
+    }
+  }, [open, assignment.id, userId, selectedDate]);
+
+  useEffect(() => {
+    if (open) {
+      setSelectedDate(today);
+      setError("");
+    }
+  }, [open, today]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    const numValue = parseFloat(value);
+    if (isNaN(numValue) || numValue < 0) {
+      setError("Masukkan angka yang valid.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const supabase = createClient();
+      if (existingReportId) {
+        const { error: err } = await supabase
+          .from("daily_reports")
+          .update({ value: numValue, notes: notes.trim() })
+          .eq("id", existingReportId);
+        if (err) throw err;
+      } else {
+        const { error: err } = await supabase.from("daily_reports").insert({
+          assignment_id: assignment.id,
+          kpi_id: assignment.kpiId,
+          user_id: userId,
+          date: selectedDate,
+          value: numValue,
+          notes: notes.trim(),
+        });
+        if (err) throw err;
+      }
+      toast.success("Laporan harian berhasil disimpan!");
+      setValue("");
+      setNotes("");
+      onClose();
+    } catch {
+      toast.error("Gagal menyimpan. Coba lagi.");
+      setError("Gagal menyimpan. Coba lagi.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!existingReportId) return;
+    setSubmitting(true);
+    try {
+      const supabase = createClient();
+      const { error: err } = await supabase
+        .from("daily_reports")
+        .delete()
+        .eq("id", existingReportId);
+      if (err) throw err;
+      setValue("");
+      setNotes("");
+      onClose();
+    } catch {
+      setError("Gagal menghapus laporan. Coba lagi.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (!kpi) return null;
+
+  const isBackdate = selectedDate !== today;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-base">{kpi.title}</DialogTitle>
+        </DialogHeader>
+
+        {kpi.type === "quality" ? (
+          <div className="py-6 text-center space-y-3">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-purple-100">
+              <span className="text-xl font-bold text-purple-600">Q</span>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">Penilaian Khusus</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                KPI dengan tipe <strong>Quality</strong> hanya dapat diisi dan dinilai langsung oleh HR, Executive, atau Head. Anda tidak perlu mengisi target harian untuk KPI ini.
+              </p>
+            </div>
+            <div className="pt-2">
+              <Button onClick={onClose} variant="outline" className="w-full">Tutup</Button>
+            </div>
+          </div>
+        ) : isChecking ? (
+          <div className="flex h-32 items-center justify-center">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="input-date" className="flex items-center gap-1.5">
+                <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+                Tanggal Input
+              </Label>
+              <Input
+                id="input-date"
+                type="date"
+                value={selectedDate}
+                min={minDate}
+                max={today}
+                onChange={(e) => {
+                  setSelectedDate(e.target.value);
+                  setError("");
+                }}
+                className="cursor-pointer"
+              />
+              {isBackdate && (
+                <p className="text-[11px] text-amber-600 font-medium flex items-center gap-1">
+                  ⚠️ Mengisi data mundur untuk tanggal {selectedDate}
+                </p>
+              )}
+            </div>
+
+            {existingReportId && (
+              <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+                <p className="font-semibold">Laporan sudah ada untuk tanggal ini.</p>
+                <p className="text-xs mt-0.5 text-amber-700/80">Anda sedang mengedit laporan tanggal {selectedDate}.</p>
+              </div>
+            )}
+
+            <div id="tour-form-target" className="rounded-xl bg-muted/50 px-4 py-3 text-sm">
+              <span className="text-muted-foreground">Target harian: </span>
+              <span className="font-semibold">
+                {formatValue(kpi.unit === "number" ? Math.ceil(finalDailyTarget) : finalDailyTarget, kpi.unit)}
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="actual-value">
+                Realisasi{isBackdate ? ` (${selectedDate})` : " hari ini"}
+                <span className="ml-1 text-xs text-muted-foreground">
+                  ({kpi.unit === "currency" ? "Rp" : kpi.unit === "percentage" ? "%" : "angka"})
+                </span>
+              </Label>
+              <Input
+                id="actual-value"
+                type="number"
+                inputMode="decimal"
+                step="any"
+                min="0"
+                placeholder="0"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                autoFocus
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="notes">
+                Catatan <span className="text-xs text-muted-foreground">(opsional)</span>
+              </Label>
+              <Textarea
+                id="notes"
+                placeholder="Tambahkan catatan singkat jika ada..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                className="resize-none"
+              />
+            </div>
+
+            {error && <p className="text-sm text-destructive">{error}</p>}
+
+            <DialogFooter id="tour-form-footer">
+              <div className="flex w-full items-center justify-between gap-2">
+                {existingReportId ? (
+                  <Button type="button" variant="destructive" size="sm" onClick={handleDelete} disabled={submitting}>
+                    Hapus
+                  </Button>
+                ) : (
+                  <div />
+                )}
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
+                    Batal
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? "Menyimpan..." : existingReportId ? "Update" : "Simpan"}
+                  </Button>
+                </div>
+              </div>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}

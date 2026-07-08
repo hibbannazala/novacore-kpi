@@ -1,0 +1,303 @@
+// ─── Local Timestamp compat (replaces firebase/firestore Timestamp)
+// Hooks will return ISO strings in Phase 3; this keeps existing code compiling.
+export interface Timestamp {
+  seconds: number;
+  nanoseconds: number;
+  toDate(): Date;
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+export type KpiRole = "executive" | "hr" | "head" | "tim" | "developer";
+
+// Kept for compat — not used in Supabase schema
+export type AbsensiRole = "admin" | "staff";
+
+export type KpiType = "result" | "activity" | "quality";
+export type KpiUnit = "number" | "currency" | "percentage";
+export type KpiPeriod = "daily" | "weekly" | "monthly";
+export type KpiStatus =
+  | "draft"
+  | "active"
+  | "adjusted"
+  | "hold"
+  | "cancelled"
+  | "completed"
+  | "archived";
+
+export type AssignmentStatus = "active" | "hold" | "cancelled" | "completed";
+
+export type PerformanceCategory =
+  | "excellent"
+  | "good"
+  | "warning"
+  | "critical";
+
+export type NoteType = "general" | "kpi" | "performance" | "warning";
+
+// ─── User (maps to public.users table in Supabase) ───────────────────────────
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  kpiRole: KpiRole;
+  departmentId: string | null;
+  departmentName: string | null;
+  department: string | null;   // alias for departmentName — compat with existing components
+  position: string | null;
+  photoUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+  // Optional compat fields — not stored in Supabase, kept so TS doesn't error
+  role?: AbsensiRole;
+  status?: string;
+  managedDepartments?: string[];
+}
+
+export function getKpiRole(user: User): KpiRole {
+  return user.kpiRole;
+}
+
+export function getManagedDepartments(user: User): string[] {
+  if (user.kpiRole === "head") {
+    if (user.managedDepartments && user.managedDepartments.length > 0) {
+      return user.managedDepartments;
+    }
+    if (user.department) return [user.department];
+  }
+  return user.department ? [user.department] : [];
+}
+
+export function canAccessKpi(user: User): boolean {
+  return true; // In Supabase, all users in the table are active
+}
+
+// ─── KPI ──────────────────────────────────────────────────────────────────────
+
+export interface KPI {
+  id: string;
+  title: string;
+  description: string;
+  type: KpiType;
+  unit: KpiUnit;
+  period: KpiPeriod;
+  status: KpiStatus;
+  department: string;
+  brand?: string;
+  createdBy: string;
+  monthlyTarget: number;
+  year: number;
+  month: number;
+  deletedAt?: Timestamp | null;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ─── KPI Assignment ───────────────────────────────────────────────────────────
+
+export interface QualityMonthScore {
+  actualTotal: number;
+  achievementPercentage: number;
+  performanceCategory: PerformanceCategory;
+  qualityNotes?: string;
+  updatedAt?: Timestamp;
+}
+
+export interface KpiAssignment {
+  id: string;
+  kpiId: string;
+  userId: string;
+  department: string;
+  kpiType?: KpiType;
+  status: AssignmentStatus;
+  monthlyTarget: number;
+  currentDailyTarget: number;
+  actualTotal: number;
+  expectedTotal: number;
+  achievementPercentage: number;
+  performanceCategory: PerformanceCategory;
+  workingDaysTotal: number;
+  workingDaysElapsed: number;
+  workingDaysRemaining: number;
+  activeDays: number;
+  year: number;
+  month: number;
+  heldAt: Timestamp | null;
+  cancelledAt: Timestamp | null;
+  completedAt: Timestamp | null;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  qualityNotes?: string;
+  monthlyScores?: Record<string, QualityMonthScore>;
+}
+
+// ─── Daily Report ─────────────────────────────────────────────────────────────
+
+export interface DailyReport {
+  id: string;
+  assignmentId: string;
+  kpiId: string;
+  userId: string;
+  department: string;
+  date: string;
+  actualValue: number;
+  notes: string;
+  isHolidayRollover: boolean;
+  originalDate: string | null;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ─── KPI History ──────────────────────────────────────────────────────────────
+
+export interface KpiHistory {
+  id: string;
+  assignmentId: string;
+  kpiId: string;
+  userId: string;
+  eventType:
+    | "target_recalculated"
+    | "status_changed"
+    | "monthly_summary"
+    | "assignment_created"
+    | "daily_report_submitted";
+  previousValue: Record<string, unknown> | null;
+  newValue: Record<string, unknown>;
+  triggeredBy: string;
+  notes: string;
+  createdAt: Timestamp;
+}
+
+// ─── Note ─────────────────────────────────────────────────────────────────────
+
+export interface Note {
+  id: string;
+  type: NoteType;
+  title: string;
+  content: string;
+  authorId: string;
+  targetUserId: string | null;
+  targetAssignmentId: string | null;
+  department: string | null;
+  isPrivate: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ─── Performance Summary ──────────────────────────────────────────────────────
+
+export interface PerformanceSummary {
+  id: string;
+  userId: string;
+  department: string;
+  year: number;
+  month: number;
+  assignmentIds: string[];
+  averageAchievement: number;
+  overallCategory: PerformanceCategory;
+  excellentCount: number;
+  goodCount: number;
+  warningCount: number;
+  criticalCount: number;
+  consecutiveCriticalMonths: number;
+  isFlaggedForReview: boolean;
+  resultWeight?: number;
+  activityWeight?: number;
+  qualityWeight?: number;
+  resultAvg?: number;
+  activityAvg?: number;
+  qualityAvg?: number;
+  generatedAt: Timestamp;
+  createdAt: Timestamp;
+}
+
+// ─── KPI User Settings (weighted scores) ─────────────────────────────────────
+
+export const DEFAULT_KPI_WEIGHTS = { result: 40, activity: 30, quality: 30 } as const;
+
+export interface KpiUserSettings {
+  id: string;
+  resultWeight: number;
+  activityWeight: number;
+  qualityWeight: number;
+  updatedAt: Timestamp;
+  updatedBy: string;
+}
+
+export interface WeightedScore {
+  resultAvg: number;
+  activityAvg: number;
+  qualityAvg: number;
+  resultWeight: number;
+  activityWeight: number;
+  qualityWeight: number;
+  resultCount: number;
+  activityCount: number;
+  qualityCount: number;
+  total: number;
+  category: PerformanceCategory;
+}
+
+// ─── UI / Composite Types ─────────────────────────────────────────────────────
+
+export interface KpiAssignmentWithDetails extends KpiAssignment {
+  kpi: KPI;
+  user: User;
+}
+
+export interface DailyReportWithAssignment extends DailyReport {
+  assignment: KpiAssignment;
+  kpi: KPI;
+}
+
+// ─── Form Types ───────────────────────────────────────────────────────────────
+
+export interface DailyReportInput {
+  assignmentId: string;
+  actualValue: number;
+  notes?: string;
+  date?: string;
+}
+
+export interface KpiCreateInput {
+  title: string;
+  description: string;
+  type: KpiType;
+  unit: KpiUnit;
+  period: KpiPeriod;
+  brand?: string;
+  department: string;
+  monthlyTarget: number;
+  year: number;
+  month: number;
+}
+
+export interface KpiAssignInput {
+  kpiId: string;
+  userId: string;
+  monthlyTarget: number;
+}
+
+// ─── Feedback ─────────────────────────────────────────────────────────────────
+
+export interface Feedback {
+  id: string;
+  userId: string;
+  userName: string;
+  department: string;
+  role: string;
+  type: "bug" | "feature" | "other";
+  message: string;
+  status: "open" | "in_progress" | "resolved" | "rejected";
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ─── API Response Types ───────────────────────────────────────────────────────
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
