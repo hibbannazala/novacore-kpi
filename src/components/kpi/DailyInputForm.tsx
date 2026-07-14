@@ -47,6 +47,7 @@ export function DailyInputForm({
   const [error, setError] = useState("");
   const [existingReportId, setExistingReportId] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(true);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const { kpi } = assignment;
 
@@ -147,11 +148,14 @@ export function DailyInputForm({
         .delete()
         .eq("id", existingReportId);
       if (err) throw err;
+      toast.success("Laporan berhasil dihapus.");
       setValue("");
       setNotes("");
+      setConfirmDelete(false);
       onClose();
     } catch {
       setError("Gagal menghapus laporan. Coba lagi.");
+      setConfirmDelete(false);
     } finally {
       setSubmitting(false);
     }
@@ -267,12 +271,20 @@ export function DailyInputForm({
             <DialogFooter id="tour-form-footer">
               <div className="flex w-full items-center justify-between gap-2">
                 {existingReportId ? (
-                  <Button type="button" variant="destructive" size="sm" onClick={handleDelete} disabled={submitting}>
+                confirmDelete ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-destructive font-medium">Yakin hapus?</span>
+                    <Button type="button" variant="destructive" size="sm" onClick={handleDelete} disabled={submitting}>Ya</Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setConfirmDelete(false)} disabled={submitting}>Tidak</Button>
+                  </div>
+                ) : (
+                  <Button type="button" variant="destructive" size="sm" onClick={() => setConfirmDelete(true)} disabled={submitting}>
                     Hapus
                   </Button>
-                ) : (
-                  <div />
-                )}
+                )
+              ) : (
+                <div />
+              )}
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
                     Batal

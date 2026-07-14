@@ -111,19 +111,7 @@ export function useAssignmentsForPeriod(period: Period, department?: string | st
           return q;
         });
 
-        // Also fetch quality assignments (they don't have a month in range, they span via monthlyScores)
-        const qualityQueries = uniqueYears.map((y) => {
-          let q = supabase
-            .from("kpi_assignments")
-            .select(ASSIGNMENT_SELECT)
-            .eq("year", y)
-            .eq("status", "active");
-
-          if (filterByDept) q = q.in("department_id", deptIds);
-          return q;
-        });
-
-        const results = await Promise.all([...queries, ...qualityQueries]);
+        const results = await Promise.all(queries);
         const allRows = results.flatMap((r) =>
           (r.data ?? []).map(rowToAssignmentWithDetails as any)
         );

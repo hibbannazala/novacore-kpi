@@ -54,7 +54,9 @@ function LoginContent() {
           <CardContent className="space-y-4">
             {urlError && (
               <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                Login gagal. Pastikan akun Google Anda terdaftar di sistem.
+                {urlError === "not_registered"
+                  ? "Akun Google Anda belum terdaftar di sistem. Hubungi HR untuk mendaftarkan akun."
+                  : "Login gagal. Coba lagi atau hubungi HR jika masalah berlanjut."}
               </p>
             )}
 

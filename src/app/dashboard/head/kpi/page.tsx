@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useDivisionAssignments } from "@/hooks/useAssignments";
-import { useAllUsers } from "@/hooks/useUsers";
+import { useDivisionMembers } from "@/hooks/useUsers";
 import { useKpis } from "@/hooks/useKpis";
 import { PerformanceBadge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -18,7 +18,7 @@ export default function HeadKpiPage() {
     now.getFullYear(),
     now.getMonth() + 1
   );
-  const { users } = useAllUsers();
+  const { members: users } = useDivisionMembers(departments);
   const { kpis } = useKpis(now.getFullYear(), now.getMonth() + 1);
 
   const userMap = Object.fromEntries(users.map((u) => [u.id, u.name]));

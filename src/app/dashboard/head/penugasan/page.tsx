@@ -117,14 +117,6 @@ export default function HeadPenugasanPage() {
     setActionError(null);
     try {
       const supabase = createClient();
-      const dailyTarget = workingDays > 0 ? Math.ceil(newTarget / workingDays) : 0;
-      const { data: reports } = await supabase
-        .from("daily_reports")
-        .select("value")
-        .eq("assignment_id", a.id);
-      const actualTotal = (reports ?? []).reduce((sum, r) => sum + ((r.value as number) ?? 0), 0);
-      const pct = newTarget > 0 ? (actualTotal / newTarget) * 100 : 0;
-      const category = getPerformanceCategory(pct);
       const { error } = await supabase.from("kpi_assignments").update({
         monthly_target: newTarget,
       }).eq("id", a.id);

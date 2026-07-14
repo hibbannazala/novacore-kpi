@@ -28,23 +28,27 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, isLoading } = useAuth();
+  const { user, supabaseUser, isLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (isLoading) return;
+    if (!supabaseUser) {
       router.replace("/login");
       return;
     }
-    if (!isLoading && user) {
-      const segment = pathname?.split("/")[2];
-      const allowed = segment ? SEGMENT_ROLES[segment] : undefined;
-      if (allowed && !allowed.includes(user.kpiRole) && user.kpiRole !== "developer") {
-        router.replace(ROLE_HOME[user.kpiRole] ?? "/dashboard/tim");
-      }
+    if (!user) {
+      // Login Google berhasil tapi belum terdaftar di sistem
+      router.replace("/login?error=not_registered");
+      return;
     }
-  }, [user, isLoading, pathname, router]);
+    const segment = pathname?.split("/")[2];
+    const allowed = segment ? SEGMENT_ROLES[segment] : undefined;
+    if (allowed && !allowed.includes(user.kpiRole) && user.kpiRole !== "developer") {
+      router.replace(ROLE_HOME[user.kpiRole] ?? "/dashboard/tim");
+    }
+  }, [user, supabaseUser, isLoading, pathname, router]);
 
   if (isLoading) {
     return (

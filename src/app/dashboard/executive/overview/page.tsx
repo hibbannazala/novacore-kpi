@@ -80,16 +80,16 @@ export default function ExecutiveOverviewPage() {
     return map;
   }, [timUsers]);
 
-  // Use the exact department list and order from Firestore, plus any unassigned ones
+  // Use the exact department list and order from Supabase, plus any unassigned ones
   const deptNames = useMemo(() => {
-    const fromFirestore = [...departments];
-    // If there are users in departments not listed in Firestore (e.g. "—"), append them at the end
+    const orderedDepts = [...departments];
+    // Append any dept names from assignments not in the departments table
     Object.keys(byDept).forEach((d) => {
-      if (!fromFirestore.includes(d)) {
-        fromFirestore.push(d);
+      if (!orderedDepts.includes(d)) {
+        orderedDepts.push(d);
       }
     });
-    return fromFirestore;
+    return orderedDepts;
   }, [byDept, departments]);
 
   if (isLoading || usersLoading || settingsLoading || deptLoading) {

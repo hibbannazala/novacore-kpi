@@ -91,8 +91,7 @@ export default function HrReportsPage() {
       const bAvg = getUserAvg(assignmentsByUser[b.id] ?? []);
       return bAvg - aAvg;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timUsers, assignmentsByUser, isRange]);
+  }, [timUsers, assignmentsByUser, reportsByAssignment, isRange]);
 
   // Company-wide summary stats
   const { companyAvg, totalKpis, assignedCount } = useMemo(() => {
@@ -102,8 +101,7 @@ export default function HrReportsPage() {
     const avg = allPcts.length > 0 ? allPcts.reduce((s, v) => s + v, 0) / allPcts.length : 0;
     const assigned = new Set(assignments.map((a) => a.userId)).size;
     return { companyAvg: avg, totalKpis: assignments.length, assignedCount: assigned };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignments, isRange]);
+  }, [assignments, reportsByAssignment, isRange]);
 
   const csvEscape = (v: string | number | null | undefined) => {
     const s = v == null ? "" : String(v);
