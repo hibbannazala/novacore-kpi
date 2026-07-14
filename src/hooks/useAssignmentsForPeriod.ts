@@ -180,7 +180,7 @@ export function useAssignmentsForPeriod(period: Period, department?: string | st
     async function fetchReports() {
       const { data } = await supabase
         .from("daily_reports")
-        .select("id, assignment_id, kpi_id, user_id, date, value, notes")
+        .select("id, assignment_id, kpi_id, user_id, date, value, notes, created_at, updated_at")
         .gte("date", rangeStart)
         .lte("date", rangeEnd);
 
@@ -193,6 +193,8 @@ export function useAssignmentsForPeriod(period: Period, department?: string | st
           date: r.date,
           actualValue: r.value,
           notes: r.notes ?? "",
+          createdAt: r.created_at,
+          updatedAt: r.updated_at,
         }))
       );
     }
