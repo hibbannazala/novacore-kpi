@@ -29,6 +29,7 @@ export function useAssignmentsForPeriod(period: Period, department?: string | st
   const [assignments, setAssignments] = useState<KpiAssignment[]>([]);
   const [kpisMap, setKpisMap] = useState<Record<string, KPI>>({});
   const [assignmentsLoading, setAssignmentsLoading] = useState(true);
+  const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
 
   useEffect(() => {
     setAssignmentsLoading(true);
@@ -163,6 +164,55 @@ export function useAssignmentsForPeriod(period: Period, department?: string | st
     JSON.stringify(department),
   ]);
 
+  // Fetch daily_reports for the period (for Rincian Harian display)
+  useEffect(() => {
+    const supabase = createClient();
+    const today = todayISODate();
+
+    const rangeStart = period.type === "range"
+      ? period.start
+      : firstDayOfMonth(currentYear, currentMonth);
+    const monthEnd = lastDayOfMonth(currentYear, currentMonth);
+    const rangeEnd = period.type === "range"
+      ? period.end
+      : (today < monthEnd ? today : monthEnd);
+
+    async function fetchReports() {
+      const { data } = await supabase
+        .from("daily_reports")
+        .select("id, assignment_id, kpi_id, user_id, date, value, notes")
+        .gte("date", rangeStart)
+        .lte("date", rangeEnd);
+
+      setDailyReports(
+        (data ?? []).map((r: any) => ({
+          id: r.id,
+          assignmentId: r.assignment_id,
+          kpiId: r.kpi_id ?? "",
+          userId: r.user_id,
+          date: r.date,
+          actualValue: r.value,
+          notes: r.notes ?? "",
+        }))
+      );
+    }
+
+    fetchReports();
+
+    const channel = supabase
+      .channel(`daily_reports_${period.type}_${rangeStart}_${rangeEnd}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_reports" }, fetchReports)
+      .subscribe();
+
+    return () => { channel.unsubscribe(); };
+  }, [
+    currentYear,
+    currentMonth,
+    period.type,
+    period.type === "range" ? period.start : "",
+    period.type === "range" ? period.end : "",
+  ]);
+
   // Build date range for daily reports
   const { rangeStart, rangeEnd } = useMemo(() => {
     if (period.type === "range") {
@@ -176,11 +226,14 @@ export function useAssignmentsForPeriod(period: Period, department?: string | st
     };
   }, [period, currentYear, currentMonth]);
 
-  // Build reportsByAssignment from assignmentIds (PostgreSQL trigger keeps actual_total in sync,
-  // but we still pass reports so components that display them can show individual entries)
   const reportsByAssignment = useMemo(() => {
-    return {} as Record<string, DailyReport[]>;
-  }, []);
+    const map: Record<string, DailyReport[]> = {};
+    dailyReports.forEach((r) => {
+      if (!map[r.assignmentId]) map[r.assignmentId] = [];
+      map[r.assignmentId].push(r);
+    });
+    return map;
+  }, [dailyReports]);
 
   // Sync quality KPI scores from monthlyScores
   const syncedAssignments = useMemo(() => {
