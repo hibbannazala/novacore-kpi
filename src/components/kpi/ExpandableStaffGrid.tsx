@@ -173,15 +173,11 @@ export function ExpandableStaffGrid({
                     const reports = reportsByAssignment[a.id] ?? [];
                     const sortedReports = [...reports].sort((x, y) => (x.date < y.date ? 1 : -1));
 
-                    // Quality KPIs: gunakan nilai dari assignment (sudah di-sync dari monthlyScores).
-                    // Result/activity: hitung ulang dari daily reports agar akurat.
+                    // All KPI types: pakai nilai dari DB (actual_total dijaga oleh trigger PostgreSQL).
+                    // Daily reports hanya untuk rincian list di bawah, bukan kalkulasi utama.
                     const isQuality = kpi.type === "quality";
-                    const displayActual = isQuality
-                      ? a.actualTotal
-                      : reports.reduce((s, r) => s + r.actualValue, 0);
-                    const displayPct = isQuality
-                      ? a.achievementPercentage
-                      : (a.monthlyTarget > 0 ? (displayActual / a.monthlyTarget) * 100 : 0);
+                    const displayActual = a.actualTotal;
+                    const displayPct = a.achievementPercentage;
                     const displayCategory = getPerformanceCategory(displayPct);
                       
                     const workingDaysRemaining = getLiveWorkingDaysRemaining(a.year, a.month);
