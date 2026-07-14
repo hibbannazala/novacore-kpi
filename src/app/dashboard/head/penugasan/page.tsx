@@ -4,8 +4,8 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useKpis } from "@/hooks/useKpis";
-import { useAllUsers } from "@/hooks/useUsers";
-import { useAllAssignments } from "@/hooks/useAssignments";
+import { useDivisionMembers } from "@/hooks/useUsers";
+import { useDivisionAssignments } from "@/hooks/useAssignments";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,8 +46,8 @@ export default function HeadPenugasanPage() {
   const [year, month] = selectedMonth.split("-").map(Number);
 
   const { kpis } = useKpis(year, month);
-  const { users } = useAllUsers();
-  const { assignments, isLoading } = useAllAssignments(year, month);
+  const { members: users } = useDivisionMembers(managedDepartments);
+  const { assignments, isLoading } = useDivisionAssignments(managedDepartments, year, month, ["active", "hold", "cancelled"]);
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);

@@ -263,7 +263,6 @@ export default function HrEmployeesPage() {
                     <SelectItem value="tim">Tim</SelectItem>
                     <SelectItem value="head">Head</SelectItem>
                     <SelectItem value="hr">HR</SelectItem>
-                    <SelectItem value="executive">Executive</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

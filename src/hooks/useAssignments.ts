@@ -89,7 +89,8 @@ export function useAllAssignments(year: number, month: number) {
 export function useDivisionAssignments(
   department: string | string[] | undefined,
   year: number,
-  month: number
+  month: number,
+  statuses?: string[]
 ) {
   const [assignments, setAssignments] = useState<KpiAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -117,12 +118,13 @@ export function useDivisionAssignments(
       const deptIds = (deptRows ?? []).map((d) => d.id);
       if (deptIds.length === 0) { setAssignments([]); setIsLoading(false); return; }
 
+      const statusFilter = statuses && statuses.length > 0 ? statuses : ["active"];
       const { data } = await supabase
         .from("kpi_assignments")
         .select("*")
         .eq("year", year)
         .eq("month", month)
-        .eq("status", "active")
+        .in("status", statusFilter)
         .in("department_id", deptIds);
 
       setAssignments(
@@ -139,7 +141,7 @@ export function useDivisionAssignments(
       .subscribe();
 
     return () => { channel.unsubscribe(); };
-  }, [JSON.stringify(department), year, month]);
+  }, [JSON.stringify(department), year, month, JSON.stringify(statuses)]);
 
   return { assignments, isLoading };
 }

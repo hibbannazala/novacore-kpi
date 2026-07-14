@@ -1,10 +1,27 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
+
+const ROLE_HOME: Record<string, string> = {
+  tim: "/dashboard/tim",
+  head: "/dashboard/head",
+  hr: "/dashboard/hr",
+  executive: "/dashboard/executive",
+  developer: "/dashboard/developer",
+};
+
+// Which roles are allowed per URL segment (/dashboard/[segment]/...)
+const SEGMENT_ROLES: Record<string, string[]> = {
+  tim: ["tim"],
+  head: ["head"],
+  hr: ["hr"],
+  executive: ["executive"],
+  developer: ["developer"],
+};
 
 export default function DashboardLayout({
   children,
@@ -13,12 +30,21 @@ export default function DashboardLayout({
 }) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!isLoading && !user) {
       router.replace("/login");
+      return;
     }
-  }, [user, isLoading, router]);
+    if (!isLoading && user) {
+      const segment = pathname?.split("/")[2];
+      const allowed = segment ? SEGMENT_ROLES[segment] : undefined;
+      if (allowed && !allowed.includes(user.kpiRole) && user.kpiRole !== "developer") {
+        router.replace(ROLE_HOME[user.kpiRole] ?? "/dashboard/tim");
+      }
+    }
+  }, [user, isLoading, pathname, router]);
 
   if (isLoading) {
     return (

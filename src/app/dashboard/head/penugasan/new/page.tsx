@@ -4,8 +4,8 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useKpis } from "@/hooks/useKpis";
-import { useAllUsers } from "@/hooks/useUsers";
-import { useAllAssignments } from "@/hooks/useAssignments";
+import { useDivisionMembers } from "@/hooks/useUsers";
+import { useDivisionAssignments } from "@/hooks/useAssignments";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,8 +36,8 @@ export default function HeadNewAssignmentPage() {
   const [year, month] = selectedMonth.split("-").map(Number);
 
   const { kpis } = useKpis(year, month);
-  const { users } = useAllUsers();
-  const { assignments } = useAllAssignments(year, month);
+  const { members: users } = useDivisionMembers(managedDepartments);
+  const { assignments } = useDivisionAssignments(managedDepartments, year, month);
 
   const [step, setStep] = useState<1 | 2>(1);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -50,9 +50,9 @@ export default function HeadNewAssignmentPage() {
 
   const workingDays = getWorkingDaysInMonth(year, month);
 
-  // Filter to managedDepartments only
+  // useDivisionMembers already scopes to dept; filter redundantly for safety
   const assignableUsers = users.filter(
-    (u) => u.status === "active" && !u.isHidden && managedDepartments.includes(u.department ?? "")
+    (u) => managedDepartments.includes(u.department ?? "")
   );
   // Show all non-deleted, non-cancelled KPIs so users can see what exists
   const activeKpis = kpis.filter(

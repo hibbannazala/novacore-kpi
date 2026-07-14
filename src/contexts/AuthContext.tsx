@@ -48,6 +48,7 @@ async function fetchUserProfile(uid: string): Promise<User | null> {
     department: deptName,
     position: data.position,
     photoUrl: data.photo_url,
+    managedDepartments: (data.managed_departments as string[]) ?? [],
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   };
