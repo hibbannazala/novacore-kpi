@@ -70,8 +70,6 @@ export default function ExecutiveDashboard() {
     return { summaries: s, companyAvg: avg };
   }, [assignments, reportsByAssignment, departments, users, isRange]);
 
-  const dbgFirst = assignments[0];
-
   if (isLoading || deptLoading) {
     return (
       <div className="flex h-40 items-center justify-center">
@@ -85,10 +83,6 @@ export default function ExecutiveDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* TEMP DEBUG — hapus setelah fix */}
-      <pre className="text-[10px] bg-yellow-100 text-black p-2 rounded overflow-auto">
-        {`assignments: ${assignments.length} | dept: "${dbgFirst?.department}" | pct: ${dbgFirst?.achievementPercentage} | typeof: ${typeof dbgFirst?.achievementPercentage}`}
-      </pre>
       <div className="flex items-center justify-between flex-wrap gap-4 mb-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-white rounded-[18px] flex items-center justify-center shadow-sm border border-slate-100 shrink-0">

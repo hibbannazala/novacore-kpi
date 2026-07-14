@@ -13,7 +13,7 @@ import { getPerformanceCategory } from "@/lib/utils";
 export const ASSIGNMENT_SELECT = `
   *,
   kpis (*, departments (name)),
-  users (*, departments (name)),
+  users!user_id (*, departments (name)),
   monthly_scores (*)
 ` as const;
 
