@@ -874,9 +874,11 @@ export default function AdminDashboardPage() {
 
       {/* Detail Modal */}
       {selectedRow?.log && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => { setSelectedRow(null); setEditingLog(null); }} />
-          <div className="bg-[var(--ab-bg-surface)] w-full max-w-md rounded-[32px] shadow-2xl relative z-10 border border-[var(--ab-border)] flex flex-col max-h-[90vh]">
+        <div
+          className="ab-confirm-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) { setSelectedRow(null); setEditingLog(null); } }}
+        >
+          <div className="w-full max-w-md rounded-[32px] shadow-2xl border border-[var(--ab-border)] flex flex-col max-h-[90vh] ab-animate-scaleIn" style={{ background: "var(--ab-bg-surface)" }}>
             {/* Modal header */}
             <div className="p-6 border-b border-[var(--ab-border)] flex justify-between items-center bg-gradient-to-r from-[var(--ab-bg-surface)] to-[var(--ab-bg-main)] rounded-t-[32px]">
               <div className="flex items-center gap-3">
@@ -1032,8 +1034,7 @@ export default function AdminDashboardPage() {
 
       {/* Export Modal */}
       {showExport && (
-        <div className="ab-confirm-overlay">
-          <div className="absolute inset-0" onClick={() => setShowExport(false)} />
+        <div className="ab-confirm-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowExport(false); }}>
           <div className="bg-[var(--ab-bg-surface)] w-full max-w-sm rounded-[40px] shadow-2xl relative p-8 border border-[var(--ab-border)]">
             <h3 className="text-xl font-black text-[var(--ab-text-main)] uppercase tracking-tight mb-1">Export Excel</h3>
             <p className="text-[10px] text-[var(--ab-text-dim)] font-bold uppercase tracking-widest mb-6">Pilih rentang tanggal laporan</p>

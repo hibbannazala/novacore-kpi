@@ -26,7 +26,7 @@ export default function PromptDialog({ isOpen, title, message, placeholder, onCo
 
   return createPortal(
     <div className="ab-confirm-overlay ab-animate-fadeIn">
-      <div className="bg-white dark:bg-slate-800 rounded-[32px] p-8 max-w-sm w-full mx-4 shadow-2xl ab-animate-scaleIn border border-gray-100 dark:border-slate-700">
+      <div className="rounded-[32px] p-8 max-w-sm w-full mx-4 shadow-2xl ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
         <div className="flex flex-col items-center text-center">
           <div className="bg-blue-500 w-16 h-16 rounded-3xl flex items-center justify-center text-white mb-6 shadow-lg">
             <PenLine size={32} />

@@ -610,9 +610,8 @@ export default function StaffHomePage() {
       {showLocationGuide &&
         typeof document !== "undefined" &&
         createPortal(
-          <div className="ab-confirm-overlay">
-            <div className="absolute inset-0" onClick={() => setShowLocationGuide(false)} />
-            <div className="bg-[var(--ab-bg-surface)] w-full max-w-md rounded-[50px] shadow-2xl relative overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]">
+          <div className="ab-confirm-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowLocationGuide(false); }}>
+            <div className="w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
               <div className="p-8 text-center">
                 <div className="w-20 h-20 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-orange-50 dark:border-orange-800 animate-bounce">
                   <Lock size={32} className="text-orange-600" />
@@ -674,9 +673,8 @@ export default function StaffHomePage() {
       {selectedView &&
         typeof document !== "undefined" &&
         createPortal(
-          <div className="ab-confirm-overlay">
-            <div className="absolute inset-0" onClick={() => setSelectedView(null)} />
-            <div className="bg-[var(--ab-bg-surface)] w-full max-w-sm rounded-[40px] shadow-2xl relative overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]">
+          <div className="ab-confirm-overlay" onClick={(e) => { if (e.target === e.currentTarget) setSelectedView(null); }}>
+            <div className="w-full max-w-sm rounded-[40px] shadow-2xl overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
               <div className="p-6 border-b border-[var(--ab-border)] flex justify-between items-center">
                 <div className="flex items-center gap-3">
                   <div

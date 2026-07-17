@@ -3,7 +3,36 @@
    Does NOT affect the KPI /dashboard routes.
 ──────────────────────────────────────────────────────────────────────────── */
 
-/* CSS Variables */
+/* CSS Variables — defined on :root so createPortal (document.body) can resolve them */
+:root {
+  --ab-primary: #00897B;
+  --ab-primary-light: #4DB6AC;
+  --ab-primary-glow: rgba(0, 137, 123, 0.3);
+  --ab-secondary: #FFAB00;
+  --ab-bg-main: #F0F2F5;
+  --ab-bg-surface: #ffffff;
+  --ab-nm-light: #ffffff;
+  --ab-nm-shadow: #d1d9e6;
+  --ab-text-main: #1e293b;
+  --ab-text-dim: #64748b;
+  --ab-border: rgba(0,0,0,0.05);
+}
+
+html.dark {
+  --ab-primary: #8b5cf6;
+  --ab-primary-light: #a78bfa;
+  --ab-primary-glow: rgba(139, 92, 246, 0.25);
+  --ab-secondary: #06b6d4;
+  --ab-bg-main: #0f172a;
+  --ab-bg-surface: #1e293b;
+  --ab-nm-light: rgba(255,255,255,0.03);
+  --ab-nm-shadow: rgba(0,0,0,0.6);
+  --ab-text-main: #f8fafc;
+  --ab-text-dim: #94a3b8;
+  --ab-border: rgba(139, 92, 246, 0.1);
+}
+
+/* Keep .absensi-root scope for overriding within the module */
 .absensi-root {
   --ab-primary: #00897B;
   --ab-primary-light: #4DB6AC;
@@ -136,9 +165,10 @@ html.dark .absensi-root {
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  backdrop-filter: blur(4px);
-  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(8px);
+  background: rgba(2, 8, 23, 0.65);
   z-index: 9999;
+  overflow-y: auto;
 }
 
 /* ── Animations ── */
