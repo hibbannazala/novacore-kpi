@@ -40,6 +40,13 @@ export default function AdminLogsPage() {
     };
 
     fetchLogs();
+
+    const ch = supabase
+      .channel("absensi_logs_rt")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "absensi_logs" }, fetchLogs)
+      .subscribe();
+
+    return () => { ch.unsubscribe(); };
   }, []);
 
   const filtered = useMemo(() => {

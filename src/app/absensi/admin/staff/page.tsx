@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { AbsensiStatus } from "@/types";
 import ConfirmDialog from "@/components/absensi/ConfirmDialog";
 import { Search, UserMinus, UserCheck, RotateCcw, User } from "lucide-react";
+import ExcelJS from "exceljs";
 import { toast } from "sonner";
 
 interface StaffUser {
@@ -40,6 +41,7 @@ export default function AdminStaffPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [confirmCfg, setConfirmCfg] = useState<ConfirmCfg>(null);
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [selectedPeriod, setSelectedPeriod] = useState(() => new Date().toISOString().substring(0, 7));
 
   useEffect(() => {
     const supabase = createClient();
@@ -136,6 +138,64 @@ export default function AdminStaffPage() {
     });
   };
 
+  const handleSlipAbsen = async (u: StaffUser) => {
+    const supabase = createClient();
+    const tid = toast.loading(`Mengambil data absensi ${u.name}...`);
+    try {
+      const startStr = `${selectedPeriod}-01`;
+      const endStr   = `${selectedPeriod}-31`;
+      const { data: logs, error } = await supabase
+        .from("attendance")
+        .select("date, type, status, check_in, check_out, late_fine, radius_penalty, late_reason_status")
+        .eq("user_id", u.id)
+        .gte("date", startStr)
+        .lte("date", endStr)
+        .order("date");
+      if (error) throw error;
+      if (!logs || logs.length === 0) {
+        toast.error(`Tidak ada absen untuk ${u.name} pada ${selectedPeriod}`, { id: tid });
+        return;
+      }
+      const workbook  = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Slip Absen");
+      worksheet.columns = [
+        { header: "Tanggal",      key: "date",              width: 15 },
+        { header: "Tipe",         key: "type",              width: 10 },
+        { header: "Status",       key: "status",            width: 15 },
+        { header: "Check In",     key: "checkIn",           width: 12 },
+        { header: "Check Out",    key: "checkOut",          width: 12 },
+        { header: "Denda (Rp)",   key: "lateFine",          width: 15 },
+        { header: "Denda Radius", key: "radiusPenalty",     width: 15 },
+        { header: "Status Alasan",key: "lateReasonStatus",  width: 15 },
+      ];
+      for (const l of logs) {
+        const lrsRaw = l.late_reason_status as string | null;
+        const lrsLabel = lrsRaw === "accepted" ? "Diterima" : lrsRaw === "rejected" ? "Ditolak" : lrsRaw === "pending" ? "Menunggu" : "-";
+        worksheet.addRow({
+          date:             l.date as string,
+          type:             (l.type as string) ?? "-",
+          status:           ((l.status as string) ?? "-").replace("_", " ").toUpperCase(),
+          checkIn:          (l.check_in as string | null) ?? "-",
+          checkOut:         (l.check_out as string | null) ?? "-",
+          lateFine:         (l.late_fine as number) ?? 0,
+          radiusPenalty:    (l.radius_penalty as number) ?? 0,
+          lateReasonStatus: lrsLabel,
+        });
+      }
+      worksheet.getRow(1).font = { bold: true };
+      worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob   = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url    = URL.createObjectURL(blob);
+      const a      = document.createElement("a");
+      a.href = url; a.download = `Slip_Absen_${u.name.replace(/\s+/g, "_")}_${selectedPeriod}.xlsx`; a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Slip absen ${u.name} berhasil diunduh`, { id: tid });
+    } catch (err: unknown) {
+      toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
+    }
+  };
+
   const filtered = users.filter(
     (u) =>
       u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -153,15 +213,24 @@ export default function AdminStaffPage() {
             Manajemen Profil, Akses, dan Kuota Cuti
           </p>
         </div>
-        <div className="relative w-full md:w-64">
-          <Search size={12} className="absolute left-3 top-3 text-[var(--ab-text-dim)]" />
+        <div className="flex gap-2 w-full md:w-auto">
           <input
-            type="text"
-            placeholder="Cari staf..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="ab-input pl-9 text-xs"
+            type="month"
+            value={selectedPeriod}
+            onChange={(e) => setSelectedPeriod(e.target.value)}
+            className="ab-input text-xs w-36"
+            title="Periode slip absen"
           />
+          <div className="relative flex-1">
+            <Search size={12} className="absolute left-3 top-3 text-[var(--ab-text-dim)]" />
+            <input
+              type="text"
+              placeholder="Cari staf..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="ab-input pl-9 text-xs w-full md:w-64"
+            />
+          </div>
         </div>
       </div>
 

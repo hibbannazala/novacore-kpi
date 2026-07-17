@@ -10,6 +10,7 @@ import { useAbsensiSettings } from "@/hooks/absensi/useAbsensiSettings";
 import { useHolidays } from "@/hooks/absensi/useHolidays";
 import ConfirmDialog from "@/components/absensi/ConfirmDialog";
 import PromptDialog from "@/components/absensi/PromptDialog";
+import CountUp from "@/components/absensi/CountUp";
 import {
   Fingerprint, Laptop, Umbrella, Stethoscope,
   Clock, CheckCircle2, AlertCircle, MapPin,
@@ -567,7 +568,7 @@ export default function StaffHomePage() {
                   {label}
                 </p>
                 <p className="text-lg font-black text-[var(--ab-text-main)] font-mono leading-none">
-                  {data.count}
+                  <CountUp end={data.count} />
                 </p>
               </div>
             </button>

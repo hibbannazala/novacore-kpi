@@ -8,14 +8,15 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 const DAY_LABELS = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 
 interface DayData {
-  wfo: number;
-  wfa: number;
-  leave: number;
+  wfo: string[];
+  wfa: string[];
+  leave: string[];
 }
 
 export default function StaffTeamPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dayData, setDayData] = useState<Record<string, DayData>>({});
+  const [totalStaff, setTotalStaff] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const { holidays } = useHolidays();
 
@@ -32,34 +33,38 @@ export default function StaffTeamPage() {
     const end     = `${year}-${mm}-${String(lastDay).padStart(2, "0")}`;
 
     const fetchData = async () => {
-      const [attRes, reqRes] = await Promise.all([
-        supabase.from("attendance").select("date, type").gte("date", start).lte("date", end),
-        supabase.from("leave_requests").select("dates, type").eq("status", "approved"),
+      const [attRes, reqRes, staffRes] = await Promise.all([
+        supabase.from("attendance").select("date, type, users(name)").gte("date", start).lte("date", end),
+        supabase.from("leave_requests").select("dates, type, users(name)").eq("status", "approved"),
+        supabase.from("users").select("id", { count: "exact", head: true }).eq("absensi_status", "active"),
       ]);
 
       const data: Record<string, DayData> = {};
-      const ensure = (d: string) => { if (!data[d]) data[d] = { wfo: 0, wfa: 0, leave: 0 }; };
+      const ensure = (d: string) => { if (!data[d]) data[d] = { wfo: [], wfa: [], leave: [] }; };
 
       (attRes.data ?? []).forEach((r) => {
-        const d = (r.date as string).substring(0, 10);
+        const d    = (r.date as string).substring(0, 10);
+        const name = ((r.users as unknown) as { name: string } | null)?.name ?? "?";
         ensure(d);
-        if (r.type === "WFA") data[d].wfa++; else data[d].wfo++;
+        if (r.type === "WFA") data[d].wfa.push(name); else data[d].wfo.push(name);
       });
 
       (reqRes.data ?? []).forEach((r) => {
         const dates = (r.dates as string[]) ?? [];
+        const name  = ((r.users as unknown) as { name: string } | null)?.name ?? "?";
         const isLeave = r.type === "leave" || r.type === "sick";
         const isWfa   = r.type === "wfa";
         dates.forEach((d) => {
           if (d >= start && d <= end) {
             ensure(d);
-            if (isLeave) data[d].leave++;
-            else if (isWfa) data[d].wfa++;
+            if (isLeave) data[d].leave.push(name);
+            else if (isWfa) data[d].wfa.push(name);
           }
         });
       });
 
       setDayData(data);
+      setTotalStaff(staffRes.count ?? 0);
       setIsLoading(false);
     };
 
@@ -123,14 +128,14 @@ export default function StaffTeamPage() {
             {day}
           </span>
           <div className="flex flex-wrap gap-0.5 mt-1">
-            {Array.from({ length: d?.wfo ?? 0 }).map((_, i) => (
-              <span key={`w-${i}`} className="w-1.5 h-1.5 rounded-full bg-green-500" />
+            {(d?.wfo ?? []).map((name, i) => (
+              <span key={`w-${i}`} title={name} className="w-1.5 h-1.5 rounded-full bg-green-500 cursor-default" />
             ))}
-            {Array.from({ length: d?.wfa ?? 0 }).map((_, i) => (
-              <span key={`f-${i}`} className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+            {(d?.wfa ?? []).map((name, i) => (
+              <span key={`f-${i}`} title={name} className="w-1.5 h-1.5 rounded-full bg-purple-500 cursor-default" />
             ))}
-            {Array.from({ length: d?.leave ?? 0 }).map((_, i) => (
-              <span key={`l-${i}`} className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+            {(d?.leave ?? []).map((name, i) => (
+              <span key={`l-${i}`} title={name} className="w-1.5 h-1.5 rounded-full bg-orange-500 cursor-default" />
             ))}
           </div>
         </div>
@@ -162,7 +167,7 @@ export default function StaffTeamPage() {
               {monthYear}
             </h3>
             <p className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest mt-0.5">
-              Ringkasan Aktivitas Tim
+              Ringkasan Aktivitas Tim{totalStaff > 0 ? ` · ${totalStaff} Staf Aktif` : ""}
             </p>
           </div>
           <button

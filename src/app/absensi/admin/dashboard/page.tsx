@@ -1,317 +1,1058 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useHolidays } from "@/hooks/absensi/useHolidays";
 import { useAbsensiSettings } from "@/hooks/absensi/useAbsensiSettings";
 import { useAuth } from "@/contexts/AuthContext";
-import { CalendarDays, Search, Users, MapPin, Laptop, Umbrella, AlertCircle, Check, X, Clock } from "lucide-react";
+import CountUp from "@/components/absensi/CountUp";
+import ExcelJS from "exceljs";
 import { toast } from "sonner";
+import {
+  Users, Building2, Laptop, Umbrella, Clock, MapPin,
+  CalendarDays, Search, FileSpreadsheet, Zap, FileText,
+  Trash2, Pencil, Navigation, X, Check, ArrowRight, ChevronRight,
+  ClipboardList, DollarSign,
+} from "lucide-react";
 
+// ─ Types ──────────────────────────────────────────────────────────────────────
 interface AttLog {
   id: string;
   userId: string;
   userName: string;
+  userEmail: string;
+  dept: string;
   date: string;
   checkIn: string | null;
   checkOut: string | null;
   status: string;
   type: string;
   lateFine: number;
+  radiusPenalty: number;
   locationStatus: string | null;
+  locationIn: { lat: number; lng: number } | null;
   lateReason: string;
   lateReasonStatus: string | null;
   notes: string | null;
 }
 
-interface ActiveUser { id: string; name: string; isHidden: boolean }
+interface ActiveUser {
+  id: string;
+  name: string;
+  email: string;
+  dept: string;
+  isHidden: boolean;
+}
 
+interface ExcusedEntry { id: string; type: string }
+
+interface DisplayRow {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  dept: string;
+  log: AttLog | null;
+  isExcused: boolean;
+  excusedType?: string;
+  isMissed: boolean;
+}
+
+interface FineSummaryRow {
+  id: string;
+  name: string;
+  dept: string;
+  lateCount: number;
+  totalFine: number;
+}
+
+interface EditingLog {
+  id: string;
+  checkIn: string;
+  checkOut: string;
+  status: string;
+  lateFine: number;
+  notes: string;
+}
+
+// ─ Helpers ────────────────────────────────────────────────────────────────────
 function fmt(t: string | null) { return t ? t.substring(0, 5) : "--:--"; }
 
+function calcDist(la1: number, lo1: number, la2: number, lo2: number) {
+  const R = 6371e3;
+  const f1 = (la1 * Math.PI) / 180, f2 = (la2 * Math.PI) / 180;
+  const df = ((la2 - la1) * Math.PI) / 180, dl = ((lo2 - lo1) * Math.PI) / 180;
+  const a = Math.sin(df / 2) ** 2 + Math.cos(f1) * Math.cos(f2) * Math.sin(dl / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+function buildDateRange(start: string, end: string): string[] {
+  const out: string[] = [];
+  let cur = new Date(start);
+  const endD = new Date(end);
+  while (cur <= endD) {
+    out.push(cur.toISOString().split("T")[0]);
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
+
+// ─ Main ───────────────────────────────────────────────────────────────────────
 export default function AdminDashboardPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const { settings } = useAbsensiSettings();
-  const { holidayDates } = useHolidays();
+  const { holidays, holidayDates } = useHolidays();
 
   const today = new Date().toISOString().split("T")[0];
-  const [filterDate, setFilterDate] = useState(today);
-  const [logs, setLogs] = useState<AttLog[]>([]);
+  const [filterDate, setFilterDate]   = useState(today);
+  const [logs, setLogs]               = useState<AttLog[]>([]);
   const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
-  const [excusedMap, setExcusedMap] = useState<Map<string, string>>(new Map());
-  const [searchTerm, setSearchTerm] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
+  const [excused, setExcused]         = useState<ExcusedEntry[]>([]);
+  const [pendingStaff, setPendingStaff] = useState(0);
+  const [searchTerm, setSearchTerm]   = useState("");
+  const [isLoading, setIsLoading]     = useState(true);
+  const [activeTab, setActiveTab]     = useState<"logs" | "fines">("logs");
+  const [activeFilter, setActiveFilter] = useState<"all" | "present" | "wfo" | "wfa" | "leave" | "missed">("present");
+  const [fineSummary, setFineSummary] = useState<FineSummaryRow[]>([]);
 
-  // Late reason review modal
-  const [selectedLog, setSelectedLog] = useState<AttLog | null>(null);
+  // Override forms
+  const [showOverrideAtt,   setShowOverrideAtt]   = useState(false);
+  const [showOverrideLeave, setShowOverrideLeave] = useState(false);
+  const [overrideAtt,   setOverrideAtt]   = useState<{ userId: string; date: string; type: "WFO" | "WFA"; checkIn: string; checkOut: string }>({ userId: "", date: today, type: "WFO", checkIn: "08:00", checkOut: "17:00" });
+  const [overrideLeave, setOverrideLeave] = useState({ userId: "", type: "leave" as "leave" | "sick" | "wfa", startDate: today, endDate: today, reason: "" });
 
-  useEffect(() => {
+  // Detail modal
+  const [selectedRow, setSelectedRow]   = useState<DisplayRow | null>(null);
+  const [editingLog,  setEditingLog]    = useState<EditingLog | null>(null);
+  const [selectedDist, setSelectedDist] = useState<number | null>(null);
+
+  // Export modal
+  const [showExport, setShowExport]       = useState(false);
+  const [exportStart, setExportStart]     = useState(today);
+  const [exportEnd,   setExportEnd]       = useState(today);
+
+  // ─ Fetch data ───────────────────────────────────────────────────────────────
+  const fetchData = useCallback(async () => {
     const supabase = createClient();
+    const [attRes, usersRes, reqsRes, pendingRes] = await Promise.all([
+      supabase.from("attendance")
+        .select("id, user_id, date, check_in, check_out, status, type, late_fine, radius_penalty, location_status, location_in, late_reason, late_reason_status, notes, users(name, email, departments(name))")
+        .eq("date", filterDate),
+      supabase.from("users")
+        .select("id, name, email, is_hidden, departments(name)")
+        .eq("absensi_status", "active"),
+      supabase.from("leave_requests")
+        .select("user_id, type")
+        .eq("status", "approved")
+        .contains("dates", [filterDate]),
+      supabase.from("users")
+        .select("id", { count: "exact", head: true })
+        .eq("absensi_status", "pending"),
+    ]);
 
-    const fetchLogs = async () => {
-      const [attRes, usersRes, reqsRes] = await Promise.all([
-        supabase.from("attendance").select("id, user_id, date, check_in, check_out, status, type, late_fine, location_status, late_reason, late_reason_status, notes").eq("date", filterDate),
-        supabase.from("users").select("id, name, is_hidden").eq("absensi_status", "active"),
-        supabase.from("leave_requests").select("user_id, type").eq("status", "approved").contains("dates", [filterDate]),
-      ]);
+    const uList: ActiveUser[] = (usersRes.data ?? []).map((r) => ({
+      id:       r.id as string,
+      name:     r.name as string,
+      email:    r.email as string,
+      dept:     ((r.departments as unknown) as { name: string } | null)?.name ?? "Umum",
+      isHidden: (r.is_hidden as boolean) ?? false,
+    }));
+    setActiveUsers(uList.filter((u) => !u.isHidden));
 
-      // Build user map
-      const uMap = new Map<string, ActiveUser>();
-      (usersRes.data ?? []).forEach((r) => {
-        uMap.set(r.id as string, { id: r.id as string, name: r.name as string, isHidden: (r.is_hidden as boolean) ?? false });
-      });
-      setActiveUsers([...uMap.values()].filter((u) => !u.isHidden));
+    const uMap = new Map(uList.map((u) => [u.id, u]));
 
-      // Build excused map
-      const ex = new Map<string, string>();
-      (reqsRes.data ?? []).forEach((r) => { ex.set(r.user_id as string, r.type as string); });
-      setExcusedMap(ex);
+    setExcused(
+      (reqsRes.data ?? []).map((r) => ({ id: r.user_id as string, type: r.type as string }))
+    );
 
-      setLogs(
-        (attRes.data ?? []).map((r) => ({
+    setLogs(
+      (attRes.data ?? []).map((r) => {
+        const usr = uMap.get(r.user_id as string);
+        const depts = (r.users as unknown) as { name: string; email: string; departments?: { name: string } | null } | null;
+        return {
           id:               r.id as string,
           userId:           r.user_id as string,
-          userName:         uMap.get(r.user_id as string)?.name ?? "Unknown",
+          userName:         usr?.name ?? (depts?.name ?? "Unknown"),
+          userEmail:        usr?.email ?? (depts?.email ?? ""),
+          dept:             usr?.dept ?? (depts?.departments?.name ?? "Umum"),
           date:             r.date as string,
           checkIn:          r.check_in as string | null,
           checkOut:         r.check_out as string | null,
           status:           r.status as string,
           type:             r.type as string,
           lateFine:         (r.late_fine as number) ?? 0,
+          radiusPenalty:    (r.radius_penalty as number) ?? 0,
           locationStatus:   r.location_status as string | null,
+          locationIn:       r.location_in as { lat: number; lng: number } | null,
           lateReason:       (r.late_reason as string) ?? "",
           lateReasonStatus: r.late_reason_status as string | null,
           notes:            r.notes as string | null,
-        }))
-      );
-      setIsLoading(false);
-    };
+        };
+      })
+    );
 
-    fetchLogs();
-
-    const ch = supabase.channel("admin_dash_" + filterDate)
-      .on("postgres_changes", { event: "*", schema: "public", table: "attendance" }, fetchLogs)
-      .on("postgres_changes", { event: "*", schema: "public", table: "leave_requests" }, fetchLogs)
-      .subscribe();
-
-    return () => { ch.unsubscribe(); };
+    setPendingStaff(pendingRes.count ?? 0);
+    setIsLoading(false);
   }, [filterDate]);
 
-  const isHoliday = holidayDates.includes(filterDate);
+  useEffect(() => {
+    setIsLoading(true);
+    fetchData();
+    const supabase = createClient();
+    const ch = supabase.channel("admin_dash_" + filterDate)
+      .on("postgres_changes", { event: "*", schema: "public", table: "attendance" }, fetchData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "leave_requests" }, fetchData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "users" }, fetchData)
+      .subscribe();
+    return () => { ch.unsubscribe(); };
+  }, [fetchData]);
 
+  // ─ Fine summary (when tab = fines) ──────────────────────────────────────────
+  useEffect(() => {
+    if (activeTab !== "fines") return;
+    const fetchFines = async () => {
+      const supabase = createClient();
+      const mm = filterDate.substring(0, 7);
+      const lastDay = String(new Date(Number(mm.split("-")[0]), Number(mm.split("-")[1]), 0).getDate()).padStart(2, "0");
+      const { data } = await supabase.from("attendance")
+        .select("user_id, late_fine")
+        .gte("date", `${mm}-01`)
+        .lte("date", `${mm}-${lastDay}`)
+        .gt("late_fine", 0);
+      const sumMap = new Map<string, { lateCount: number; totalFine: number }>();
+      (data ?? []).forEach((r) => {
+        const uid = r.user_id as string;
+        const cur = sumMap.get(uid) ?? { lateCount: 0, totalFine: 0 };
+        sumMap.set(uid, { lateCount: cur.lateCount + 1, totalFine: cur.totalFine + ((r.late_fine as number) ?? 0) });
+      });
+      const rows: FineSummaryRow[] = activeUsers
+        .filter((u) => sumMap.has(u.id))
+        .map((u) => {
+          const s = sumMap.get(u.id)!;
+          return { id: u.id, name: u.name, dept: u.dept, ...s };
+        })
+        .sort((a, b) => b.totalFine - a.totalFine);
+      setFineSummary(rows);
+    };
+    fetchFines();
+  }, [activeTab, filterDate, activeUsers]);
+
+  // ─ Stats ────────────────────────────────────────────────────────────────────
   const stats = useMemo(() => {
+    const excusedIds = new Set(excused.map((e) => e.id));
     const presentIds = new Set(logs.map((l) => l.userId));
-    const excusedIds = new Set(excusedMap.keys());
-    const wfo    = logs.filter((l) => l.type === "WFO").length;
-    const wfa    = logs.filter((l) => l.type === "WFA").length;
-    const excused = excusedIds.size;
-    const missed = activeUsers.filter((u) => !presentIds.has(u.id) && !excusedIds.has(u.id)).length;
-    return { total: logs.length, wfo, wfa, excused, missed };
-  }, [logs, activeUsers, excusedMap]);
+    return {
+      total:   activeUsers.length,
+      present: logs.length,
+      wfo:     logs.filter((l) => l.type === "WFO").length,
+      wfa:     logs.filter((l) => l.type === "WFA").length,
+      leave:   excusedIds.size,
+      missed:  activeUsers.filter((u) => !presentIds.has(u.id) && !excusedIds.has(u.id)).length,
+    };
+  }, [logs, activeUsers, excused]);
 
-  const displayRows = useMemo(() => {
+  // ─ Display rows ─────────────────────────────────────────────────────────────
+  const displayRows = useMemo((): DisplayRow[] => {
+    const excusedIds = new Set(excused.map((e) => e.id));
     const presentIds = new Set(logs.map((l) => l.userId));
-    const excusedIds = new Set(excusedMap.keys());
+    const logMap = new Map(logs.map((l) => [l.userId, l]));
+    const excusedMap = new Map(excused.map((e) => [e.id, e.type]));
 
-    type Row = AttLog | { id: string; userId: string; userName: string; isExcused: boolean; excusedType?: string; isMissed: boolean; status: string; type: string; checkIn: null; checkOut: null; lateFine: number; locationStatus: null; lateReason: string; lateReasonStatus: null; notes: null; date: string };
+    let rows: DisplayRow[] = [];
 
-    const rows: Row[] = [...logs];
-
-    activeUsers.forEach((u) => {
-      if (!presentIds.has(u.id)) {
-        if (excusedIds.has(u.id)) {
-          rows.push({ id: `ex-${u.id}`, userId: u.id, userName: u.name, isExcused: true, excusedType: excusedMap.get(u.id), isMissed: false, status: "approved", type: excusedMap.get(u.id) ?? "leave", checkIn: null, checkOut: null, lateFine: 0, locationStatus: null, lateReason: "", lateReasonStatus: null, notes: null, date: filterDate });
-        } else {
-          rows.push({ id: `ms-${u.id}`, userId: u.id, userName: u.name, isExcused: false, isMissed: true, status: "missed", type: "-", checkIn: null, checkOut: null, lateFine: 0, locationStatus: null, lateReason: "", lateReasonStatus: null, notes: null, date: filterDate });
-        }
-      }
-    });
+    if (activeFilter === "all") {
+      rows = activeUsers.map((u) => ({
+        id: u.id, userId: u.id, name: u.name, email: u.email, dept: u.dept,
+        log: logMap.get(u.id) ?? null,
+        isExcused: excusedIds.has(u.id), excusedType: excusedMap.get(u.id),
+        isMissed: !presentIds.has(u.id) && !excusedIds.has(u.id),
+      }));
+    } else if (activeFilter === "present") {
+      rows = logs.map((l) => {
+        const u = activeUsers.find((a) => a.id === l.userId);
+        return { id: l.id, userId: l.userId, name: l.userName, email: l.userEmail, dept: l.dept, log: l, isExcused: false, isMissed: false };
+      });
+    } else if (activeFilter === "wfo" || activeFilter === "wfa") {
+      const t = activeFilter.toUpperCase();
+      rows = logs.filter((l) => l.type === t).map((l) => ({
+        id: l.id, userId: l.userId, name: l.userName, email: l.userEmail, dept: l.dept,
+        log: l, isExcused: false, isMissed: false,
+      }));
+    } else if (activeFilter === "leave") {
+      rows = activeUsers.filter((u) => excusedIds.has(u.id)).map((u) => ({
+        id: u.id, userId: u.id, name: u.name, email: u.email, dept: u.dept,
+        log: null, isExcused: true, excusedType: excusedMap.get(u.id), isMissed: false,
+      }));
+    } else if (activeFilter === "missed") {
+      rows = activeUsers.filter((u) => !presentIds.has(u.id) && !excusedIds.has(u.id)).map((u) => ({
+        id: u.id, userId: u.id, name: u.name, email: u.email, dept: u.dept,
+        log: null, isExcused: false, isMissed: true,
+      }));
+    }
 
     if (!searchTerm) return rows;
-    return rows.filter((r) => r.userName.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [logs, activeUsers, excusedMap, searchTerm, filterDate]);
+    const q = searchTerm.toLowerCase();
+    return rows.filter((r) => r.name.toLowerCase().includes(q) || r.email.toLowerCase().includes(q));
+  }, [logs, activeUsers, excused, activeFilter, searchTerm]);
 
+  // ─ Actions ──────────────────────────────────────────────────────────────────
   const handleLateReason = async (logId: string, action: "accepted" | "rejected") => {
     const supabase = createClient();
     const tid = toast.loading("Memproses alasan...");
     try {
-      const updatePayload = action === "accepted"
+      const payload = action === "accepted"
         ? { late_reason_status: action, late_fine: 0, status: "on_time" as const }
         : { late_reason_status: action };
-      const { error } = await supabase.from("attendance").update(updatePayload).eq("id", logId);
+      const { error } = await supabase.from("attendance").update(payload).eq("id", logId);
       if (error) throw error;
       toast.success(action === "accepted" ? "Alasan diterima, denda dibatalkan." : "Alasan ditolak.", { id: tid });
-      setSelectedLog(null);
+      await fetchData();
+      setSelectedRow(null);
     } catch (err: unknown) {
       toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
     }
   };
 
+  const handleSaveEdit = async () => {
+    if (!editingLog) return;
+    const supabase = createClient();
+    const tid = toast.loading("Menyimpan perubahan...");
+    try {
+      const { error } = await supabase.from("attendance").update({
+        check_in:  editingLog.checkIn  || null,
+        check_out: editingLog.checkOut || null,
+        status:    editingLog.status as "on_time" | "late" | "very_late" | "auto_checkout",
+        late_fine: Number(editingLog.lateFine),
+        notes:     editingLog.notes || null,
+      }).eq("id", editingLog.id);
+      if (error) throw error;
+      toast.success("Log berhasil diupdate.", { id: tid });
+      setEditingLog(null);
+      setSelectedRow(null);
+      await fetchData();
+    } catch (err: unknown) {
+      toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
+    }
+  };
+
+  const handleDeleteLog = async (logId: string) => {
+    const supabase = createClient();
+    const tid = toast.loading("Menghapus log...");
+    try {
+      const { error } = await supabase.from("attendance").delete().eq("id", logId);
+      if (error) throw error;
+      toast.success("Log berhasil dihapus.", { id: tid });
+      setSelectedRow(null);
+      await fetchData();
+    } catch (err: unknown) {
+      toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
+    }
+  };
+
+  const handleOverrideAtt = async () => {
+    if (!overrideAtt.userId || !overrideAtt.date) { toast.error("Lengkapi data!"); return; }
+    const supabase = createClient();
+    const staff = activeUsers.find((u) => u.id === overrideAtt.userId);
+    const tid = toast.loading("Menyimpan override absensi...");
+    try {
+      const { error } = await supabase.from("attendance").upsert({
+        user_id:         overrideAtt.userId,
+        date:            overrideAtt.date,
+        check_in:        overrideAtt.checkIn,
+        check_out:       overrideAtt.checkOut,
+        type:            overrideAtt.type,
+        status:          "on_time",
+        location_status: "ADMIN_OVERRIDE",
+        late_fine:       0,
+        radius_penalty:  0,
+        late_reason:     "",
+        early_reason:    "",
+        early_checkout:  false,
+      }, { onConflict: "user_id,date" });
+      if (error) throw error;
+      await supabase.from("absensi_logs").insert({
+        actor: user?.name ?? "Admin", action: "ADMIN_OVERRIDE_ATT",
+        details: `Override absensi ${staff?.name ?? overrideAtt.userId} tgl ${overrideAtt.date}`,
+      });
+      toast.success("Override absensi berhasil!", { id: tid });
+      setShowOverrideAtt(false);
+      await fetchData();
+    } catch (err: unknown) {
+      toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
+    }
+  };
+
+  const handleOverrideLeave = async () => {
+    if (!overrideLeave.userId || !overrideLeave.startDate) { toast.error("Lengkapi data!"); return; }
+    const supabase = createClient();
+    const staff = activeUsers.find((u) => u.id === overrideLeave.userId);
+    if (!staff) { toast.error("Staf tidak ditemukan!"); return; }
+    const dates = buildDateRange(overrideLeave.startDate, overrideLeave.endDate);
+    const tid = toast.loading("Menyimpan override cuti/WFA...");
+    try {
+      const type = overrideLeave.type;
+      // Deduct quota
+      if (type === "leave" || type === "sick") {
+        const validDates = dates.filter((d) => {
+          const dow = new Date(d).getDay();
+          return dow !== 0 && dow !== 6 && !holidayDates.includes(d);
+        });
+        const days = validDates.length;
+        const { data: userData } = await supabase.from("users").select("leave_quota, sick_quota").eq("id", overrideLeave.userId).single();
+        if (userData && days > 0) {
+          let leaveQ = (userData.leave_quota as number) ?? 0;
+          let sickQ  = (userData.sick_quota as number) ?? 0;
+          if (type === "sick") {
+            const fromSick  = Math.min(days, sickQ);
+            const fromLeave = days - fromSick;
+            sickQ  -= fromSick;
+            leaveQ -= fromLeave;
+          } else {
+            leaveQ -= days;
+          }
+          await supabase.from("users").update({ leave_quota: leaveQ, sick_quota: sickQ }).eq("id", overrideLeave.userId);
+        }
+      }
+      const { error } = await supabase.from("leave_requests").insert({
+        user_id:  overrideLeave.userId,
+        type,
+        dates,
+        reason:       overrideLeave.reason || "Admin Override",
+        status:       "approved",
+        processed_by: user?.name ?? "Admin",
+        processed_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      await supabase.from("absensi_logs").insert({
+        actor: user?.name ?? "Admin", action: "ADMIN_OVERRIDE_LEAVE",
+        details: `Override ${type} ${staff.name} (${dates.join(", ")})`,
+      });
+      toast.success("Override cuti/WFA berhasil!", { id: tid });
+      setShowOverrideLeave(false);
+      await fetchData();
+    } catch (err: unknown) {
+      toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
+    }
+  };
+
+  // ─ Export Excel ─────────────────────────────────────────────────────────────
+  const handleExportExcel = async () => {
+    const tid = toast.loading("Menyiapkan laporan Excel...");
+    try {
+      const supabase = createClient();
+      const [attRes, reqsRes] = await Promise.all([
+        supabase.from("attendance").select("user_id, date, type, status, check_in, check_out, late_fine, radius_penalty, late_reason")
+          .gte("date", exportStart).lte("date", exportEnd),
+        supabase.from("leave_requests").select("user_id, type, dates, reason").eq("status", "approved"),
+      ]);
+
+      const attLogs = attRes.data ?? [];
+      const reqs    = reqsRes.data ?? [];
+      const dateRange = buildDateRange(exportStart, exportEnd);
+      const todayStr  = today;
+      const holSet    = new Set(holidays.map((h) => h.date));
+
+      const workbook   = new ExcelJS.Workbook();
+      const summaryWs  = workbook.addWorksheet("Rekap Kehadiran");
+      const detailWs   = workbook.addWorksheet("Rincian Harian");
+
+      summaryWs.columns = [
+        { header: "Nama Staf",      key: "name",        width: 25 },
+        { header: "Departemen",     key: "dept",        width: 20 },
+        { header: "Kehadiran Aktif",key: "totalActive", width: 15 },
+        { header: "WFO",            key: "totalWFO",    width: 10 },
+        { header: "WFA/WFH",        key: "totalWFA",    width: 10 },
+        { header: "Cuti Biasa",     key: "totalLeave",  width: 12 },
+        { header: "Sakit",          key: "totalSick",   width: 10 },
+        { header: "Total Telat",    key: "totalLate",   width: 12 },
+        { header: "Total Alpha",    key: "totalAlpha",  width: 12 },
+        { header: "Catatan Alpha",  key: "alphaNote",   width: 25 },
+        { header: "Total Denda",    key: "totalFine",   width: 15 },
+        { header: "Denda Radius",   key: "totalRadius", width: 15 },
+      ];
+
+      detailWs.columns = [
+        { header: "Tanggal",            key: "date",     width: 15 },
+        { header: "Nama Staf",          key: "name",     width: 25 },
+        { header: "Divisi",             key: "dept",     width: 20 },
+        { header: "Check In",           key: "checkIn",  width: 12 },
+        { header: "Check Out",          key: "checkOut", width: 12 },
+        { header: "Status",             key: "status",   width: 20 },
+        { header: "Tipe",               key: "type",     width: 10 },
+        { header: "Denda Telat (Rp)",   key: "lateFine", width: 15 },
+        { header: "Keterangan/Alasan",  key: "reason",   width: 35 },
+      ];
+
+      const sorted = [...activeUsers].sort((a, b) => a.name.localeCompare(b.name));
+
+      sorted.forEach((u) => {
+        const uLogs = attLogs.filter((l) => l.user_id === u.id);
+        const totalWFO   = uLogs.filter((l) => l.type === "WFO").length;
+        const totalWFA   = uLogs.filter((l) => l.type === "WFA").length;
+        const totalLate  = uLogs.filter((l) => l.status === "late" || l.status === "very_late").length;
+        const totalFine  = uLogs.reduce((s, l) => s + ((l.late_fine as number) ?? 0), 0);
+        const totalRadius = uLogs.reduce((s, l) => s + ((l.radius_penalty as number) ?? 0), 0);
+
+        let totalLeave = 0, totalSick = 0;
+        reqs.filter((r) => r.user_id === u.id).forEach((r) => {
+          const valid = (r.dates as string[]).filter((d) => d >= exportStart && d <= exportEnd);
+          if (r.type === "leave") totalLeave += valid.length;
+          if (r.type === "sick")  totalSick  += valid.length;
+        });
+
+        const totalAlpha = dateRange.reduce((s, d) => {
+          const dow = new Date(d).getDay();
+          if (dow === 0 || dow === 6 || holSet.has(d) || d > todayStr) return s;
+          const hasLog = uLogs.some((l) => l.date === d);
+          const hasReq = reqs.some((r) => r.user_id === u.id && (r.dates as string[]).includes(d));
+          return hasLog || hasReq ? s : s + 1;
+        }, 0);
+
+        summaryWs.addRow({
+          name: u.name, dept: u.dept,
+          totalActive: totalWFO + totalWFA, totalWFO, totalWFA,
+          totalLeave, totalSick, totalLate, totalAlpha,
+          alphaNote: totalAlpha > 0 ? `Alpa ${totalAlpha} hari` : "-",
+          totalFine, totalRadius,
+        });
+      });
+
+      dateRange.forEach((d) => {
+        const dow = new Date(d).getDay();
+        const isWeekend = dow === 0 || dow === 6;
+        const isHol = holSet.has(d);
+        const isFuture = d > todayStr;
+        sorted.forEach((u) => {
+          const log = attLogs.find((l) => l.user_id === u.id && l.date === d);
+          const req = reqs.find((r) => r.user_id === u.id && (r.dates as string[]).includes(d));
+          if (log) {
+            detailWs.addRow({ date: d, name: u.name, dept: u.dept, checkIn: fmt(log.check_in as string | null), checkOut: fmt(log.check_out as string | null), status: (log.status as string).replace("_", " "), type: log.type as string, lateFine: (log.late_fine as number) ?? 0, reason: (log.late_reason as string) || "-" });
+          } else if (req) {
+            const typeLabel = req.type === "leave" ? "Cuti" : req.type === "sick" ? "Sakit" : "WFA";
+            detailWs.addRow({ date: d, name: u.name, dept: u.dept, checkIn: "-", checkOut: "-", status: "Disetujui", type: typeLabel, lateFine: 0, reason: (req.reason as string) || "-" });
+          } else if (!isWeekend && !isHol && !isFuture) {
+            detailWs.addRow({ date: d, name: u.name, dept: u.dept, checkIn: "-", checkOut: "-", status: "Alpa / Mangkir", type: "-", lateFine: 0, reason: "Alpa" });
+          }
+        });
+      });
+
+      summaryWs.getRow(1).font = { bold: true };
+      summaryWs.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
+      detailWs.getRow(1).font  = { bold: true };
+      detailWs.getRow(1).fill  = { type: "pattern", pattern: "solid", fgColor: { argb: "FFBBDEFB" } };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob   = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url    = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `Laporan_Rekap_${exportStart}_sd_${exportEnd}.xlsx`; a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Laporan berhasil didownload!", { id: tid });
+      setShowExport(false);
+    } catch (err: unknown) {
+      toast.error("Gagal ekspor: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
+    }
+  };
+
+  // ─ Derived ──────────────────────────────────────────────────────────────────
+  const isHoliday = holidayDates.includes(filterDate);
+
+  const statCards = [
+    { label: "Total Aktif",  value: stats.total,   filter: "all"     as const, col: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-900/20", icon: <Users size={18} /> },
+    { label: "Total Hadir",  value: stats.present, filter: "present" as const, col: "text-teal-600",    bg: "bg-teal-50 dark:bg-teal-900/20",       icon: <Building2 size={18} /> },
+    { label: "WFO",          value: stats.wfo,     filter: "wfo"     as const, col: "text-cyan-600",    bg: "bg-cyan-50 dark:bg-cyan-900/20",        icon: <MapPin size={18} /> },
+    { label: "WFA",          value: stats.wfa,     filter: "wfa"     as const, col: "text-indigo-600",  bg: "bg-indigo-50 dark:bg-indigo-900/20",    icon: <Laptop size={18} /> },
+    { label: "Cuti/Sakit",   value: stats.leave,   filter: "leave"   as const, col: "text-amber-600",   bg: "bg-amber-50 dark:bg-amber-900/20",      icon: <Umbrella size={18} /> },
+    { label: "Belum Absen",  value: stats.missed,  filter: "missed"  as const, col: "text-rose-600",    bg: "bg-rose-50 dark:bg-rose-900/20",        icon: <Clock size={18} /> },
+  ];
+
+  // ─ Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-[var(--ab-text-main)] tracking-tighter">Admin Dashboard</h1>
-          <p className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest mt-0.5">Management & Oversight System</p>
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-[var(--ab-bg-surface)] rounded-2xl flex items-center justify-center shadow-sm border border-[var(--ab-border)] text-white" style={{ background: "var(--ab-primary)" }}>
+            <ClipboardList size={20} />
+          </div>
+          <div>
+            <h1 className="text-3xl font-black text-[var(--ab-text-main)] tracking-tighter">Admin Dashboard</h1>
+            <p className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest mt-0.5">Management & Oversight System</p>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 w-full md:w-auto">
           <div className="flex items-center gap-2 bg-[var(--ab-bg-surface)] px-4 py-2 rounded-2xl border border-[var(--ab-border)] shadow-sm">
             <CalendarDays size={12} style={{ color: "var(--ab-primary)" }} />
-            <input
-              type="date"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-              className="bg-transparent text-[10px] font-black text-[var(--ab-text-main)] outline-none uppercase"
-            />
+            <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)}
+              className="bg-transparent text-[10px] font-black text-[var(--ab-text-main)] outline-none uppercase" />
           </div>
           {isHoliday && (
-            <span className="text-[10px] font-black text-white bg-rose-500 px-3 py-1.5 rounded-full">
-              Hari Libur
-            </span>
+            <span className="text-[10px] font-black text-white bg-rose-500 px-3 py-1.5 rounded-full">Hari Libur</span>
           )}
+          <div className="hidden md:flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/30 px-4 py-2 rounded-2xl border border-emerald-100 dark:border-emerald-800">
+            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-300 uppercase tracking-widest">Sistem Aktif</span>
+          </div>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "Total Hadir", value: stats.total, icon: <Users size={16} />, col: "var(--ab-primary)" },
-          { label: "WFO", value: stats.wfo, icon: <MapPin size={16} />, col: "#22c55e" },
-          { label: "WFA / Cuti", value: stats.excused + stats.wfa, icon: <Umbrella size={16} />, col: "#f97316" },
-          { label: "Belum Hadir", value: stats.missed, icon: <AlertCircle size={16} />, col: "#f43f5e" },
-        ].map(({ label, value, icon, col }) => (
-          <div key={label} className="ab-card-tactile !p-5 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1.5 h-full" style={{ background: col }} />
-            <div style={{ color: col }} className="mb-2">{icon}</div>
+      {/* 6 Stat Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        {statCards.map(({ label, value, filter, col, bg, icon }) => (
+          <button
+            key={filter}
+            onClick={() => setActiveFilter(filter)}
+            className={`ab-card-tactile !p-5 flex flex-col items-center text-center transition-all ${activeFilter === filter ? "ring-4 ring-[var(--ab-primary)]/20 scale-[1.03]" : "opacity-80 hover:opacity-100"}`}
+          >
+            <div className={`${bg} ${col} w-10 h-10 rounded-2xl flex items-center justify-center mb-2 shadow-sm`}>{icon}</div>
             <p className="text-[9px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest mb-1">{label}</p>
-            <p className="text-2xl font-black text-[var(--ab-text-main)] font-mono">{value}</p>
-          </div>
+            <h3 className={`text-2xl font-black font-mono ${col}`}>
+              {isLoading ? "—" : <CountUp end={value} />}
+            </h3>
+          </button>
         ))}
       </div>
 
-      {/* Table */}
+      {/* Pendaftar Baru Banner */}
+      {pendingStaff > 0 && (
+        <div
+          className="p-6 rounded-[35px] text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden relative"
+          style={{ background: "linear-gradient(135deg, #f59e0b, #ea580c)" }}
+        >
+          <Users className="absolute -right-8 -bottom-8 opacity-10" size={120} />
+          <div className="relative z-10">
+            <h3 className="text-lg font-black uppercase tracking-tight mb-1">Ada {pendingStaff} Pendaftar Baru!</h3>
+            <p className="text-xs text-orange-50 font-medium opacity-90">Karyawan baru sedang menunggu persetujuan Anda untuk mulai bekerja.</p>
+          </div>
+          <button
+            onClick={() => router.push("/absensi/admin/staff?tab=pending")}
+            className="relative z-10 px-8 py-3 bg-white text-orange-600 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg hover:bg-orange-50 transition-all active:scale-95 flex items-center gap-2"
+          >
+            Proses Sekarang <ArrowRight size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* Main Card */}
       <div className="ab-card-tactile !p-0 overflow-hidden">
-        <div className="p-4 border-b border-[var(--ab-border)] flex items-center justify-between gap-4">
-          <h2 className="font-black text-[var(--ab-text-main)] uppercase tracking-tight text-sm">Log Absensi — {filterDate}</h2>
-          <div className="relative flex items-center w-48">
-            <Search size={12} className="absolute left-3 text-[var(--ab-text-dim)]" />
-            <input
-              type="text"
-              placeholder="Cari nama..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="ab-input pl-9 text-xs py-2"
-            />
+        {/* Tabs */}
+        <div className="p-2 bg-[var(--ab-bg-main)]/50 border-b border-[var(--ab-border)]">
+          <div className="flex p-1 bg-[var(--ab-bg-main)] rounded-2xl w-fit">
+            <button
+              onClick={() => setActiveTab("logs")}
+              className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "logs" ? "bg-[var(--ab-bg-surface)] text-[var(--ab-primary)] shadow-sm" : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"}`}
+            >
+              <ClipboardList size={12} /> Log Absensi
+            </button>
+            <button
+              onClick={() => setActiveTab("fines")}
+              className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "fines" ? "bg-[var(--ab-bg-surface)] text-orange-600 shadow-sm" : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"}`}
+            >
+              <DollarSign size={12} /> Rekapan Denda
+            </button>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Table toolbar */}
+        <div className="p-5 border-b border-[var(--ab-border)] flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
+            <div className="flex items-center gap-3">
+              <h2 className="font-black text-[var(--ab-text-main)] uppercase tracking-tight text-sm">
+                {activeTab === "logs" ? "Riwayat Kehadiran" : "Rekapan Denda Bulan Ini"}
+              </h2>
+              <span className="text-[9px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest">
+                {activeTab === "logs" ? filterDate : filterDate.substring(0, 7)}
+              </span>
+            </div>
+            {activeTab === "logs" && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setShowOverrideAtt(!showOverrideAtt); setShowOverrideLeave(false); }}
+                  className="px-4 py-2 bg-[var(--ab-bg-surface)] text-[var(--ab-primary)] rounded-2xl font-black text-[9px] uppercase tracking-widest border border-[var(--ab-border)] flex items-center gap-1.5 hover:bg-[var(--ab-primary)] hover:text-white transition-all active:scale-95"
+                >
+                  <Zap size={10} /> Override Absensi
+                </button>
+                <button
+                  onClick={() => { setShowOverrideLeave(!showOverrideLeave); setShowOverrideAtt(false); }}
+                  className="px-4 py-2 bg-[var(--ab-bg-surface)] text-orange-500 rounded-2xl font-black text-[9px] uppercase tracking-widest border border-[var(--ab-border)] flex items-center gap-1.5 hover:bg-orange-500 hover:text-white transition-all active:scale-95"
+                >
+                  <FileText size={10} /> Override Cuti/WFA
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="relative flex-1 md:w-64">
+              <Search size={12} className="absolute left-3 top-2.5 text-[var(--ab-text-dim)]" />
+              <input type="text" placeholder="Cari nama staf..." value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="ab-input pl-9 text-[10px] w-full" />
+            </div>
+            <button
+              onClick={() => setShowExport(true)}
+              className="bg-green-600 text-white px-5 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-green-700 flex items-center gap-2 shadow-lg shadow-green-100 dark:shadow-none active:scale-95 transition-all whitespace-nowrap"
+            >
+              <FileSpreadsheet size={12} /> Excel
+            </button>
+          </div>
+        </div>
+
+        {/* Override: Absensi */}
+        {showOverrideAtt && (
+          <div className="p-5 bg-emerald-50/30 dark:bg-emerald-900/5 border-b border-[var(--ab-border)] animate-[fadeIn_0.2s]">
+            <div className="flex flex-col md:flex-row gap-4 items-end">
+              <div className="flex-1 space-y-1">
+                <label className="text-[9px] font-black uppercase text-[var(--ab-primary)] ml-1">Pilih Staf</label>
+                <select className="ab-input text-xs w-full" value={overrideAtt.userId} onChange={(e) => setOverrideAtt({ ...overrideAtt, userId: e.target.value })}>
+                  <option value="">-- Pilih Staf --</option>
+                  {activeUsers.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.dept})</option>)}
+                </select>
+              </div>
+              <div className="flex-1 space-y-1">
+                <label className="text-[9px] font-black uppercase text-[var(--ab-primary)] ml-1">Tanggal</label>
+                <input type="date" className="ab-input text-xs w-full" value={overrideAtt.date} onChange={(e) => setOverrideAtt({ ...overrideAtt, date: e.target.value })} />
+              </div>
+              <div className="flex-1 space-y-1">
+                <label className="text-[9px] font-black uppercase text-[var(--ab-primary)] ml-1">Jam Masuk</label>
+                <input type="time" className="ab-input text-xs w-full" value={overrideAtt.checkIn} onChange={(e) => setOverrideAtt({ ...overrideAtt, checkIn: e.target.value })} />
+              </div>
+              <div className="flex-1 space-y-1">
+                <label className="text-[9px] font-black uppercase text-[var(--ab-primary)] ml-1">Jam Pulang</label>
+                <input type="time" className="ab-input text-xs w-full" value={overrideAtt.checkOut} onChange={(e) => setOverrideAtt({ ...overrideAtt, checkOut: e.target.value })} />
+              </div>
+              <button onClick={handleOverrideAtt} className="px-8 py-2.5 text-white rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all whitespace-nowrap" style={{ background: "var(--ab-primary)" }}>
+                Simpan Override
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Override: Cuti/WFA */}
+        {showOverrideLeave && (
+          <div className="p-5 bg-orange-50/30 dark:bg-orange-900/5 border-b border-[var(--ab-border)] animate-[fadeIn_0.2s]">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase text-orange-600 ml-1">Staf</label>
+                <select className="ab-input text-xs w-full" value={overrideLeave.userId} onChange={(e) => setOverrideLeave({ ...overrideLeave, userId: e.target.value })}>
+                  <option value="">-- Pilih Staf --</option>
+                  {activeUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase text-orange-600 ml-1">Jenis</label>
+                <select className="ab-input text-xs w-full" value={overrideLeave.type} onChange={(e) => setOverrideLeave({ ...overrideLeave, type: e.target.value as "leave" | "sick" | "wfa" })}>
+                  <option value="leave">Cuti Biasa</option>
+                  <option value="sick">Cuti Sakit</option>
+                  <option value="wfa">Izin WFA</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase text-orange-600 ml-1">Mulai</label>
+                <input type="date" className="ab-input text-xs w-full" value={overrideLeave.startDate} onChange={(e) => setOverrideLeave({ ...overrideLeave, startDate: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase text-orange-600 ml-1">Sampai</label>
+                <input type="date" className="ab-input text-xs w-full" value={overrideLeave.endDate} onChange={(e) => setOverrideLeave({ ...overrideLeave, endDate: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase text-orange-600 ml-1">Alasan</label>
+                <div className="flex gap-2">
+                  <input type="text" placeholder="Keterangan..." className="ab-input text-xs flex-1" value={overrideLeave.reason} onChange={(e) => setOverrideLeave({ ...overrideLeave, reason: e.target.value })} />
+                  <button onClick={handleOverrideLeave} className="px-5 py-2 bg-orange-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all whitespace-nowrap">
+                    Kirim
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Data Table */}
+        <div className="overflow-x-auto min-h-[300px]">
           {isLoading ? (
-            <div className="animate-pulse p-6 space-y-3">
-              {[1, 2, 3].map((i) => <div key={i} className="h-10 bg-[var(--ab-bg-main)] rounded-xl" />)}
+            <div className="p-6 space-y-3 animate-pulse">
+              {[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-10 bg-[var(--ab-bg-main)] rounded-xl" />)}
             </div>
-          ) : displayRows.length === 0 ? (
-            <div className="p-16 text-center text-[var(--ab-text-dim)] text-sm">
-              Tidak ada data untuk tanggal ini.
-            </div>
-          ) : (
-            <table className="w-full text-xs">
+          ) : activeTab === "logs" ? (
+            <table className="w-full text-xs whitespace-nowrap">
               <thead>
-                <tr className="bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)]">
-                  <th className="px-4 py-3 text-left font-black uppercase tracking-widest text-[9px]">Nama</th>
-                  <th className="px-4 py-3 text-left font-black uppercase tracking-widest text-[9px]">Status</th>
-                  <th className="px-4 py-3 text-left font-black uppercase tracking-widest text-[9px]">Masuk</th>
-                  <th className="px-4 py-3 text-left font-black uppercase tracking-widest text-[9px]">Pulang</th>
-                  <th className="px-4 py-3 text-left font-black uppercase tracking-widest text-[9px]">Denda</th>
-                  <th className="px-4 py-3 text-left font-black uppercase tracking-widest text-[9px]">Aksi</th>
+                <tr className="bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] border-b border-[var(--ab-border)]">
+                  {["Nama Staf", "Dept", "Status", "In", "Out", "Detail"].map((h) => (
+                    <th key={h} className="px-4 py-3 text-left font-black uppercase tracking-widest text-[9px]">{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {displayRows.map((row) => {
-                  const isExcused = "isExcused" in row && (row as { isExcused: boolean }).isExcused;
-                  const isMissed  = "isMissed"  in row && (row as { isMissed: boolean }).isMissed;
-                  const isLog     = !isExcused && !isMissed && "lateReasonStatus" in row;
-                  const log       = isLog ? (row as AttLog) : null;
-                  const hasPendingReason = log?.lateReasonStatus === "pending";
-
-                  return (
+                {displayRows.length === 0 ? (
+                  <tr><td colSpan={6} className="p-20 text-center text-[var(--ab-text-dim)] text-[10px] font-black uppercase tracking-widest">Tidak ada data untuk filter ini.</td></tr>
+                ) : (
+                  displayRows.map((row) => (
                     <tr
                       key={row.id}
-                      className={`border-t border-[var(--ab-border)] hover:bg-[var(--ab-bg-main)]/50 transition-colors ${hasPendingReason ? "bg-orange-50/30 dark:bg-orange-900/5" : ""}`}
+                      onClick={() => {
+                        if (!row.log) return;
+                        const dist = row.log.locationIn && settings?.officeLat && settings?.officeLng
+                          ? calcDist(row.log.locationIn.lat, row.log.locationIn.lng, settings.officeLat, settings.officeLng)
+                          : null;
+                        setSelectedDist(dist);
+                        setSelectedRow(row);
+                        setEditingLog(null);
+                      }}
+                      className={`border-t border-[var(--ab-border)] transition-colors text-[10px] ${row.log ? "hover:bg-[var(--ab-bg-main)]/50 cursor-pointer" : ""} ${row.isMissed ? "opacity-40 grayscale" : ""}`}
                     >
-                      <td className="px-4 py-3 font-bold text-[var(--ab-text-main)]">{row.userName}</td>
                       <td className="px-4 py-3">
-                        {isExcused ? (
-                          <span className="text-orange-600 font-black text-[9px] uppercase bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 rounded border border-orange-200 dark:border-orange-800">
-                            {(row as { excusedType?: string }).excusedType === "wfa" ? "WFA" : "Cuti/Sakit"}
-                          </span>
-                        ) : isMissed ? (
-                          <span className="text-red-500 font-black text-[9px] uppercase bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded border border-red-200 dark:border-red-800">Alpha</span>
-                        ) : (
-                          <span className={`font-black text-[9px] uppercase px-2 py-0.5 rounded border ${
-                            row.status === "on_time" ? "text-green-600 bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800" :
-                            "text-orange-600 bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-800"
-                          }`}>
-                            {row.status.replace("_", " ")}
-                          </span>
-                        )}
+                        <div className="flex flex-col">
+                          <span className="font-black text-[var(--ab-text-main)]">{row.name}</span>
+                          <span className="text-[var(--ab-text-dim)] font-bold text-[9px]">{row.email}</span>
+                        </div>
                       </td>
-                      <td className="px-4 py-3 font-mono font-black text-[var(--ab-text-main)]">{fmt(row.checkIn)}</td>
-                      <td className="px-4 py-3 font-mono font-black text-[var(--ab-text-main)]">{fmt(row.checkOut)}</td>
-                      <td className="px-4 py-3 font-bold text-[var(--ab-text-main)]">
-                        {(row.lateFine ?? 0) > 0 ? `Rp ${row.lateFine.toLocaleString("id-ID")}` : "-"}
-                      </td>
+                      <td className="px-4 py-3 font-black text-[var(--ab-text-dim)] uppercase tracking-widest text-[9px]">{row.dept || "-"}</td>
                       <td className="px-4 py-3">
-                        {hasPendingReason && (
-                          <button
-                            onClick={() => setSelectedLog(log!)}
-                            className="text-[8px] font-black uppercase tracking-widest text-orange-500 bg-orange-50 dark:bg-orange-900/20 px-3 py-1 rounded-lg border border-orange-200 dark:border-orange-800 hover:bg-orange-100 transition"
-                          >
-                            Review Alasan
-                          </button>
-                        )}
+                        {row.isMissed ? (
+                          <span className="bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] px-2.5 py-1 rounded-xl font-black text-[9px] uppercase border border-[var(--ab-border)]">Belum Absen</span>
+                        ) : row.isExcused ? (
+                          <span className="bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 px-2.5 py-1 rounded-xl font-black text-[9px] uppercase border border-amber-200 dark:border-amber-800">
+                            {row.excusedType === "wfa" ? "WFA" : "Cuti/Sakit"}
+                          </span>
+                        ) : row.log ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className={`px-2.5 py-1 rounded-xl font-black text-[9px] uppercase border ${row.log.type === "WFA" ? "bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800" : "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800"}`}>{row.log.type}</span>
+                            <span className={`text-[8px] font-bold uppercase ${row.log.status === "on_time" ? "text-green-500" : row.log.status === "late" ? "text-orange-500" : "text-red-500"}`}>{row.log.status.replace("_", " ")}</span>
+                          </div>
+                        ) : "-"}
+                      </td>
+                      <td className="px-4 py-3 font-mono font-black text-[var(--ab-text-main)]">{fmt(row.log?.checkIn ?? null)}</td>
+                      <td className="px-4 py-3 font-mono font-black text-[var(--ab-text-main)]">{fmt(row.log?.checkOut ?? null)}</td>
+                      <td className="px-4 py-3">
+                        {row.log ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[9px] text-[var(--ab-text-dim)] font-bold">{row.log.locationStatus ?? "-"}</span>
+                            {(row.log.lateFine ?? 0) > 0 && (
+                              <span className="text-[8px] font-black text-orange-500">Denda: Rp{row.log.lateFine.toLocaleString("id-ID")}</span>
+                            )}
+                            {row.log.lateReasonStatus === "pending" && (
+                              <span className="text-[8px] font-black text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800">Review</span>
+                            )}
+                          </div>
+                        ) : "-"}
                       </td>
                     </tr>
-                  );
-                })}
+                  ))
+                )}
+              </tbody>
+            </table>
+          ) : (
+            <table className="w-full text-xs whitespace-nowrap">
+              <thead>
+                <tr className="bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] border-b border-[var(--ab-border)]">
+                  {["Nama Staf", "Departemen", "Total Terlambat", "Total Denda (Rp)"].map((h) => (
+                    <th key={h} className="px-4 py-3 text-left font-black uppercase tracking-widest text-[9px]">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {fineSummary.length === 0 ? (
+                  <tr><td colSpan={4} className="p-16 text-center text-[var(--ab-text-dim)] text-[10px] font-black uppercase tracking-widest">Tidak ada record keterlambatan bulan ini.</td></tr>
+                ) : (
+                  fineSummary.map((r) => (
+                    <tr key={r.id} className="border-t border-[var(--ab-border)] hover:bg-[var(--ab-bg-main)]/50 transition-colors">
+                      <td className="px-4 py-3 font-black text-[var(--ab-text-main)]">{r.name}</td>
+                      <td className="px-4 py-3 font-bold text-[var(--ab-text-dim)] uppercase tracking-widest text-[9px]">{r.dept}</td>
+                      <td className="px-4 py-3 text-center font-black text-orange-500">{r.lateCount} x</td>
+                      <td className="px-4 py-3 text-center font-black text-rose-600">Rp {r.totalFine.toLocaleString("id-ID")}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           )}
         </div>
       </div>
 
-      {/* Late Reason Review Modal */}
-      {selectedLog && (
-        <div className="ab-confirm-overlay">
-          <div className="absolute inset-0" onClick={() => setSelectedLog(null)} />
-          <div className="bg-[var(--ab-bg-surface)] w-full max-w-md rounded-[40px] shadow-2xl relative overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)] p-8">
-            <h3 className="text-xl font-black text-[var(--ab-text-main)] uppercase tracking-tight mb-2">Review Alasan Telat</h3>
-            <p className="text-[10px] text-[var(--ab-text-dim)] font-bold uppercase tracking-widest mb-6">{selectedLog.userName}</p>
-            <div className="bg-[var(--ab-bg-main)] p-4 rounded-2xl border border-[var(--ab-border)] mb-4">
-              <p className="text-[9px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest mb-1">Check In</p>
-              <p className="font-mono font-black text-[var(--ab-text-main)]">{fmt(selectedLog.checkIn)}</p>
-            </div>
-            <div className="bg-[var(--ab-bg-main)] p-4 rounded-2xl border border-[var(--ab-border)] mb-6">
-              <p className="text-[9px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest mb-1">Alasan</p>
-              <p className="text-sm font-bold text-[var(--ab-text-main)] italic">&ldquo;{selectedLog.lateReason}&rdquo;</p>
-            </div>
-            {(selectedLog.lateFine ?? 0) > 0 && (
-              <div className="text-center mb-6">
-                <p className="text-[10px] text-[var(--ab-text-dim)] uppercase tracking-widest">Denda saat ini</p>
-                <p className="text-2xl font-black text-orange-600 font-mono">Rp {selectedLog.lateFine.toLocaleString("id-ID")}</p>
+      {/* Detail Modal */}
+      {selectedRow?.log && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => { setSelectedRow(null); setEditingLog(null); }} />
+          <div className="bg-[var(--ab-bg-surface)] w-full max-w-md rounded-[32px] shadow-2xl relative z-10 border border-[var(--ab-border)] flex flex-col max-h-[90vh]">
+            {/* Modal header */}
+            <div className="p-6 border-b border-[var(--ab-border)] flex justify-between items-center bg-gradient-to-r from-[var(--ab-bg-surface)] to-[var(--ab-bg-main)] rounded-t-[32px]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-white" style={{ background: "var(--ab-primary)" }}>
+                  <ClipboardList size={16} />
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-[var(--ab-text-main)] tracking-tight leading-none mb-0.5">Detail Kehadiran</h3>
+                  <p className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">Log Sistem Otomatis</p>
+                </div>
               </div>
-            )}
+              <div className="flex gap-2">
+                {!editingLog ? (
+                  <>
+                    <button onClick={() => handleDeleteLog(selectedRow.log!.id)} className="w-8 h-8 rounded-xl flex items-center justify-center text-red-400 hover:bg-red-50 hover:text-red-600 transition-all border border-transparent hover:border-red-100">
+                      <Trash2 size={14} />
+                    </button>
+                    <button onClick={() => setEditingLog({ id: selectedRow.log!.id, checkIn: selectedRow.log!.checkIn?.substring(0, 5) ?? "", checkOut: selectedRow.log!.checkOut?.substring(0, 5) ?? "", status: selectedRow.log!.status, lateFine: selectedRow.log!.lateFine, notes: selectedRow.log!.notes ?? "" })} className="w-8 h-8 rounded-xl flex items-center justify-center text-[var(--ab-primary)] hover:bg-[var(--ab-primary)]/10 transition-all border border-transparent hover:border-[var(--ab-primary)]/20">
+                      <Pencil size={14} />
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={() => setEditingLog(null)} className="w-8 h-8 flex items-center justify-center text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]">
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Modal body */}
+            <div className="p-6 overflow-y-auto ab-scrollbar">
+              <div className="mb-5 flex gap-4 items-center">
+                <div className="w-14 h-14 rounded-[18px] bg-[var(--ab-bg-main)] flex items-center justify-center text-2xl font-black text-[var(--ab-text-dim)] border border-[var(--ab-border)]">
+                  {selectedRow.name.charAt(0)}
+                </div>
+                <div>
+                  <h4 className="font-black text-lg text-[var(--ab-text-main)] mb-1">{selectedRow.name}</h4>
+                  <div className="flex gap-2">
+                    <span className="bg-[var(--ab-bg-main)] px-2 py-0.5 rounded text-[9px] font-black uppercase text-[var(--ab-text-dim)] border border-[var(--ab-border)]">{selectedRow.dept || "Umum"}</span>
+                    <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase text-white border" style={{ background: "var(--ab-primary)", borderColor: "var(--ab-primary)" }}>{selectedRow.log.type}</span>
+                  </div>
+                </div>
+              </div>
+
+              {!editingLog ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-[var(--ab-bg-main)] p-4 rounded-3xl border border-[var(--ab-border)]">
+                      <p className="text-[9px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest mb-1">Check In</p>
+                      <p className="text-xl font-black font-mono text-[var(--ab-text-main)]">{fmt(selectedRow.log.checkIn)}</p>
+                    </div>
+                    <div className="bg-[var(--ab-bg-main)] p-4 rounded-3xl border border-[var(--ab-border)]">
+                      <p className="text-[9px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest mb-1">Check Out</p>
+                      <p className="text-xl font-black font-mono text-[var(--ab-text-main)]">{fmt(selectedRow.log.checkOut)}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-[var(--ab-bg-main)] p-5 rounded-3xl border border-[var(--ab-border)] space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">Status Waktu</span>
+                      <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase border ${selectedRow.log.status === "on_time" ? "bg-green-50 text-green-600 border-green-200 dark:bg-green-900/20 dark:border-green-800" : selectedRow.log.status === "late" ? "bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800" : "bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:border-red-800"}`}>
+                        {selectedRow.log.status.replace("_", " ")}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">Status Lokasi</span>
+                      <div className="flex items-center gap-1.5">
+                        <Navigation size={12} className="text-[var(--ab-text-dim)]" />
+                        <span className="text-[10px] font-black uppercase text-[var(--ab-text-main)]">{selectedRow.log.locationStatus ?? "-"}</span>
+                      </div>
+                    </div>
+                    {selectedDist !== null && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">Jarak ke Kantor</span>
+                        <span className={`text-[10px] font-black uppercase ${selectedDist <= (settings?.officeRadius ?? 100) ? "text-green-500" : "text-red-500"}`}>{selectedDist} meter</span>
+                      </div>
+                    )}
+                    {selectedRow.log.locationIn && (
+                      <a
+                        href={`https://www.google.com/maps?q=${selectedRow.log.locationIn.lat},${selectedRow.log.locationIn.lng}`}
+                        target="_blank" rel="noreferrer"
+                        className="w-full flex items-center justify-center gap-2 bg-[var(--ab-bg-surface)] border border-[var(--ab-border)] py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-main)] hover:bg-[var(--ab-bg-main)] transition"
+                      >
+                        <MapPin size={12} className="text-red-500" /> Buka Google Maps
+                      </a>
+                    )}
+                  </div>
+
+                  {selectedRow.log.lateReason && (
+                    <div className="bg-amber-50 dark:bg-amber-900/10 p-5 rounded-3xl border border-amber-200 dark:border-amber-900/30 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <p className="text-[10px] font-black text-amber-600 dark:text-amber-500 uppercase tracking-widest">Alasan Keterlambatan</p>
+                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${selectedRow.log.lateReasonStatus === "accepted" ? "bg-green-100 text-green-700" : selectedRow.log.lateReasonStatus === "rejected" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+                          {selectedRow.log.lateReasonStatus === "accepted" ? "Diterima" : selectedRow.log.lateReasonStatus === "rejected" ? "Ditolak" : "Menunggu"}
+                        </span>
+                      </div>
+                      <p className="text-sm font-bold text-[var(--ab-text-main)] italic">&ldquo;{selectedRow.log.lateReason}&rdquo;</p>
+                      {selectedRow.log.lateReasonStatus === "pending" && (
+                        <div className="flex gap-2 pt-1">
+                          <button onClick={() => handleLateReason(selectedRow.log!.id, "accepted")} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition flex items-center justify-center gap-1">
+                            <Check size={12} /> Terima Alasan
+                          </button>
+                          <button onClick={() => handleLateReason(selectedRow.log!.id, "rejected")} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition flex items-center justify-center gap-1">
+                            <X size={12} /> Tolak
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {(selectedRow.log.lateFine ?? 0) > 0 && (
+                    <div className="bg-orange-50 dark:bg-orange-900/10 p-4 rounded-3xl border border-orange-100 dark:border-orange-900/30">
+                      <p className="text-[9px] font-black text-orange-400 uppercase tracking-widest mb-1">Denda Keterlambatan</p>
+                      <p className="text-lg font-black text-orange-600 dark:text-orange-400 font-mono">Rp {selectedRow.log.lateFine.toLocaleString("id-ID")}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-[var(--ab-primary)] uppercase tracking-widest">Jam Masuk</label>
+                      <input type="time" className="ab-input text-xs w-full" value={editingLog.checkIn} onChange={(e) => setEditingLog({ ...editingLog, checkIn: e.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-[var(--ab-primary)] uppercase tracking-widest">Jam Keluar</label>
+                      <input type="time" className="ab-input text-xs w-full" value={editingLog.checkOut} onChange={(e) => setEditingLog({ ...editingLog, checkOut: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-[var(--ab-primary)] uppercase tracking-widest">Status Waktu</label>
+                    <select className="ab-input text-xs w-full" value={editingLog.status} onChange={(e) => setEditingLog({ ...editingLog, status: e.target.value })}>
+                      <option value="on_time">On Time</option>
+                      <option value="late">Late</option>
+                      <option value="very_late">Very Late</option>
+                      <option value="auto_checkout">Auto Checkout</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-[var(--ab-primary)] uppercase tracking-widest">Nominal Denda (Rp)</label>
+                    <input type="number" className="ab-input text-xs w-full text-orange-600" value={editingLog.lateFine} onChange={(e) => setEditingLog({ ...editingLog, lateFine: Number(e.target.value) })} />
+                  </div>
+                  <button onClick={handleSaveEdit} className="w-full text-white py-4 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2" style={{ background: "var(--ab-primary)" }}>
+                    <Check size={14} /> Simpan Perubahan
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Export Modal */}
+      {showExport && (
+        <div className="ab-confirm-overlay">
+          <div className="absolute inset-0" onClick={() => setShowExport(false)} />
+          <div className="bg-[var(--ab-bg-surface)] w-full max-w-sm rounded-[40px] shadow-2xl relative p-8 border border-[var(--ab-border)]">
+            <h3 className="text-xl font-black text-[var(--ab-text-main)] uppercase tracking-tight mb-1">Export Excel</h3>
+            <p className="text-[10px] text-[var(--ab-text-dim)] font-bold uppercase tracking-widest mb-6">Pilih rentang tanggal laporan</p>
+            <div className="space-y-4 mb-6">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-[var(--ab-primary)] uppercase tracking-widest">Dari Tanggal</label>
+                <input type="date" className="ab-input text-xs w-full" value={exportStart} onChange={(e) => setExportStart(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-[var(--ab-primary)] uppercase tracking-widest">Sampai Tanggal</label>
+                <input type="date" className="ab-input text-xs w-full" value={exportEnd} onChange={(e) => setExportEnd(e.target.value)} />
+              </div>
+            </div>
             <div className="flex gap-3">
-              <button
-                onClick={() => handleLateReason(selectedLog.id, "accepted")}
-                className="flex-1 bg-green-500 text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-green-600 transition"
-              >
-                <Check size={14} /> Terima & Hapus Denda
+              <button onClick={() => setShowExport(false)} className="flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] border border-[var(--ab-border)] active:scale-95 transition-all">
+                Batal
               </button>
-              <button
-                onClick={() => handleLateReason(selectedLog.id, "rejected")}
-                className="flex-1 bg-red-500 text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-red-600 transition"
-              >
-                <X size={14} /> Tolak
+              <button onClick={handleExportExcel} className="flex-1 py-3 rounded-2xl font-black text-xs uppercase tracking-widest text-white active:scale-95 transition-all flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700">
+                <FileSpreadsheet size={14} /> Download
               </button>
             </div>
           </div>
