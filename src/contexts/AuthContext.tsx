@@ -51,6 +51,11 @@ async function fetchUserProfile(uid: string): Promise<User | null> {
     managedDepartments: (data.managed_departments as string[]) ?? [],
     createdAt: data.created_at,
     updatedAt: data.updated_at,
+    absensiRole: (data.absensi_role as "admin" | "staff") ?? "staff",
+    absensiStatus: (data.absensi_status as User["absensiStatus"]) ?? "pending",
+    leaveQuota: (data.leave_quota as number) ?? 12,
+    sickQuota: (data.sick_quota as number) ?? 14,
+    isHidden: (data.is_hidden as boolean) ?? false,
   };
 }
 

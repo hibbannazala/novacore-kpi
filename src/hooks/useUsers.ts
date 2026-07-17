@@ -16,6 +16,11 @@ function rowToUser(row: Record<string, unknown>): User {
     department: dept,
     position: row.position as string | null,
     photoUrl: row.photo_url as string | null,
+    absensiRole: (row.absensi_role as "staff" | "admin") ?? "staff",
+    absensiStatus: (row.absensi_status as User["absensiStatus"]) ?? "pending",
+    leaveQuota: (row.leave_quota as number) ?? 12,
+    sickQuota: (row.sick_quota as number) ?? 14,
+    isHidden: (row.is_hidden as boolean) ?? false,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };

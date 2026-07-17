@@ -54,7 +54,7 @@ export default function NewAssignmentPage() {
 
   const workingDays = getWorkingDaysInMonth(year, month);
   const activeKpis = kpis.filter((k) => !k.deletedAt && k.status !== "cancelled");
-  const assignableUsers = users.filter((u) => u.status === "active" && !u.isHidden);
+  const assignableUsers = users.filter((u) => u.absensiStatus === "active" && !u.isHidden);
   const userMap = Object.fromEntries(users.map((u) => [u.id, u]));
   const kpiMap = Object.fromEntries(kpis.map((k) => [k.id, k]));
 

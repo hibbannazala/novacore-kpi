@@ -1,0 +1,163 @@
+/* ── Absensi Module CSS ────────────────────────────────────────────────────
+   Scoped to the /absensi routes only. Imported by src/app/absensi/layout.tsx.
+   Does NOT affect the KPI /dashboard routes.
+──────────────────────────────────────────────────────────────────────────── */
+
+/* CSS Variables */
+.absensi-root {
+  --ab-primary: #00897B;
+  --ab-primary-light: #4DB6AC;
+  --ab-primary-glow: rgba(0, 137, 123, 0.3);
+  --ab-secondary: #FFAB00;
+  --ab-bg-main: #F0F2F5;
+  --ab-bg-surface: #ffffff;
+  --ab-nm-light: #ffffff;
+  --ab-nm-shadow: #d1d9e6;
+  --ab-text-main: #1e293b;
+  --ab-text-dim: #64748b;
+  --ab-border: rgba(0,0,0,0.05);
+}
+
+html.dark .absensi-root {
+  --ab-primary: #8b5cf6;
+  --ab-primary-light: #a78bfa;
+  --ab-primary-glow: rgba(139, 92, 246, 0.25);
+  --ab-secondary: #06b6d4;
+  --ab-bg-main: #0f172a;
+  --ab-bg-surface: #1e293b;
+  --ab-nm-light: rgba(255,255,255,0.03);
+  --ab-nm-shadow: rgba(0,0,0,0.6);
+  --ab-text-main: #f8fafc;
+  --ab-text-dim: #94a3b8;
+  --ab-border: rgba(139, 92, 246, 0.1);
+}
+
+/* ── Mobile Container ── */
+.ab-mobile-container {
+  max-width: 480px;
+  margin: 0 auto;
+  background-color: var(--ab-bg-main);
+  min-height: 100vh;
+  position: relative;
+  box-shadow: 0 0 50px rgba(0,0,0,0.1);
+  color: var(--ab-text-main);
+  font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+}
+
+.absensi-root.dark .ab-mobile-container {
+  box-shadow: 0 0 50px rgba(0,0,0,0.6);
+}
+
+/* ── Dot Grid Background ── */
+.ab-mobile-container {
+  background-image: radial-gradient(circle at 2px 2px, var(--ab-border) 2px, transparent 0);
+  background-size: 40px 40px;
+}
+
+/* ── Neumorphic Utilities ── */
+.ab-nm-flat {
+  background: var(--ab-bg-surface);
+  box-shadow: 10px 10px 20px var(--ab-nm-shadow), -5px -5px 15px var(--ab-nm-light);
+  border: 1px solid var(--ab-border);
+}
+
+.ab-nm-inset {
+  background: var(--ab-bg-main);
+  box-shadow: inset 8px 8px 16px var(--ab-nm-shadow), inset -4px -4px 10px var(--ab-nm-light);
+  border: 1px solid var(--ab-border);
+}
+
+.ab-nm-button {
+  background: var(--ab-bg-surface);
+  box-shadow: 6px 6px 15px var(--ab-nm-shadow), -2px -2px 8px var(--ab-nm-light);
+  border: 1px solid var(--ab-border);
+  transition: all 0.3s;
+}
+.ab-nm-button:active { transform: scale(0.95); }
+
+.ab-card-tactile {
+  border-radius: 40px;
+  padding: 1.5rem;
+  transition: all 0.3s;
+  background: var(--ab-bg-surface);
+  box-shadow: 20px 20px 40px var(--ab-nm-shadow), -8px -8px 25px var(--ab-nm-light);
+  border: 1px solid var(--ab-border);
+}
+.ab-card-tactile:hover { transform: translateY(-2px); }
+
+/* ── Glassmorphism ── */
+.ab-glass {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: color-mix(in srgb, var(--ab-bg-surface), transparent 40%);
+  border-top: 1px solid var(--ab-border);
+}
+
+/* ── Input Styles ── */
+.ab-input {
+  border-radius: 1rem;
+  padding: 0.75rem 1.25rem;
+  outline: none;
+  transition: all 0.2s;
+  background: var(--ab-bg-main);
+  color: var(--ab-text-main);
+  box-shadow: inset 8px 8px 16px var(--ab-nm-shadow), inset -4px -4px 10px var(--ab-nm-light);
+  border: 1px solid var(--ab-border);
+  width: 100%;
+}
+.ab-input:focus {
+  ring: 4px solid var(--ab-primary);
+  box-shadow: inset 8px 8px 16px var(--ab-nm-shadow), inset -4px -4px 10px var(--ab-nm-light),
+              0 0 0 3px var(--ab-primary-glow);
+}
+
+/* ── Buttons ── */
+.ab-btn-primary {
+  background: var(--ab-primary);
+  color: white;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border-radius: 1rem;
+  padding: 0.75rem 1.5rem;
+  box-shadow: 0 10px 25px -5px var(--ab-primary-glow);
+  transition: all 0.2s;
+  border: none;
+  cursor: pointer;
+}
+.ab-btn-primary:hover { transform: scale(1.02); }
+.ab-btn-primary:active { transform: scale(0.97); }
+
+/* ── Confirm Overlay ── */
+.ab-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  backdrop-filter: blur(4px);
+  background: rgba(15, 23, 42, 0.4);
+  z-index: 9999;
+}
+
+/* ── Animations ── */
+@keyframes ab-fadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes ab-scaleIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.ab-animate-fadeIn  { animation: ab-fadeIn  0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.ab-animate-scaleIn { animation: ab-scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+/* ── Scrollbar ── */
+.ab-scrollbar::-webkit-scrollbar { width: 6px; }
+.ab-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+html.dark .ab-scrollbar::-webkit-scrollbar-thumb { background: #334155; }
+
+/* ── Selection ── */
+.ab-mobile-container ::selection { background: color-mix(in srgb, var(--ab-primary), transparent 70%); }

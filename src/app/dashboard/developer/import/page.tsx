@@ -115,7 +115,7 @@ function autoDetectMapping(headers: string[]): ColumnMapping {
 }
 
 function buildRows(parsed: string[][], users: User[], mapping: ColumnMapping): ImportRow[] {
-  const active = users.filter(u => u.status === "active");
+  const active = users.filter(u => u.absensiStatus === "active");
   const result: ImportRow[] = [];
   for (let i = 1; i < parsed.length; i++) {
     const row = parsed[i];
@@ -218,7 +218,7 @@ export default function KpiImportPage() {
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
   function handleDownloadTemplate() {
-    const timUsers = users.filter(u => (getKpiRole(u) === "tim" || getKpiRole(u) === "head") && u.status === "active");
+    const timUsers = users.filter(u => (getKpiRole(u) === "tim" || getKpiRole(u) === "head") && u.absensiStatus === "active");
     const now = new Date();
     const yr = now.getFullYear();
     const mo = now.getMonth() + 1;

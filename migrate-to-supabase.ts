@@ -29,6 +29,8 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 const SKIP_AUTH = process.argv.includes("--skip-auth");
+const USERS_ONLY = process.argv.includes("--users-only");
+const DAILY_ONLY = process.argv.includes("--daily-only");
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
@@ -193,7 +195,7 @@ async function migrateDepartments(): Promise<Map<string, string>> {
 
 // ─── Step 3: Migrate User Profiles ───────────────────────────────────────────
 
-async function migrateUsers(uidMap: Map<string, string>): Promise<void> {
+async function migrateUsers(uidMap: Map<string, string>, deptMap: Map<string, string>): Promise<void> {
   log("\n[3/8] Migrating user profiles...");
 
   const snap = await firestore.collection("users").get();
@@ -207,10 +209,11 @@ async function migrateUsers(uidMap: Map<string, string>): Promise<void> {
       id: supabaseId,
       email: data.email ?? "",
       name: data.name ?? "",
-      department: data.department ?? null,
       kpi_role: data.kpiRole ?? "tim",
+      department_id: deptMap.get(data.department ?? "") ?? null,
+      position: data.position ?? null,
+      photo_url: data.photoURL ?? null,
       managed_departments: data.managedDepartments ?? [],
-      status: data.status ?? "active",
       created_at: tsToIso(data.createdAt) ?? new Date().toISOString(),
     };
   }).filter(Boolean) as Record<string, unknown>[];
@@ -229,7 +232,7 @@ async function migrateUsers(uidMap: Map<string, string>): Promise<void> {
 
 // ─── Step 4: Migrate KPIs ────────────────────────────────────────────────────
 
-async function migrateKpis(uidMap: Map<string, string>): Promise<Map<string, string>> {
+async function migrateKpis(uidMap: Map<string, string>, deptMap: Map<string, string>): Promise<Map<string, string>> {
   log("\n[4/8] Migrating KPIs...");
 
   const snap = await firestore.collection("kpis").get();
@@ -246,7 +249,7 @@ async function migrateKpis(uidMap: Map<string, string>): Promise<Map<string, str
       type: data.type ?? "result",
       unit: data.unit ?? "number",
       period: data.period ?? "monthly",
-      department: data.department ?? "",
+      department_id: deptMap.get(data.department ?? "") ?? null,
       monthly_target: data.monthlyTarget ?? 0,
       year: data.year ?? new Date().getFullYear(),
       month: data.month ?? new Date().getMonth() + 1,
@@ -302,21 +305,13 @@ async function migrateAssignments(
       department_id: deptMap.get(data.department ?? "") ?? null,
       status: data.status ?? "active",
       monthly_target: data.monthlyTarget ?? 0,
-      current_daily_target: data.currentDailyTarget ?? 0,
       actual_total: data.actualTotal ?? 0,
-      expected_total: data.expectedTotal ?? 0,
       achievement_percentage: data.achievementPercentage ?? 0,
-      performance_category: data.performanceCategory ?? "warning",
-      working_days_total: data.workingDaysTotal ?? 0,
-      working_days_elapsed: data.workingDaysElapsed ?? 0,
-      working_days_remaining: data.workingDaysRemaining ?? 0,
-      active_days: data.activeDays ?? 0,
+      weight: data.weight ?? 0,
+      notes: data.notes ?? null,
+      cancelled_at: tsToIso(data.cancelledAt),
       year: data.year ?? new Date().getFullYear(),
       month: data.month ?? new Date().getMonth() + 1,
-      quality_notes: data.qualityNotes ?? null,
-      held_at: tsToIso(data.heldAt),
-      cancelled_at: tsToIso(data.cancelledAt),
-      completed_at: tsToIso(data.completedAt),
       created_at: tsToIso(data.createdAt) ?? new Date().toISOString(),
       updated_at: tsToIso(data.updatedAt) ?? new Date().toISOString(),
     };
@@ -331,7 +326,7 @@ async function migrateAssignments(
   if (DRY_RUN) {
     rows.forEach((r) => {
       assignmentIdMap.set(r._fbId as string, `dry-run-${r._fbId}`);
-      Object.entries(r._monthlyScores).forEach(([key, val]: [string, any]) => {
+      Object.entries(r._monthlyScores).forEach(([key, _val]: [string, any]) => {
         const [y, m] = key.split("-").map(Number);
         if (y && m) monthlyScoreRows.push({ assignment_id: `dry-run-${r._fbId}`, year: y, month: m });
       });
@@ -402,7 +397,7 @@ async function migrateDailyReports(
   const snap = await firestore.collection("daily_reports").get();
   log(`  Firebase daily report docs: ${snap.size}`);
 
-  const rows = snap.docs.map((doc) => {
+  const rawRows = snap.docs.map((doc) => {
     const data = doc.data();
     return {
       kpi_id: kpiIdMap.get(data.kpiId ?? ""),
@@ -414,7 +409,21 @@ async function migrateDailyReports(
       created_at: tsToIso(data.createdAt) ?? new Date().toISOString(),
       updated_at: tsToIso(data.updatedAt) ?? new Date().toISOString(),
     };
-  }).filter((r) => r.kpi_id && r.user_id && r.assignment_id && r.date);
+  }).filter((r) => r.user_id && r.assignment_id && r.date);
+
+  // Deduplicate by (assignment_id, date) — keep last occurrence (latest created_at)
+  const dedupMap = new Map<string, typeof rawRows[0]>();
+  rawRows.forEach((r) => {
+    const key = `${r.assignment_id}|${r.date}`;
+    const existing = dedupMap.get(key);
+    if (!existing || (r.created_at ?? "") > (existing.created_at ?? "")) {
+      dedupMap.set(key, r);
+    }
+  });
+  const rows = [...dedupMap.values()];
+  if (rawRows.length !== rows.length) {
+    log(`  Deduplicated ${rawRows.length - rows.length} duplicate (assignment_id, date) pairs`);
+  }
 
   const skipped = snap.size - rows.length;
   if (skipped > 0) log(`  ⚠️  Skipped ${skipped} daily reports (missing FK references)`);
@@ -500,6 +509,182 @@ async function migrateFeedbacks(uidMap: Map<string, string>): Promise<void> {
   log(`  Done: ${rows.length} feedbacks`);
 }
 
+// ─── Build maps from existing Supabase data (for --daily-only mode) ──────────
+
+async function buildKpiIdMapFromDB(): Promise<Map<string, string>> {
+  log("\n[Re-map] Matching Firebase KPIs to existing Supabase KPIs...");
+
+  const fbSnap = await firestore.collection("kpis").get();
+  const fbKpis = fbSnap.docs.map((doc) => ({
+    fbId: doc.id,
+    key: `${doc.data().title ?? ""}|${doc.data().type ?? "result"}|${doc.data().year ?? ""}|${doc.data().month ?? ""}|${doc.data().brand ?? ""}`,
+  }));
+
+  const sbKpis: Array<{ id: string; title: string; type: string; year: number; month: number; brand: string | null }> = [];
+  let from = 0;
+  while (true) {
+    const { data } = await supabase.from("kpis").select("id, title, type, year, month, brand").range(from, from + 999);
+    if (!data?.length) break;
+    sbKpis.push(...(data as any));
+    if (data.length < 1000) break;
+    from += 1000;
+  }
+
+  const sbLookup = new Map<string, string>();
+  sbKpis.forEach((k) => {
+    const key = `${k.title}|${k.type}|${k.year}|${k.month}|${k.brand ?? ""}`;
+    sbLookup.set(key, k.id);
+  });
+
+  const kpiIdMap = new Map<string, string>();
+  let matched = 0;
+  fbKpis.forEach(({ fbId, key }) => {
+    const sbId = sbLookup.get(key);
+    if (sbId) { kpiIdMap.set(fbId, sbId); matched++; }
+  });
+
+  log(`  Matched ${matched}/${fbKpis.length} KPIs (${fbKpis.length - matched} unmatched)`);
+  return kpiIdMap;
+}
+
+async function buildAndSyncAssignmentIdMap(
+  uidMap: Map<string, string>,
+  kpiIdMap: Map<string, string>,
+  deptMap: Map<string, string>
+): Promise<Map<string, string>> {
+  log("\n[Re-map] Matching + syncing Firebase assignments to Supabase...");
+
+  const fbSnap = await firestore.collection("kpi_assignments").get();
+
+  const sbRows: Array<{ id: string; user_id: string; kpi_id: string; year: number; month: number }> = [];
+  let from = 0;
+  while (true) {
+    const { data } = await supabase.from("kpi_assignments").select("id, user_id, kpi_id, year, month").range(from, from + 999);
+    if (!data?.length) break;
+    sbRows.push(...(data as any));
+    if (data.length < 1000) break;
+    from += 1000;
+  }
+
+  const sbLookup = new Map<string, string>();
+  sbRows.forEach((a) => sbLookup.set(`${a.user_id}|${a.kpi_id}|${a.year}|${a.month}`, a.id));
+
+  const assignmentIdMap = new Map<string, string>();
+  const missing: Array<{ fbId: string; row: Record<string, unknown> }> = [];
+
+  fbSnap.docs.forEach((doc) => {
+    const d = doc.data();
+    const sbUserId = uidMap.get(d.userId ?? "");
+    const sbKpiId = kpiIdMap.get(d.kpiId ?? "");
+    if (!sbUserId || !sbKpiId) return;
+    const key = `${sbUserId}|${sbKpiId}|${d.year}|${d.month}`;
+    const sbId = sbLookup.get(key);
+    if (sbId) {
+      assignmentIdMap.set(doc.id, sbId);
+    } else {
+      missing.push({
+        fbId: doc.id,
+        row: {
+          kpi_id: sbKpiId,
+          user_id: sbUserId,
+          department_id: deptMap.get(d.department ?? "") ?? null,
+          status: d.status ?? "active",
+          monthly_target: d.monthlyTarget ?? 0,
+          actual_total: d.actualTotal ?? 0,
+          achievement_percentage: d.achievementPercentage ?? 0,
+          weight: d.weight ?? 0,
+          notes: d.notes ?? null,
+          cancelled_at: tsToIso(d.cancelledAt),
+          year: d.year ?? new Date().getFullYear(),
+          month: d.month ?? new Date().getMonth() + 1,
+          created_at: tsToIso(d.createdAt) ?? new Date().toISOString(),
+          updated_at: tsToIso(d.updatedAt) ?? new Date().toISOString(),
+        },
+      });
+    }
+  });
+
+  log(`  Matched: ${assignmentIdMap.size} | Missing from Supabase: ${missing.length}`);
+
+  if (missing.length > 0) {
+    // Deduplicate by (user_id, kpi_id, year, month) — Firebase may have duplicate docs
+    const dedupMissing = new Map<string, typeof missing[0]>();
+    missing.forEach((m) => {
+      const key = `${m.row.user_id}|${m.row.kpi_id}|${m.row.year}|${m.row.month}`;
+      if (!dedupMissing.has(key)) dedupMissing.set(key, m);
+    });
+    const uniqueMissing = [...dedupMissing.values()];
+    if (uniqueMissing.length !== missing.length) {
+      log(`  Deduplicated ${missing.length - uniqueMissing.length} duplicate assignments from Firebase`);
+    }
+
+    log(`  Inserting ${uniqueMissing.length} missing assignments...`);
+    if (!DRY_RUN) {
+      for (const ch of chunk(uniqueMissing, 50)) {
+        const { data, error } = await supabase
+          .from("kpi_assignments")
+          .upsert(ch.map((m) => m.row), { onConflict: "user_id,kpi_id,year,month" })
+          .select("id");
+        if (error) { console.warn(`  ⚠️  Missing assignments chunk error: ${error.message}`); continue; }
+        ch.forEach((item, i) => {
+          if (data?.[i]) assignmentIdMap.set(item.fbId, data[i].id);
+        });
+      }
+    } else {
+      uniqueMissing.forEach((m) => assignmentIdMap.set(m.fbId, `dry-run-${m.fbId}`));
+      log(`  Would insert ${uniqueMissing.length} missing assignments`);
+    }
+    log(`  Total mapped: ${assignmentIdMap.size}`);
+  }
+
+  return assignmentIdMap;
+}
+
+async function migrateMonthlyScoresOnly(assignmentIdMap: Map<string, string>): Promise<void> {
+  log("\n[Monthly Scores] Migrating monthly scores from Firebase...");
+
+  const snap = await firestore.collection("kpi_assignments").get();
+  const rows: Record<string, unknown>[] = [];
+
+  snap.docs.forEach((doc) => {
+    const supabaseAssignmentId = assignmentIdMap.get(doc.id);
+    if (!supabaseAssignmentId) return;
+
+    const monthlyScores = doc.data().monthlyScores ?? {};
+    Object.entries(monthlyScores).forEach(([key, val]: [string, any]) => {
+      const parts = key.split("-");
+      const msYear = parseInt(parts[0]);
+      const msMonth = parseInt(parts[1]);
+      if (!isNaN(msYear) && !isNaN(msMonth) && msMonth >= 1 && msMonth <= 12) {
+        rows.push({
+          assignment_id: supabaseAssignmentId,
+          year: msYear,
+          month: msMonth,
+          actual_total: val.actualTotal ?? 0,
+          achievement_percentage: val.achievementPercentage ?? 0,
+          quality_notes: val.qualityNotes ?? null,
+        });
+      }
+    });
+  });
+
+  log(`  Found ${rows.length} monthly score records`);
+
+  if (!DRY_RUN && rows.length > 0) {
+    let count = 0;
+    for (const ch of chunk(rows, 100)) {
+      const { error } = await supabase
+        .from("monthly_scores")
+        .upsert(ch, { onConflict: "assignment_id,year,month" });
+      if (error) console.warn(`  ⚠️  Monthly scores error: ${error.message}`);
+      else count += ch.length;
+    }
+    log(`  Done: ${count} monthly scores upserted`);
+  } else {
+    log(`  Would upsert ${rows.length} monthly scores`);
+  }
+}
+
 // ─── Preflight Check ──────────────────────────────────────────────────────────
 
 async function preflightCheck(): Promise<boolean> {
@@ -533,18 +718,39 @@ async function main() {
   console.log("=".repeat(52));
   if (DRY_RUN) console.log("📋 DRY RUN mode — no writes to Supabase");
   if (SKIP_AUTH) console.log("⏭️  SKIP_AUTH — will not create Supabase auth users");
+  if (DAILY_ONLY) console.log("📋 DAILY-ONLY mode — migrating daily_reports, monthly_scores, kpi_settings, feedbacks");
 
-  const ok = await preflightCheck();
-  if (!ok) process.exit(1);
+  if (DAILY_ONLY) {
+    // KPIs already exist in Supabase — build ID maps, insert missing assignments, then migrate data
+    const uidMap = await buildUidMap();
+    const deptMap = await migrateDepartments();
+    await migrateUsers(uidMap, deptMap);
+    const kpiIdMap = await buildKpiIdMapFromDB();
+    const assignmentIdMap = await buildAndSyncAssignmentIdMap(uidMap, kpiIdMap, deptMap);
+    await migrateMonthlyScoresOnly(assignmentIdMap);
+    await migrateDailyReports(uidMap, kpiIdMap, assignmentIdMap);
+    await migrateKpiSettings(uidMap);
+    await migrateFeedbacks(uidMap);
+  } else {
+    if (!USERS_ONLY) {
+      const ok = await preflightCheck();
+      if (!ok) process.exit(1);
+    }
 
-  const uidMap = await buildUidMap();
-  const deptMap = await migrateDepartments();
-  await migrateUsers(uidMap);
-  const kpiIdMap = await migrateKpis(uidMap);
-  const assignmentIdMap = await migrateAssignments(uidMap, kpiIdMap, deptMap);
-  await migrateDailyReports(uidMap, kpiIdMap, assignmentIdMap);
-  await migrateKpiSettings(uidMap);
-  await migrateFeedbacks(uidMap);
+    const uidMap = await buildUidMap();
+    const deptMap = await migrateDepartments();
+    await migrateUsers(uidMap, deptMap);
+
+    if (!USERS_ONLY) {
+      const kpiIdMap = await migrateKpis(uidMap, deptMap);
+      const assignmentIdMap = await migrateAssignments(uidMap, kpiIdMap, deptMap);
+      await migrateDailyReports(uidMap, kpiIdMap, assignmentIdMap);
+      await migrateKpiSettings(uidMap);
+      await migrateFeedbacks(uidMap);
+    } else {
+      log("\n⏭️  --users-only: skipped KPIs, assignments, reports, settings, feedbacks");
+    }
+  }
 
   console.log("\n" + "=".repeat(52));
   console.log("✅ Migration complete!");

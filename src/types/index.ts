@@ -37,6 +37,13 @@ export interface Timestamp {
 
 // ─── User (maps to public.users table in Supabase) ───────────────────────────
 
+export type AbsensiStatus =
+  | "active"
+  | "pending"
+  | "rejected"
+  | "resigned"
+  | "deleted";
+
 export interface User {
   id: string;
   name: string;
@@ -49,10 +56,13 @@ export interface User {
   photoUrl: string | null;
   createdAt: string;
   updatedAt: string;
-  role?: AbsensiRole;
-  status?: string;
   managedDepartments?: string[];
-  isHidden?: boolean;
+  // Absensi fields
+  absensiRole: AbsensiRole;
+  absensiStatus: AbsensiStatus;
+  leaveQuota: number;
+  sickQuota: number;
+  isHidden: boolean;
 }
 
 export function getKpiRole(user: User): KpiRole {
@@ -69,7 +79,7 @@ export function getManagedDepartments(user: User): string[] {
   return user.department ? [user.department] : [];
 }
 
-export function canAccessKpi(user: User): boolean {
+export function canAccessKpi(_user: User): boolean {
   return true;
 }
 

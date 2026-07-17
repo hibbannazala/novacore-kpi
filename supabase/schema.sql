@@ -166,22 +166,27 @@ begin
 end;
 $$;
 
+drop trigger if exists trg_users_updated_at on public.users;
 create trigger trg_users_updated_at
   before update on public.users
   for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_kpis_updated_at on public.kpis;
 create trigger trg_kpis_updated_at
   before update on public.kpis
   for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_kpi_assignments_updated_at on public.kpi_assignments;
 create trigger trg_kpi_assignments_updated_at
   before update on public.kpi_assignments
   for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_monthly_scores_updated_at on public.monthly_scores;
 create trigger trg_monthly_scores_updated_at
   before update on public.monthly_scores
   for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_daily_reports_updated_at on public.daily_reports;
 create trigger trg_daily_reports_updated_at
   before update on public.daily_reports
   for each row execute function public.set_updated_at();
@@ -221,6 +226,7 @@ begin
 end;
 $$;
 
+drop trigger if exists trg_recalculate_on_report_change on public.daily_reports;
 create trigger trg_recalculate_on_report_change
   after insert or update or delete on public.daily_reports
   for each row execute function public.recalculate_assignment_totals();
@@ -238,6 +244,7 @@ begin
 end;
 $$;
 
+drop trigger if exists trg_create_kpi_settings_on_user on public.users;
 create trigger trg_create_kpi_settings_on_user
   after insert on public.users
   for each row execute function public.create_default_kpi_settings();

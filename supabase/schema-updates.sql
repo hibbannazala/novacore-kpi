@@ -81,3 +81,19 @@ exception when duplicate_object then null; end $$;
 do $$ begin
   alter publication supabase_realtime add table public.feedbacks;
 exception when duplicate_object then null; end $$;
+
+-- 6. Tambah kolom yang dibutuhkan app tapi belum ada di schema awal
+alter table public.users
+  add column if not exists managed_departments text[] not null default '{}';
+
+alter table public.kpis
+  add column if not exists deleted_at timestamptz;
+
+alter table public.kpi_assignments
+  add column if not exists cancelled_at timestamptz;
+
+alter table public.kpi_settings
+  add column if not exists updated_by uuid references public.users(id) on delete set null;
+
+alter table public.daily_reports
+  add column if not exists kpi_id uuid references public.kpis(id) on delete set null;

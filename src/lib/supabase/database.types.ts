@@ -42,6 +42,11 @@ export interface Database {
           position: string | null;
           photo_url: string | null;
           managed_departments: string[] | null;
+          absensi_role: "staff" | "admin";
+          absensi_status: "active" | "pending" | "rejected" | "resigned" | "deleted";
+          leave_quota: number;
+          sick_quota: number;
+          is_hidden: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -54,6 +59,11 @@ export interface Database {
           position?: string | null;
           photo_url?: string | null;
           managed_departments?: string[] | null;
+          absensi_role?: "staff" | "admin";
+          absensi_status?: "active" | "pending" | "rejected" | "resigned" | "deleted";
+          leave_quota?: number;
+          sick_quota?: number;
+          is_hidden?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -66,8 +76,220 @@ export interface Database {
           position?: string | null;
           photo_url?: string | null;
           managed_departments?: string[] | null;
+          absensi_role?: "staff" | "admin";
+          absensi_status?: "active" | "pending" | "rejected" | "resigned" | "deleted";
+          leave_quota?: number;
+          sick_quota?: number;
+          is_hidden?: boolean;
           created_at?: string;
           updated_at?: string;
+        };
+        Relationships: GenericRelationship[];
+      };
+      attendance: {
+        Row: {
+          id: string;
+          user_id: string;
+          date: string;
+          check_in: string | null;
+          check_out: string | null;
+          status: "on_time" | "late" | "very_late" | "auto_checkout";
+          type: "WFO" | "WFA";
+          location_in: Json | null;
+          location_status: string | null;
+          late_fine: number;
+          late_reason: string;
+          late_reason_status: "pending" | "accepted" | "rejected" | null;
+          radius_penalty: number;
+          early_checkout: boolean;
+          early_reason: string;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          date: string;
+          check_in?: string | null;
+          check_out?: string | null;
+          status?: "on_time" | "late" | "very_late" | "auto_checkout";
+          type?: "WFO" | "WFA";
+          location_in?: Json | null;
+          location_status?: string | null;
+          late_fine?: number;
+          late_reason?: string;
+          late_reason_status?: "pending" | "accepted" | "rejected" | null;
+          radius_penalty?: number;
+          early_checkout?: boolean;
+          early_reason?: string;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          date?: string;
+          check_in?: string | null;
+          check_out?: string | null;
+          status?: "on_time" | "late" | "very_late" | "auto_checkout";
+          type?: "WFO" | "WFA";
+          location_in?: Json | null;
+          location_status?: string | null;
+          late_fine?: number;
+          late_reason?: string;
+          late_reason_status?: "pending" | "accepted" | "rejected" | null;
+          radius_penalty?: number;
+          early_checkout?: boolean;
+          early_reason?: string;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: GenericRelationship[];
+      };
+      leave_requests: {
+        Row: {
+          id: string;
+          user_id: string;
+          type: "leave" | "sick" | "wfa";
+          dates: string[];
+          reason: string;
+          status: "pending" | "approved" | "rejected" | "cancelled";
+          processed_by: string | null;
+          processed_at: string | null;
+          deducted_sick: number;
+          deducted_leave: number;
+          cancellation_requested: boolean;
+          cancellation_reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          type: "leave" | "sick" | "wfa";
+          dates?: string[];
+          reason?: string;
+          status?: "pending" | "approved" | "rejected" | "cancelled";
+          processed_by?: string | null;
+          processed_at?: string | null;
+          deducted_sick?: number;
+          deducted_leave?: number;
+          cancellation_requested?: boolean;
+          cancellation_reason?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          type?: "leave" | "sick" | "wfa";
+          dates?: string[];
+          reason?: string;
+          status?: "pending" | "approved" | "rejected" | "cancelled";
+          processed_by?: string | null;
+          processed_at?: string | null;
+          deducted_sick?: number;
+          deducted_leave?: number;
+          cancellation_requested?: boolean;
+          cancellation_reason?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: GenericRelationship[];
+      };
+      holidays: {
+        Row: {
+          id: string;
+          date: string;
+          description: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          date: string;
+          description?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          date?: string;
+          description?: string;
+          created_at?: string;
+        };
+        Relationships: GenericRelationship[];
+      };
+      absensi_settings: {
+        Row: {
+          id: number;
+          work_start: string;
+          work_end: string;
+          max_late: string;
+          max_time_sick: string;
+          max_time_leave: string;
+          max_time_wfa: string;
+          office_lat: number;
+          office_lng: number;
+          office_radius: number;
+          last_sync_date: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: number;
+          work_start?: string;
+          work_end?: string;
+          max_late?: string;
+          max_time_sick?: string;
+          max_time_leave?: string;
+          max_time_wfa?: string;
+          office_lat?: number;
+          office_lng?: number;
+          office_radius?: number;
+          last_sync_date?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          id?: number;
+          work_start?: string;
+          work_end?: string;
+          max_late?: string;
+          max_time_sick?: string;
+          max_time_leave?: string;
+          max_time_wfa?: string;
+          office_lat?: number;
+          office_lng?: number;
+          office_radius?: number;
+          last_sync_date?: string | null;
+          updated_at?: string;
+        };
+        Relationships: GenericRelationship[];
+      };
+      absensi_logs: {
+        Row: {
+          id: string;
+          actor: string;
+          action: string;
+          target_user_id: string | null;
+          details: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          actor?: string;
+          action: string;
+          target_user_id?: string | null;
+          details?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          actor?: string;
+          action?: string;
+          target_user_id?: string | null;
+          details?: string | null;
+          created_at?: string;
         };
         Relationships: GenericRelationship[];
       };
@@ -368,6 +590,18 @@ export interface Database {
       my_kpi_role: {
         Args: Record<string, never>;
         Returns: KpiRole;
+      };
+      process_leave_request: {
+        Args: { p_request_id: string; p_action: string; p_admin_name: string };
+        Returns: void;
+      };
+      process_leave_cancellation: {
+        Args: { p_request_id: string; p_action: string; p_admin_name: string };
+        Returns: void;
+      };
+      is_absensi_admin: {
+        Args: Record<string, never>;
+        Returns: boolean;
       };
     };
     Enums: Record<string, never>;
