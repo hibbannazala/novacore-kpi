@@ -259,8 +259,8 @@ function CreateModal({ types, onClose, onUpdate }: { types: LetterType[], onClos
 
   useEffect(() => {
     if (types.length > 0 && !typeId) setTypeId(types[0].id);
-    supabase.from("users").select("id, name, role").order("name").then(({data}) => {
-      if (data) setUsers(data);
+    supabase.from("users").select("id, name, role").order("name").then((res: any) => {
+      if (res.data) setUsers(res.data);
     });
   }, [types]);
 

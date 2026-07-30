@@ -45,8 +45,8 @@ export default function HrPayrollPage() {
     // Initialize form data
     const initialForm: Record<string, Partial<Payroll>> = {};
     if (uData) {
-      uData.forEach(u => {
-        const existing = pData?.find(p => p.user_id === u.id);
+      uData.forEach((u: any) => {
+        const existing = pData?.find((p: any) => p.user_id === u.id);
         initialForm[u.id] = {
           base_salary: existing?.base_salary ?? 0,
           mobility_allowance: existing?.mobility_allowance ?? 0,
@@ -73,9 +73,9 @@ export default function HrPayrollPage() {
   async function handleSave(publish: boolean) {
     setSaving(true);
     try {
-      const upserts = users.map(u => {
+      const upserts = users.map((u: any) => {
         const d = formData[u.id];
-        const existing = payrolls.find(p => p.user_id === u.id);
+        const existing = payrolls.find((p: any) => p.user_id === u.id);
         return {
           id: existing?.id,
           user_id: u.id,
@@ -165,7 +165,7 @@ export default function HrPayrollPage() {
                     <tr key={u.id} className="border-t border-slate-100 hover:bg-slate-50/50 transition-colors">
                       <td className="px-4 py-3">
                         <p className="text-sm font-bold text-slate-800">{u.name}</p>
-                        <p className="text-[10px] text-slate-500 uppercase tracking-widest">{u.department || "-"} / {u.role}</p>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-widest">{u.department || "-"} / {(u as any).role}</p>
                       </td>
                       <td className="px-4 py-3">
                         <input 
