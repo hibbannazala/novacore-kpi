@@ -33,7 +33,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Redirect unauthenticated users to login
-  if (!user && pathname.startsWith("/dashboard")) {
+  if (!user && (pathname.startsWith("/dashboard") || pathname.startsWith("/absensi"))) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
