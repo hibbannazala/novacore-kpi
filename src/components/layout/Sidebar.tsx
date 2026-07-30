@@ -37,8 +37,6 @@ const navByRole: Record<Exclude<KpiRole, "developer">, NavItem[]> = {
     { label: "KPI Saya", href: "/dashboard/tim/kpi", icon: Target },
     { label: "Input Harian", href: "/dashboard/tim/input", icon: ClipboardList },
     { label: "Riwayat", href: "/dashboard/tim/history", icon: FileText },
-    { label: "Surat Saya", href: "/dashboard/tim/letters", icon: Mail },
-    { label: "Slip Gaji", href: "/dashboard/tim/payroll", icon: Banknote },
   ],
   head: [
     { label: "Dashboard", href: "/dashboard/head", icon: LayoutDashboard },
@@ -59,8 +57,6 @@ const navByRole: Record<Exclude<KpiRole, "developer">, NavItem[]> = {
     { label: "Kualitas", href: "/dashboard/hr/quality", icon: BarChart3 },
     { label: "Karyawan", href: "/dashboard/hr/employees", icon: Users },
     { label: "Departemen", href: "/dashboard/hr/divisions", icon: Building2 },
-    { label: "Surat Menyurat", href: "/dashboard/hr/letters", icon: Mail },
-    { label: "Penggajian", href: "/dashboard/hr/payroll", icon: Banknote },
   ],
   executive: [
     { label: "Dashboard", href: "/dashboard/executive", icon: LayoutDashboard },
@@ -73,8 +69,6 @@ const navByRole: Record<Exclude<KpiRole, "developer">, NavItem[]> = {
     { label: "Karyawan", href: "/dashboard/hr/employees", icon: Users },
     { label: "Manajemen KPI", href: "/dashboard/hr/kpi", icon: Target },
     { label: "Penugasan", href: "/dashboard/hr/assignments", icon: ClipboardList },
-    { label: "Surat Menyurat", href: "/dashboard/hr/letters", icon: Mail },
-    { label: "Penggajian", href: "/dashboard/hr/payroll", icon: Banknote },
   ],
 };
 

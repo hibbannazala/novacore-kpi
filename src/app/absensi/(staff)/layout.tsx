@@ -8,7 +8,7 @@ import ConfirmDialog from "@/components/absensi/ConfirmDialog";
 import { toast } from "sonner";
 import {
   Home, FilePen, CalendarDays, TrendingUp,
-  Briefcase, Sun, Moon, UserCog, LogOut, Clock,
+  Briefcase, Sun, Moon, UserCog, LogOut, Clock, Mail, Banknote,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -16,6 +16,8 @@ const NAV_ITEMS = [
   { path: "/absensi/requests", icon: <FilePen size={24} />,     label: "Cuti/WFA" },
   { path: "/absensi/team",     icon: <CalendarDays size={24} />, label: "Kalender" },
   { path: "/absensi/kpi",      icon: <TrendingUp size={24} />,  label: "KPI"      },
+  { path: "/absensi/letters",  icon: <Mail size={24} />,        label: "Surat"    },
+  { path: "/absensi/payroll",  icon: <Banknote size={24} />,    label: "Slip Gaji" },
 ];
 
 export default function AbsensiStaffLayout({ children }: { children: React.ReactNode }) {

@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import {
   PieChart, ClipboardCheck, Users, UserX, UserMinus,
   Trash2, Settings, History, ShieldCheck, AlignJustify,
-  X, Moon, Sun, LogOut, ChevronLeft, ChevronRight, TriangleAlert,
+  X, Moon, Sun, LogOut, ChevronLeft, ChevronRight, TriangleAlert, FileText
 } from "lucide-react";
 
 const MENU_GROUPS = [
@@ -22,6 +22,13 @@ const MENU_GROUPS = [
       { path: "/absensi/admin/latereasons",        icon: <TriangleAlert size={18} />,  label: "Approval Telat",   badgeKey: "" },
       { path: "/absensi/admin/staff?tab=pending",  icon: <ShieldCheck size={18} />,    label: "Pendaftar Baru",   badgeKey: "pendingStaff" },
       { path: "/absensi/admin/staff",              icon: <Users size={18} />,          label: "Kelola Staf",      badgeKey: "" },
+    ],
+  },
+  {
+    group: "Surat & Gaji",
+    items: [
+      { path: "/absensi/admin/letters", icon: <FileText size={18} />, label: "Surat Menyurat", badgeKey: "" },
+      { path: "/absensi/admin/payroll", icon: <ClipboardCheck size={18} />, label: "Penggajian", badgeKey: "" },
     ],
   },
   {
