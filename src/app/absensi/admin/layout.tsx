@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { createClient } from "@/lib/supabase/client";
@@ -52,6 +52,7 @@ export default function AbsensiAdminLayout({ children }: { children: React.React
   const { user, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed]     = useState(false);
@@ -171,8 +172,20 @@ export default function AbsensiAdminLayout({ children }: { children: React.React
                   </li>
                 )}
                 {group.items.map((item) => {
-                  const basePath = item.path.split("?")[0];
-                  const active = pathname === basePath || (basePath !== "/absensi/admin/staff" && pathname.startsWith(basePath));
+                  const [basePath, queryStr] = item.path.split("?");
+                  let active = false;
+                  
+                  if (pathname === basePath || (basePath !== "/absensi/admin/staff" && pathname.startsWith(basePath))) {
+                    if (queryStr) {
+                      const tabParam = new URLSearchParams(queryStr).get("tab");
+                      const currentTab = searchParams.get("tab");
+                      active = tabParam === currentTab;
+                    } else if (basePath === "/absensi/admin/staff") {
+                      active = !searchParams.has("tab");
+                    } else {
+                      active = true;
+                    }
+                  }
                   const badge = item.badgeKey ? (badges[item.badgeKey] ?? 0) : 0;
                   return (
                     <li key={item.path}>
