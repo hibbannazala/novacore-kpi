@@ -20,8 +20,7 @@ const MENU_GROUPS = [
       { path: "/absensi/admin/dashboard",          icon: <PieChart size={18} />,       label: "Dashboard",        badgeKey: "" },
       { path: "/absensi/admin/approvals",          icon: <ClipboardCheck size={18} />, label: "Manajemen Cuti",   badgeKey: "pendingReqs" },
       { path: "/absensi/admin/latereasons",        icon: <TriangleAlert size={18} />,  label: "Approval Telat",   badgeKey: "" },
-      { path: "/absensi/admin/staff?tab=pending",  icon: <ShieldCheck size={18} />,    label: "Pendaftar Baru",   badgeKey: "pendingStaff" },
-      { path: "/absensi/admin/staff",              icon: <Users size={18} />,          label: "Kelola Staf",      badgeKey: "" },
+      { path: "/absensi/admin/staff",              icon: <Users size={18} />,          label: "Kelola Staf",      badgeKey: "pendingStaff" },
     ],
   },
   {
@@ -29,14 +28,6 @@ const MENU_GROUPS = [
     items: [
       { path: "/absensi/admin/letters", icon: <FileText size={18} />, label: "Surat Menyurat", badgeKey: "" },
       { path: "/absensi/admin/payroll", icon: <ClipboardCheck size={18} />, label: "Penggajian", badgeKey: "" },
-    ],
-  },
-  {
-    group: "Arsip & Akses",
-    items: [
-      { path: "/absensi/admin/staff?tab=rejected", icon: <UserX size={18} />,     label: "Akun Ditolak", badgeKey: "" },
-      { path: "/absensi/admin/staff?tab=resigned", icon: <UserMinus size={18} />, label: "Staf Resign",  badgeKey: "" },
-      { path: "/absensi/admin/staff?tab=deleted",  icon: <Trash2 size={18} />,    label: "Akun Dihapus", badgeKey: "" },
     ],
   },
   {
