@@ -95,21 +95,26 @@ export function Sidebar() {
   const navItems = navByRole[effectiveRole];
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r border-white/30 bg-white/40 backdrop-blur-xl">
+    <aside className="flex h-screen w-64 flex-col border-r bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800">
       {/* Brand */}
-      <div className="flex h-24 items-center gap-3 px-6 mt-2">
-        <div className="w-10 h-10 bg-primary/10 rounded-[14px] flex items-center justify-center shadow-inner border border-primary/20 shrink-0">
-          <span className="text-primary font-black text-xl">N</span>
+      <div className="flex h-24 items-center gap-3 px-8 mt-2">
+        <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center shadow-lg shrink-0 text-white">
+          <Target className="h-6 w-6" />
         </div>
         <div>
-          <h1 className="text-lg font-black text-slate-800 tracking-tight leading-none">NovaCore</h1>
-          <p className="text-[9px] font-bold text-primary uppercase tracking-widest mt-1">KPI Management</p>
+          <h1 className="text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight leading-none">NovaCore</h1>
+          <p className="text-[10px] font-black text-primary uppercase tracking-[0.15em] mt-1">KPI Management</p>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-4 py-2">
-        <ul className="space-y-1.5">
+      <nav className="flex-1 overflow-y-auto px-4 py-4">
+        <ul className="space-y-1">
+          <li className="pt-2 pb-2 px-2">
+            <p className="text-[10px] font-black uppercase tracking-widest leading-none text-slate-400 dark:text-slate-500">
+              Menu Utama
+            </p>
+          </li>
           {navItems.map((item) => {
             const Icon = item.icon;
             const basePath = `/dashboard/${effectiveRole}`;
@@ -121,14 +126,14 @@ export function Sidebar() {
                 <Link
                   href={item.href}
                   className={cn(
-                    "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold transition-all duration-200",
+                    "flex items-center gap-4 rounded-2xl px-5 py-3.5 text-[13px] font-black transition-all duration-300 group",
                     isActive
-                      ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-[0.98]"
-                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                      ? "bg-primary text-primary-foreground shadow-md scale-[1.02]"
+                      : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
                   )}
                 >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  {item.label}
+                  <Icon className={cn("h-[18px] w-[18px] shrink-0 transition-transform duration-300", isActive ? "scale-110" : "group-hover:scale-110")} />
+                  <span className="tracking-tight whitespace-nowrap">{item.label}</span>
                 </Link>
               </li>
             );
@@ -137,10 +142,10 @@ export function Sidebar() {
       </nav>
 
       {/* User footer */}
-      <div className="border-t border-white/30 p-4 space-y-2">
+      <div className="border-t border-slate-200 dark:border-slate-800 p-4 space-y-2">
         <div className="px-2 mb-2">
-          <p className="truncate text-sm font-semibold text-slate-800">{user.name}</p>
-          <p className="text-xs font-medium text-teal-600">{roleLabel[kpiRole]}</p>
+          <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-200">{user.name}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-primary">{roleLabel[kpiRole]}</p>
         </div>
 
         {/* Akun Saya — KPI pribadi (untuk role manajer: HR, Executive, Head) */}
