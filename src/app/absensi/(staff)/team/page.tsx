@@ -11,6 +11,7 @@ interface DayData {
   wfo: string[];
   wfa: string[];
   leave: string[];
+
 }
 
 export default function StaffTeamPage() {
@@ -52,8 +53,8 @@ export default function StaffTeamPage() {
       (reqRes.data ?? []).forEach((r) => {
         const dates = (r.dates as string[]) ?? [];
         const name  = ((r.users as unknown) as { name: string } | null)?.name ?? "?";
-        const isLeave = r.type === "leave" || r.type === "sick";
-        const isWfa   = r.type === "wfa";
+        const isLeave  = r.type === "leave" || r.type === "sick";
+        const isWfa    = r.type === "wfa";
         dates.forEach((d) => {
           if (d >= start && d <= end) {
             ensure(d);

@@ -46,7 +46,7 @@ interface ActiveUser {
   isHidden: boolean;
 }
 
-interface ExcusedEntry { id: string; type: string }
+interface ExcusedEntry { id: string; type: string; reason: string; }
 
 interface DisplayRow {
   id: string;
@@ -57,6 +57,7 @@ interface DisplayRow {
   log: AttLog | null;
   isExcused: boolean;
   excusedType?: string;
+  excusedReason?: string;
   isMissed: boolean;
 }
 
@@ -145,7 +146,7 @@ export default function AdminDashboardPage() {
         .select("id, name, email, is_hidden, departments(name)")
         .eq("absensi_status", "active"),
       supabase.from("leave_requests")
-        .select("user_id, type")
+        .select("user_id, type, reason")
         .eq("status", "approved")
         .contains("dates", [filterDate]),
       supabase.from("users")
@@ -165,7 +166,7 @@ export default function AdminDashboardPage() {
     const uMap = new Map(uList.map((u) => [u.id, u]));
 
     setExcused(
-      (reqsRes.data ?? []).map((r) => ({ id: r.user_id as string, type: r.type as string }))
+      (reqsRes.data ?? []).map((r) => ({ id: r.user_id as string, type: r.type as string, reason: (r.reason as string) ?? "" }))
     );
 
     setLogs(
@@ -240,6 +241,8 @@ export default function AdminDashboardPage() {
     fetchFines();
   }, [activeTab, filterDate, activeUsers]);
 
+
+
   // ─ Stats ────────────────────────────────────────────────────────────────────
   const stats = useMemo(() => {
     const excusedIds = new Set(excused.map((e) => e.id));
@@ -259,7 +262,7 @@ export default function AdminDashboardPage() {
     const excusedIds = new Set(excused.map((e) => e.id));
     const presentIds = new Set(logs.map((l) => l.userId));
     const logMap = new Map(logs.map((l) => [l.userId, l]));
-    const excusedMap = new Map(excused.map((e) => [e.id, e.type]));
+    const excusedMap = new Map(excused.map((e) => [e.id, { type: e.type, reason: e.reason }]));
 
     let rows: DisplayRow[] = [];
 
@@ -267,7 +270,7 @@ export default function AdminDashboardPage() {
       rows = activeUsers.map((u) => ({
         id: u.id, userId: u.id, name: u.name, email: u.email, dept: u.dept,
         log: logMap.get(u.id) ?? null,
-        isExcused: excusedIds.has(u.id), excusedType: excusedMap.get(u.id),
+        isExcused: excusedIds.has(u.id), excusedType: excusedMap.get(u.id)?.type, excusedReason: excusedMap.get(u.id)?.reason,
         isMissed: !presentIds.has(u.id) && !excusedIds.has(u.id),
       }));
     } else if (activeFilter === "present") {
@@ -284,7 +287,7 @@ export default function AdminDashboardPage() {
     } else if (activeFilter === "leave") {
       rows = activeUsers.filter((u) => excusedIds.has(u.id)).map((u) => ({
         id: u.id, userId: u.id, name: u.name, email: u.email, dept: u.dept,
-        log: null, isExcused: true, excusedType: excusedMap.get(u.id), isMissed: false,
+        log: null, isExcused: true, excusedType: excusedMap.get(u.id)?.type, excusedReason: excusedMap.get(u.id)?.reason, isMissed: false,
       }));
     } else if (activeFilter === "missed") {
       rows = activeUsers.filter((u) => !presentIds.has(u.id) && !excusedIds.has(u.id)).map((u) => ({
@@ -394,7 +397,6 @@ export default function AdminDashboardPage() {
     const tid = toast.loading("Menyimpan override cuti/WFA...");
     try {
       const type = overrideLeave.type;
-      // Deduct quota
       if (type === "leave" || type === "sick") {
         const validDates = dates.filter((d) => {
           const dow = new Date(d).getDay();
@@ -403,17 +405,18 @@ export default function AdminDashboardPage() {
         const days = validDates.length;
         const { data: userData } = await supabase.from("users").select("leave_quota, sick_quota").eq("id", overrideLeave.userId).single();
         if (userData && days > 0) {
-          let leaveQ = (userData.leave_quota as number) ?? 0;
-          let sickQ  = (userData.sick_quota as number) ?? 0;
+          let leaveQ  = (userData.leave_quota as number) ?? 0;
+          let sickQ   = (userData.sick_quota as number) ?? 0;
           if (type === "sick") {
             const fromSick  = Math.min(days, sickQ);
             const fromLeave = days - fromSick;
             sickQ  -= fromSick;
             leaveQ -= fromLeave;
-          } else {
+            await supabase.from("users").update({ leave_quota: leaveQ, sick_quota: sickQ }).eq("id", overrideLeave.userId);
+          } else if (type === "leave") {
             leaveQ -= days;
+            await supabase.from("users").update({ leave_quota: leaveQ }).eq("id", overrideLeave.userId);
           }
-          await supabase.from("users").update({ leave_quota: leaveQ, sick_quota: sickQ }).eq("id", overrideLeave.userId);
         }
       }
       const { error } = await supabase.from("leave_requests").insert({
@@ -460,18 +463,18 @@ export default function AdminDashboardPage() {
       const detailWs   = workbook.addWorksheet("Rincian Harian");
 
       summaryWs.columns = [
-        { header: "Nama Staf",      key: "name",        width: 25 },
-        { header: "Departemen",     key: "dept",        width: 20 },
-        { header: "Kehadiran Aktif",key: "totalActive", width: 15 },
-        { header: "WFO",            key: "totalWFO",    width: 10 },
-        { header: "WFA/WFH",        key: "totalWFA",    width: 10 },
-        { header: "Cuti Biasa",     key: "totalLeave",  width: 12 },
-        { header: "Sakit",          key: "totalSick",   width: 10 },
-        { header: "Total Telat",    key: "totalLate",   width: 12 },
-        { header: "Total Alpha",    key: "totalAlpha",  width: 12 },
-        { header: "Catatan Alpha",  key: "alphaNote",   width: 25 },
-        { header: "Total Denda",    key: "totalFine",   width: 15 },
-        { header: "Denda Radius",   key: "totalRadius", width: 15 },
+        { header: "Nama Staf",      key: "name",         width: 25 },
+        { header: "Departemen",     key: "dept",         width: 20 },
+        { header: "Kehadiran Aktif",key: "totalActive",  width: 15 },
+        { header: "WFO",            key: "totalWFO",     width: 10 },
+        { header: "WFA/WFH",        key: "totalWFA",     width: 10 },
+        { header: "Cuti Biasa",     key: "totalLeave",   width: 12 },
+        { header: "Sakit",          key: "totalSick",    width: 10 },
+        { header: "Total Telat",    key: "totalLate",    width: 12 },
+        { header: "Total Alpha",    key: "totalAlpha",   width: 12 },
+        { header: "Catatan Alpha",  key: "alphaNote",    width: 25 },
+        { header: "Total Denda",    key: "totalFine",    width: 15 },
+        { header: "Denda Radius",   key: "totalRadius",  width: 15 },
       ];
 
       detailWs.columns = [
@@ -499,8 +502,8 @@ export default function AdminDashboardPage() {
         let totalLeave = 0, totalSick = 0;
         reqs.filter((r) => r.user_id === u.id).forEach((r) => {
           const valid = (r.dates as string[]).filter((d) => d >= exportStart && d <= exportEnd);
-          if (r.type === "leave") totalLeave += valid.length;
-          if (r.type === "sick")  totalSick  += valid.length;
+          if (r.type === "leave")  totalLeave  += valid.length;
+          if (r.type === "sick")   totalSick   += valid.length;
         });
 
         const totalAlpha = dateRange.reduce((s, d) => {
@@ -793,15 +796,19 @@ export default function AdminDashboardPage() {
                     <tr
                       key={row.id}
                       onClick={() => {
-                        if (!row.log) return;
-                        const dist = row.log.locationIn && settings?.officeLat && settings?.officeLng
-                          ? calcDist(row.log.locationIn.lat, row.log.locationIn.lng, settings.officeLat, settings.officeLng)
-                          : null;
-                        setSelectedDist(dist);
+                        if (!row.log && !row.isExcused) return;
+                        if (row.log) {
+                          const dist = row.log.locationIn && settings?.officeLat && settings?.officeLng
+                            ? calcDist(row.log.locationIn.lat, row.log.locationIn.lng, settings.officeLat, settings.officeLng)
+                            : null;
+                          setSelectedDist(dist);
+                        } else {
+                          setSelectedDist(null);
+                        }
                         setSelectedRow(row);
                         setEditingLog(null);
                       }}
-                      className={`border-t border-[var(--ab-border)] transition-colors text-[10px] ${row.log ? "hover:bg-[var(--ab-bg-main)]/50 cursor-pointer" : ""} ${row.isMissed ? "opacity-40 grayscale" : ""}`}
+                      className={`border-t border-[var(--ab-border)] transition-colors text-[10px] ${row.log || row.isExcused ? "hover:bg-[var(--ab-bg-main)]/50 cursor-pointer" : ""} ${row.isMissed ? "opacity-40 grayscale" : ""}`}
                     >
                       <td className="px-4 py-3">
                         <div className="flex flex-col">
@@ -873,7 +880,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Detail Modal */}
-      {selectedRow?.log && typeof document !== "undefined" && createPortal(
+      {selectedRow && (selectedRow.log || selectedRow.isExcused) && typeof document !== "undefined" && createPortal(
         <div
           className="ab-confirm-overlay"
           onClick={(e) => { if (e.target === e.currentTarget) { setSelectedRow(null); setEditingLog(null); } }}
@@ -891,7 +898,7 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                {!editingLog ? (
+                {!editingLog && selectedRow.log ? (
                   <>
                     <button onClick={() => handleDeleteLog(selectedRow.log!.id)} className="w-8 h-8 rounded-xl flex items-center justify-center text-red-400 hover:bg-red-50 hover:text-red-600 transition-all border border-transparent hover:border-red-100">
                       <Trash2 size={14} />
@@ -900,8 +907,12 @@ export default function AdminDashboardPage() {
                       <Pencil size={14} />
                     </button>
                   </>
-                ) : (
+                ) : editingLog ? (
                   <button onClick={() => setEditingLog(null)} className="w-8 h-8 flex items-center justify-center text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]">
+                    <X size={16} />
+                  </button>
+                ) : (
+                  <button onClick={() => setSelectedRow(null)} className="w-8 h-8 flex items-center justify-center text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]">
                     <X size={16} />
                   </button>
                 )}
@@ -918,12 +929,12 @@ export default function AdminDashboardPage() {
                   <h4 className="font-black text-lg text-[var(--ab-text-main)] mb-1">{selectedRow.name}</h4>
                   <div className="flex gap-2">
                     <span className="bg-[var(--ab-bg-main)] px-2 py-0.5 rounded text-[9px] font-black uppercase text-[var(--ab-text-dim)] border border-[var(--ab-border)]">{selectedRow.dept || "Umum"}</span>
-                    <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase text-white border" style={{ background: "var(--ab-primary)", borderColor: "var(--ab-primary)" }}>{selectedRow.log.type}</span>
+                    <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase text-white border" style={{ background: "var(--ab-primary)", borderColor: "var(--ab-primary)" }}>{selectedRow.log ? selectedRow.log.type : selectedRow.excusedType === "leave" ? "Cuti" : selectedRow.excusedType === "sick" ? "Sakit" : "WFA"}</span>
                   </div>
                 </div>
               </div>
 
-              {!editingLog ? (
+              {!editingLog && selectedRow.log ? (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-[var(--ab-bg-main)] p-4 rounded-3xl border border-[var(--ab-border)]">
@@ -950,6 +961,14 @@ export default function AdminDashboardPage() {
                         <span className="text-[10px] font-black uppercase text-[var(--ab-text-main)]">{selectedRow.log.locationStatus ?? "-"}</span>
                       </div>
                     </div>
+                    {selectedRow.log.notes && (
+                      <div className="flex flex-col gap-1 mt-2">
+                        <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">Catatan Absensi</span>
+                        <div className="bg-[var(--ab-bg-surface)] p-3 rounded-2xl border border-[var(--ab-border)]">
+                          <p className="text-[10px] text-[var(--ab-text-main)] italic">&ldquo;{selectedRow.log.notes}&rdquo;</p>
+                        </div>
+                      </div>
+                    )}
                     {selectedDist !== null && (
                       <div className="flex justify-between items-center">
                         <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">Jarak ke Kantor</span>
@@ -996,7 +1015,19 @@ export default function AdminDashboardPage() {
                     </div>
                   )}
                 </div>
-              ) : (
+              ) : !editingLog && selectedRow.isExcused ? (
+                <div className="space-y-4">
+                  <div className="bg-amber-50 dark:bg-amber-900/10 p-5 rounded-3xl border border-amber-200 dark:border-amber-900/30 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <p className="text-[10px] font-black text-amber-600 dark:text-amber-500 uppercase tracking-widest">Alasan Cuti / WFA</p>
+                      <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-green-100 text-green-700">
+                        Disetujui
+                      </span>
+                    </div>
+                    <p className="text-sm font-bold text-[var(--ab-text-main)] italic">&ldquo;{selectedRow.excusedReason || "Admin Override"}&rdquo;</p>
+                  </div>
+                </div>
+              ) : editingLog ? (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
@@ -1025,7 +1056,7 @@ export default function AdminDashboardPage() {
                     <Check size={14} /> Simpan Perubahan
                   </button>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         </div>,

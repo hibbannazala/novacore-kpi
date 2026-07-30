@@ -359,6 +359,8 @@ export default function AdminStaffPage() {
                     </button>
                   </div>
                 </div>
+
+
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -373,7 +375,7 @@ export default function AdminStaffPage() {
                 <button
                   className="flex-1 py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all text-white flex items-center justify-center gap-2 shadow-lg"
                   style={{ background: "var(--ab-primary)", boxShadow: "0 4px 12px -3px var(--ab-primary-glow)" }}
-                  onClick={() => toast.info("Slip absen — instal ExcelJS dulu untuk fitur ini")}
+                  onClick={() => handleSlipAbsen(u)}
                 >
                   <RotateCcw size={10} /> Slip Absen
                 </button>

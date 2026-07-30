@@ -102,9 +102,9 @@ export default function StaffRequestsPage() {
       }
     }
 
-    const reqDays   = selectedDates.length;
-    const curSick   = user.sickQuota  ?? 0;
-    const curLeave  = user.leaveQuota ?? 0;
+    const reqDays    = selectedDates.length;
+    const curSick    = user.sickQuota    ?? 0;
+    const curLeave   = user.leaveQuota   ?? 0;
     let cfg: ConfirmCfg = {
       title: "Konfirmasi Pengajuan",
       message: `Yakin ingin mengirim pengajuan ${reqType.toUpperCase()} ini? Pastikan tanggal dan alasan sudah sesuai.`,
@@ -448,9 +448,9 @@ function RequestCard({ req, onCancel }: { req: LeaveRequest; onCancel: (req: Lea
     req.status === "cancelled" ? "#94a3b8" : "bg-red-500";
 
   const typeStyle =
-    req.type === "leave" ? "bg-emerald-50 text-[#00897B] border-emerald-100 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400" :
-    req.type === "sick"  ? "bg-rose-50 text-rose-600 border-rose-100 dark:bg-rose-900/20 dark:border-rose-800 dark:text-rose-400" :
-                           "bg-purple-50 text-purple-600 border-purple-100 dark:bg-purple-900/20 dark:border-purple-800 dark:text-purple-400";
+    req.type === "leave"  ? "bg-emerald-50 text-[#00897B] border-emerald-100 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400" :
+    req.type === "sick"   ? "bg-rose-50 text-rose-600 border-rose-100 dark:bg-rose-900/20 dark:border-rose-800 dark:text-rose-400" :
+                            "bg-purple-50 text-purple-600 border-purple-100 dark:bg-purple-900/20 dark:border-purple-800 dark:text-purple-400";
 
   const statusBadgeStyle =
     req.status === "approved"  ? "bg-green-500 text-white" :
