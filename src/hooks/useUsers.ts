@@ -48,6 +48,7 @@ export function useDivisionMembers(department: string | string[] | undefined) {
       const { data } = await supabase
         .from("users")
         .select("*, departments(name)")
+        .in("absensi_status", ["active", "pending"])
         .in(
           "department_id",
           // sub-select: get department IDs matching the names
@@ -85,6 +86,7 @@ export function useAllUsers() {
       const { data } = await supabase
         .from("users")
         .select("*, departments(name)")
+        .in("absensi_status", ["active", "pending"])
         .order("name");
       setUsers((data ?? []).map(rowToUser));
       setIsLoading(false);
