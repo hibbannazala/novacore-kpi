@@ -16,10 +16,10 @@ const ROLE_HOME: Record<string, string> = {
 
 // Which roles are allowed per URL segment (/dashboard/[segment]/...)
 const SEGMENT_ROLES: Record<string, string[]> = {
-  tim: ["tim"],
-  head: ["head"],
-  hr: ["hr"],
-  executive: ["executive"],
+  tim: ["tim", "head", "hr", "executive", "developer"],
+  head: ["head", "developer"],
+  hr: ["hr", "executive", "developer"],
+  executive: ["executive", "hr", "developer"],
   developer: ["developer"],
 };
 

@@ -313,3 +313,42 @@ export interface ApiResponse<T> {
   data?: T;
   error?: string;
 }
+
+// ==========================================
+// SURAT MENYURAT & SLIP GAJI TYPES
+// ==========================================
+
+export interface LetterType {
+  id: string;
+  name: string;
+  code: string;
+  created_at?: string;
+}
+
+export interface CompanyLetter {
+  id: string;
+  company: 'TNT' | 'HYPE' | 'GOAT' | 'NOVA';
+  letter_type_id: string;
+  running_number: number;
+  month: string;
+  year: number;
+  full_number: string;
+  issued_to?: string | null;
+  created_at?: string;
+  letter_types?: LetterType;
+  users?: Partial<User>;
+}
+
+export interface Payroll {
+  id: string;
+  user_id: string;
+  month: number;
+  year: number;
+  base_salary: number;
+  mobility_allowance: number;
+  performance_bonus: number;
+  overtime_pay: number;
+  status: 'draft' | 'published';
+  created_at?: string;
+  users?: Partial<User>;
+}

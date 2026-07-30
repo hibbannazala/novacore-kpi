@@ -796,7 +796,6 @@ export default function AdminDashboardPage() {
                     <tr
                       key={row.id}
                       onClick={() => {
-                        if (!row.log && !row.isExcused) return;
                         if (row.log) {
                           const dist = row.log.locationIn && settings?.officeLat && settings?.officeLng
                             ? calcDist(row.log.locationIn.lat, row.log.locationIn.lng, settings.officeLat, settings.officeLng)
@@ -808,7 +807,7 @@ export default function AdminDashboardPage() {
                         setSelectedRow(row);
                         setEditingLog(null);
                       }}
-                      className={`border-t border-[var(--ab-border)] transition-colors text-[10px] ${row.log || row.isExcused ? "hover:bg-[var(--ab-bg-main)]/50 cursor-pointer" : ""} ${row.isMissed ? "opacity-40 grayscale" : ""}`}
+                      className={`border-t border-[var(--ab-border)] transition-colors text-[10px] hover:bg-[var(--ab-bg-main)]/50 cursor-pointer ${row.isMissed ? "opacity-40 grayscale" : ""}`}
                     >
                       <td className="px-4 py-3">
                         <div className="flex flex-col">
@@ -880,7 +879,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Detail Modal */}
-      {selectedRow && (selectedRow.log || selectedRow.isExcused) && typeof document !== "undefined" && createPortal(
+      {selectedRow && typeof document !== "undefined" && createPortal(
         <div
           className="ab-confirm-overlay"
           onClick={(e) => { if (e.target === e.currentTarget) { setSelectedRow(null); setEditingLog(null); } }}
@@ -934,98 +933,109 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              {!editingLog && selectedRow.log ? (
+              {!editingLog ? (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-[var(--ab-bg-main)] p-4 rounded-3xl border border-[var(--ab-border)]">
-                      <p className="text-[9px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest mb-1">Check In</p>
-                      <p className="text-xl font-black font-mono text-[var(--ab-text-main)]">{fmt(selectedRow.log.checkIn)}</p>
-                    </div>
-                    <div className="bg-[var(--ab-bg-main)] p-4 rounded-3xl border border-[var(--ab-border)]">
-                      <p className="text-[9px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest mb-1">Check Out</p>
-                      <p className="text-xl font-black font-mono text-[var(--ab-text-main)]">{fmt(selectedRow.log.checkOut)}</p>
-                    </div>
-                  </div>
-
-                  <div className="bg-[var(--ab-bg-main)] p-5 rounded-3xl border border-[var(--ab-border)] space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">Status Waktu</span>
-                      <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase border ${selectedRow.log.status === "on_time" ? "bg-green-50 text-green-600 border-green-200 dark:bg-green-900/20 dark:border-green-800" : selectedRow.log.status === "late" ? "bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800" : "bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:border-red-800"}`}>
-                        {selectedRow.log.status.replace("_", " ")}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">Status Lokasi</span>
-                      <div className="flex items-center gap-1.5">
-                        <Navigation size={12} className="text-[var(--ab-text-dim)]" />
-                        <span className="text-[10px] font-black uppercase text-[var(--ab-text-main)]">{selectedRow.log.locationStatus ?? "-"}</span>
-                      </div>
-                    </div>
-                    {selectedRow.log.notes && (
-                      <div className="flex flex-col gap-1 mt-2">
-                        <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">Catatan Absensi</span>
-                        <div className="bg-[var(--ab-bg-surface)] p-3 rounded-2xl border border-[var(--ab-border)]">
-                          <p className="text-[10px] text-[var(--ab-text-main)] italic">&ldquo;{selectedRow.log.notes}&rdquo;</p>
+                  {selectedRow.log && (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-[var(--ab-bg-main)] p-4 rounded-3xl border border-[var(--ab-border)]">
+                          <p className="text-[9px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest mb-1">Check In</p>
+                          <p className="text-xl font-black font-mono text-[var(--ab-text-main)]">{fmt(selectedRow.log.checkIn)}</p>
+                        </div>
+                        <div className="bg-[var(--ab-bg-main)] p-4 rounded-3xl border border-[var(--ab-border)]">
+                          <p className="text-[9px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest mb-1">Check Out</p>
+                          <p className="text-xl font-black font-mono text-[var(--ab-text-main)]">{fmt(selectedRow.log.checkOut)}</p>
                         </div>
                       </div>
-                    )}
-                    {selectedDist !== null && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">Jarak ke Kantor</span>
-                        <span className={`text-[10px] font-black uppercase ${selectedDist <= (settings?.officeRadius ?? 100) ? "text-green-500" : "text-red-500"}`}>{selectedDist} meter</span>
-                      </div>
-                    )}
-                    {selectedRow.log.locationIn && (
-                      <a
-                        href={`https://www.google.com/maps?q=${selectedRow.log.locationIn.lat},${selectedRow.log.locationIn.lng}`}
-                        target="_blank" rel="noreferrer"
-                        className="w-full flex items-center justify-center gap-2 bg-[var(--ab-bg-surface)] border border-[var(--ab-border)] py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-main)] hover:bg-[var(--ab-bg-main)] transition"
-                      >
-                        <MapPin size={12} className="text-red-500" /> Buka Google Maps
-                      </a>
-                    )}
-                  </div>
 
-                  {selectedRow.log.lateReason && (
-                    <div className="bg-amber-50 dark:bg-amber-900/10 p-5 rounded-3xl border border-amber-200 dark:border-amber-900/30 space-y-3">
-                      <div className="flex justify-between items-center">
-                        <p className="text-[10px] font-black text-amber-600 dark:text-amber-500 uppercase tracking-widest">Alasan Keterlambatan</p>
-                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${selectedRow.log.lateReasonStatus === "accepted" ? "bg-green-100 text-green-700" : selectedRow.log.lateReasonStatus === "rejected" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
-                          {selectedRow.log.lateReasonStatus === "accepted" ? "Diterima" : selectedRow.log.lateReasonStatus === "rejected" ? "Ditolak" : "Menunggu"}
-                        </span>
+                      <div className="bg-[var(--ab-bg-main)] p-5 rounded-3xl border border-[var(--ab-border)] space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">Status Waktu</span>
+                          <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase border ${selectedRow.log.status === "on_time" ? "bg-green-50 text-green-600 border-green-200 dark:bg-green-900/20 dark:border-green-800" : selectedRow.log.status === "late" ? "bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800" : "bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:border-red-800"}`}>
+                            {selectedRow.log.status.replace("_", " ")}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">Status Lokasi</span>
+                          <div className="flex items-center gap-1.5">
+                            <Navigation size={12} className="text-[var(--ab-text-dim)]" />
+                            <span className="text-[10px] font-black uppercase text-[var(--ab-text-main)]">{selectedRow.log.locationStatus ?? "-"}</span>
+                          </div>
+                        </div>
+                        {selectedRow.log.notes && (
+                          <div className="flex flex-col gap-1 mt-2">
+                            <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">Catatan Absensi</span>
+                            <div className="bg-[var(--ab-bg-surface)] p-3 rounded-2xl border border-[var(--ab-border)]">
+                              <p className="text-[10px] text-[var(--ab-text-main)] italic">&ldquo;{selectedRow.log.notes}&rdquo;</p>
+                            </div>
+                          </div>
+                        )}
+                        {selectedDist !== null && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">Jarak ke Kantor</span>
+                            <span className={`text-[10px] font-black uppercase ${selectedDist <= (settings?.officeRadius ?? 100) ? "text-green-500" : "text-red-500"}`}>{selectedDist} meter</span>
+                          </div>
+                        )}
+                        {selectedRow.log.locationIn && (
+                          <a
+                            href={`https://www.google.com/maps?q=${selectedRow.log.locationIn.lat},${selectedRow.log.locationIn.lng}`}
+                            target="_blank" rel="noreferrer"
+                            className="w-full flex items-center justify-center gap-2 bg-[var(--ab-bg-surface)] border border-[var(--ab-border)] py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-main)] hover:bg-[var(--ab-bg-main)] transition"
+                          >
+                            <MapPin size={12} className="text-red-500" /> Buka Google Maps
+                          </a>
+                        )}
                       </div>
-                      <p className="text-sm font-bold text-[var(--ab-text-main)] italic">&ldquo;{selectedRow.log.lateReason}&rdquo;</p>
-                      {selectedRow.log.lateReasonStatus === "pending" && (
-                        <div className="flex gap-2 pt-1">
-                          <button onClick={() => handleLateReason(selectedRow.log!.id, "accepted")} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition flex items-center justify-center gap-1">
-                            <Check size={12} /> Terima Alasan
-                          </button>
-                          <button onClick={() => handleLateReason(selectedRow.log!.id, "rejected")} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition flex items-center justify-center gap-1">
-                            <X size={12} /> Tolak
-                          </button>
+
+                      {selectedRow.log.lateReason && (
+                        <div className="bg-amber-50 dark:bg-amber-900/10 p-5 rounded-3xl border border-amber-200 dark:border-amber-900/30 space-y-3">
+                          <div className="flex justify-between items-center">
+                            <p className="text-[10px] font-black text-amber-600 dark:text-amber-500 uppercase tracking-widest">Alasan Keterlambatan</p>
+                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${selectedRow.log.lateReasonStatus === "accepted" ? "bg-green-100 text-green-700" : selectedRow.log.lateReasonStatus === "rejected" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+                              {selectedRow.log.lateReasonStatus === "accepted" ? "Diterima" : selectedRow.log.lateReasonStatus === "rejected" ? "Ditolak" : "Menunggu"}
+                            </span>
+                          </div>
+                          <p className="text-sm font-bold text-[var(--ab-text-main)] italic">&ldquo;{selectedRow.log.lateReason}&rdquo;</p>
+                          {selectedRow.log.lateReasonStatus === "pending" && (
+                            <div className="flex gap-2 pt-1">
+                              <button onClick={() => handleLateReason(selectedRow.log!.id, "accepted")} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition flex items-center justify-center gap-1">
+                                <Check size={12} /> Terima Alasan
+                              </button>
+                              <button onClick={() => handleLateReason(selectedRow.log!.id, "rejected")} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition flex items-center justify-center gap-1">
+                                <X size={12} /> Tolak
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
+
+                      {(selectedRow.log.lateFine ?? 0) > 0 && (
+                        <div className="bg-orange-50 dark:bg-orange-900/10 p-4 rounded-3xl border border-orange-100 dark:border-orange-900/30">
+                          <p className="text-[9px] font-black text-orange-400 uppercase tracking-widest mb-1">Denda Keterlambatan</p>
+                          <p className="text-lg font-black text-orange-600 dark:text-orange-400 font-mono">Rp {selectedRow.log.lateFine.toLocaleString("id-ID")}</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {selectedRow.isExcused && (
+                    <div className="bg-amber-50 dark:bg-amber-900/10 p-5 rounded-3xl border border-amber-200 dark:border-amber-900/30 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <p className="text-[10px] font-black text-amber-600 dark:text-amber-500 uppercase tracking-widest">Alasan Cuti / WFA</p>
+                        <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-green-100 text-green-700">
+                          Disetujui
+                        </span>
+                      </div>
+                      <p className="text-sm font-bold text-[var(--ab-text-main)] italic">&ldquo;{selectedRow.excusedReason || "Admin Override"}&rdquo;</p>
                     </div>
                   )}
 
-                  {(selectedRow.log.lateFine ?? 0) > 0 && (
-                    <div className="bg-orange-50 dark:bg-orange-900/10 p-4 rounded-3xl border border-orange-100 dark:border-orange-900/30">
-                      <p className="text-[9px] font-black text-orange-400 uppercase tracking-widest mb-1">Denda Keterlambatan</p>
-                      <p className="text-lg font-black text-orange-600 dark:text-orange-400 font-mono">Rp {selectedRow.log.lateFine.toLocaleString("id-ID")}</p>
+                  {selectedRow.isMissed && !selectedRow.log && !selectedRow.isExcused && (
+                    <div className="bg-rose-50 dark:bg-rose-900/10 p-5 rounded-3xl border border-rose-200 dark:border-rose-900/30">
+                      <p className="text-sm font-black text-rose-600 dark:text-rose-500 uppercase tracking-widest text-center">Status: Belum Absen / Alpa</p>
+                      <p className="text-[10px] text-rose-500 dark:text-rose-400 mt-2 text-center">Karyawan ini belum melakukan absensi hari ini dan tidak memiliki izin/cuti yang tercatat.</p>
                     </div>
                   )}
-                </div>
-              ) : !editingLog && selectedRow.isExcused ? (
-                <div className="space-y-4">
-                  <div className="bg-amber-50 dark:bg-amber-900/10 p-5 rounded-3xl border border-amber-200 dark:border-amber-900/30 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <p className="text-[10px] font-black text-amber-600 dark:text-amber-500 uppercase tracking-widest">Alasan Cuti / WFA</p>
-                      <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-green-100 text-green-700">
-                        Disetujui
-                      </span>
-                    </div>
-                    <p className="text-sm font-bold text-[var(--ab-text-main)] italic">&ldquo;{selectedRow.excusedReason || "Admin Override"}&rdquo;</p>
-                  </div>
                 </div>
               ) : editingLog ? (
                 <div className="space-y-4">
