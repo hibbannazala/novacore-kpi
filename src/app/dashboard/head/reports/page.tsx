@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,10 +22,10 @@ export default function HeadReportsPage() {
   const departments = user ? getManagedDepartments(user) : [];
   const departmentLabel = departments.length > 1 ? departments.join(", ") : departments[0] ?? "Umum";
   const { members } = useDivisionMembers(departments);
-  const { assignments, kpisMap, reportsByAssignment, isLoading } = useAssignmentsForPeriod(period, departments);
+  const { assignments, kpisMap, isLoading } = useAssignmentsForPeriod(period, departments);
   const isRange = period.type === "range";
 
-  const reports = useMemo(() => Object.values(reportsByAssignment).flat(), [reportsByAssignment]);
+  const reports: any[] = [];
 
   const assignmentMap = useMemo(
     () => Object.fromEntries(assignments.map((a) => [a.id, a])),
@@ -36,11 +36,11 @@ export default function HeadReportsPage() {
   const totalActual = useMemo(() => {
     return assignments.reduce((sum, a) => {
       const actual = isRange
-        ? (reportsByAssignment[a.id] ?? []).reduce((s, r) => s + r.actualValue, 0)
+        ? a.actualTotal
         : a.actualTotal;
       return sum + actual;
     }, 0);
-  }, [assignments, reportsByAssignment, isRange]);
+  }, [assignments, isRange]);
   const totalTarget = useMemo(
     () => assignments.reduce((sum, a) => sum + a.monthlyTarget, 0),
     [assignments]
@@ -49,12 +49,12 @@ export default function HeadReportsPage() {
     if (assignments.length === 0) return 0;
     const pcts = assignments.map((a) => {
       const actual = isRange
-        ? (reportsByAssignment[a.id] ?? []).reduce((s, r) => s + r.actualValue, 0)
+        ? a.actualTotal
         : a.actualTotal;
       return a.monthlyTarget > 0 ? (actual / a.monthlyTarget) * 100 : 0;
     });
     return pcts.reduce((sum, value) => sum + value, 0) / pcts.length;
-  }, [assignments, reportsByAssignment, isRange]);
+  }, [assignments, isRange]);
   const totalAchievementPercent = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
 
   const csvEscape = (value: string | number | null | undefined) => {
@@ -85,7 +85,7 @@ export default function HeadReportsPage() {
 
     assignments.forEach((a) => {
       const actual = isRange
-        ? (reportsByAssignment[a.id] ?? []).reduce((s, r) => s + r.actualValue, 0)
+        ? a.actualTotal
         : a.actualTotal;
       const pct = a.monthlyTarget > 0 ? (actual / a.monthlyTarget) * 100 : 0;
       rows.push([
@@ -214,7 +214,7 @@ export default function HeadReportsPage() {
         {Object.entries(byUser).map(([userId, userAssignments]) => {
           const pcts = userAssignments.map((a) => {
             if (isRange) {
-              const reports = reportsByAssignment[a.id] ?? [];
+              const reports: any[] = [];
               const actual = reports.reduce((s, r) => s + r.actualValue, 0);
               return a.monthlyTarget > 0 ? (actual / a.monthlyTarget) * 100 : 0;
             }

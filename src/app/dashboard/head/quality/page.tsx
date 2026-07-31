@@ -67,7 +67,7 @@ export default function HeadQualityPage() {
         .map(u => u.id);
       
       // Also include the head's own ID so they can see their own
-      if (user.id) teamUserIds.push(user.id);
+      if (user?.id) teamUserIds.push(user.id);
 
       if (teamUserIds.length === 0) {
         setQualityItems([]);

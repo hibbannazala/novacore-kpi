@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -35,7 +35,7 @@ export default function HeadTeamPage() {
 
   const { members, isLoading: usersLoading } = useDivisionMembers(departments);
   const { getWeights, isLoading: settingsLoading } = useAllKpiSettings();
-  const { assignments, kpisMap, reportsByAssignment, isLoading } =
+  const { assignments, kpisMap, isLoading } =
     useAssignmentsForPeriod(period, departments);
 
   const [expandedDepts, setExpandedDepts] = useState<Set<string>>(new Set(departments));
@@ -59,7 +59,7 @@ export default function HeadTeamPage() {
   const byDept = useMemo(() => {
     const map: Record<string, typeof timUsers> = {};
     timUsers.forEach((u) => {
-      const dept = u.department ?? "—";
+      const dept = u.department ?? "â€”";
       if (!map[dept]) map[dept] = [];
       map[dept].push(u);
     });
@@ -120,7 +120,7 @@ export default function HeadTeamPage() {
         <div>
           <h2 className="text-base font-semibold">Overview Tim Saya</h2>
           <p className="text-sm text-muted-foreground">
-            {timUsers.length} anggota · Departemen {departmentLabel}
+            {timUsers.length} anggota Â· Departemen {departmentLabel}
           </p>
         </div>
         <PeriodPicker
@@ -180,7 +180,7 @@ export default function HeadTeamPage() {
                 // Let's pass the mapped assignments if it's a range, just like in HeadDashboard.
                 const userAssignments = period.type === "range"
                   ? (assignmentsMap[u.id] || []).map((a) => {
-                      const reports = reportsByAssignment[a.id] ?? [];
+                      const reports: any[] = [];
                       const actual = reports.reduce((s, r) => s + r.actualValue, 0);
                       const pct = a.monthlyTarget > 0 ? (actual / a.monthlyTarget) * 100 : 0;
                       return { ...a, achievementPercentage: pct, performanceCategory: getPerformanceCategory(pct) as KpiAssignment["performanceCategory"] };
@@ -233,7 +233,7 @@ export default function HeadTeamPage() {
                       expandedUsers={expandedUsers}
                       onToggleUser={toggleUser}
                       period={period}
-                      reportsByAssignment={reportsByAssignment}
+                      
                     />
                   </div>
                 )}

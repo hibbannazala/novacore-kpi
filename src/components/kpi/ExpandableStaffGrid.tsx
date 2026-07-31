@@ -15,6 +15,7 @@ import {
 } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import { PerformanceBadge } from "@/components/ui/badge";
+import { DailyReportsViewer } from "@/components/kpi/DailyReportsViewer";
 import type { User, KpiAssignment, KPI, DailyReport } from "@/types";
 import type { Period } from "@/components/kpi/PeriodPicker";
 
@@ -268,49 +269,13 @@ export function ExpandableStaffGrid({
                               )}
                             </>
                           ) : (
-                            <>
-                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-medium uppercase tracking-wide mb-2">
-                                <MessageSquare className="h-3 w-3" />
-                                Rincian Harian
-                                {sortedReports.length > 0 && (
-                                  <span className="text-foreground">({sortedReports.length})</span>
-                                )}
-                              </div>
-                              {sortedReports.length === 0 ? (
-                                <p className="text-[11px] text-muted-foreground italic mt-1">
-                                  Belum ada laporan di periode ini
-                                </p>
-                              ) : (
-                                <div className="space-y-3 max-h-48 overflow-y-auto pr-1 border-l-2 border-slate-100 ml-1.5 pl-3 py-1">
-                                  {sortedReports.map((r) => {
-                                    const isPositive = r.actualValue > 0;
-                                    return (
-                                      <div key={r.id} className="relative">
-                                        <div className="absolute -left-[17px] top-1.5 h-2 w-2 rounded-full bg-slate-300 ring-2 ring-white" />
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <span className="text-[10px] font-medium bg-white border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded shadow-sm">
-                                            {formatDateDisplay(r.date)}
-                                          </span>
-                                          <span className={cn("text-[11px] font-bold", isPositive ? "text-teal-600" : "text-slate-400")}>
-                                            {isPositive ? "+" : ""}{formatValue(r.actualValue, unit)}
-                                          </span>
-                                        </div>
-                                        {r.notes && r.notes.trim().length > 0 && (
-                                          <div className="mt-1 relative">
-                                            <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-amber-300 rounded-full" />
-                                            <div className="ml-1 bg-amber-50/60 rounded-r-md rounded-bl-sm py-1.5 px-2.5 shadow-sm border border-amber-100/50">
-                                              <p className="text-[11px] text-amber-900/90 whitespace-pre-wrap break-words leading-relaxed italic">
-                                                "{r.notes}"
-                                              </p>
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </>
+                            <DailyReportsViewer
+                              assignmentId={a.id}
+                              period={period}
+                              currentYear={a.year}
+                              currentMonth={a.month}
+                              unit={unit}
+                            />
                           )}
                         </div>
                       </div>

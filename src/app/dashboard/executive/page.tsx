@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useMemo } from "react";
 
@@ -31,7 +31,7 @@ export default function ExecutiveDashboard() {
   const [period, setPeriod] = useState<Period>({ type: "month" });
   const { departments, isLoading: deptLoading } = useDepartments();
   const { users } = useAllUsers();
-  const { assignments, reportsByAssignment, isLoading } = useAssignmentsForPeriod(period);
+  const { assignments, isLoading } = useAssignmentsForPeriod(period);
   const isRange = period.type === "range";
 
   const { summaries, companyAvg } = useMemo(() => {
@@ -54,7 +54,7 @@ export default function ExecutiveDashboard() {
       const deptAssignments = byDept[dept] ?? [];
       const pcts = deptAssignments.map((a) => {
         if (isRange) {
-          const reports = reportsByAssignment[a.id] ?? [];
+          const reports: any[] = [];
           const actual = reports.reduce((sum, r) => sum + r.actualValue, 0);
           return a.monthlyTarget > 0 ? (actual / a.monthlyTarget) * 100 : 0;
         }
@@ -68,7 +68,7 @@ export default function ExecutiveDashboard() {
 
     const avg = allPcts.length > 0 ? allPcts.reduce((s, v) => s + v, 0) / allPcts.length : 0;
     return { summaries: s, companyAvg: avg };
-  }, [assignments, reportsByAssignment, departments, users, isRange]);
+  }, [assignments, departments, users, isRange]);
 
   if (isLoading || deptLoading) {
     return (
@@ -151,7 +151,7 @@ export default function ExecutiveDashboard() {
                         {memberCount} anggota
                         {criticalCount > 0 && (
                           <span className="ml-2 text-red-600 font-medium">
-                            · {criticalCount} critical
+                            Â· {criticalCount} critical
                           </span>
                         )}
                       </p>

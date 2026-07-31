@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useMemo } from "react";
 import { useAllUsers } from "@/hooks/useUsers";
@@ -46,7 +46,7 @@ export default function ExecutiveTeamPage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
   const { users, isLoading: ul } = useAllUsers();
-  const { assignments, kpisMap, reportsByAssignment, isLoading } = useAssignmentsForPeriod(period);
+  const { assignments, kpisMap, isLoading } = useAssignmentsForPeriod(period);
   const isRange = period.type === "range";
 
   const byUser = useMemo(() => {
@@ -82,7 +82,7 @@ export default function ExecutiveTeamPage() {
             const userAssignments = byUser[u.id] ?? [];
             const pcts = userAssignments.map((a) => {
               if (isRange) {
-                const reports = reportsByAssignment[a.id] ?? [];
+                const reports: any[] = [];
                 const actual = reports.reduce((s, r) => s + r.actualValue, 0);
                 return a.monthlyTarget > 0 ? (actual / a.monthlyTarget) * 100 : 0;
               }
@@ -100,7 +100,7 @@ export default function ExecutiveTeamPage() {
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate">{u.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {u.department ?? "—"} · {userAssignments.length} KPI aktif
+                    {u.department ?? "â€”"} Â· {userAssignments.length} KPI aktif
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-3">
@@ -127,7 +127,7 @@ export default function ExecutiveTeamPage() {
           <DialogHeader>
             <DialogTitle>{selectedUser?.name}</DialogTitle>
             <p className="text-sm text-muted-foreground">
-              {selectedUser?.department ?? "—"} ·{" "}
+              {selectedUser?.department ?? "â€”"} Â·{" "}
               {selectedUser ? (kpiRoleLabel[getKpiRole(selectedUser)] ?? "") : ""}
             </p>
           </DialogHeader>
@@ -140,7 +140,7 @@ export default function ExecutiveTeamPage() {
             ) : (
               selectedUserAssignments.map((a) => {
                 const kpi = kpisMap[a.kpiId];
-                const reports = reportsByAssignment[a.id] ?? [];
+                const reports: any[] = [];
                 const actualInPeriod = reports.reduce((s, r) => s + r.actualValue, 0);
                 const displayActual = isRange ? actualInPeriod : a.actualTotal;
                 const displayPct = isRange
@@ -156,7 +156,7 @@ export default function ExecutiveTeamPage() {
                           {kpi?.title ?? a.kpiId}
                         </p>
                         <p className="text-xs text-muted-foreground capitalize">
-                          {kpi?.type ?? "—"} · {kpi?.period ?? "—"}
+                          {kpi?.type ?? "â€”"} Â· {kpi?.period ?? "â€”"}
                         </p>
                       </div>
                       <PerformanceBadge category={cat} />

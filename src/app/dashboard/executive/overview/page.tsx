@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useMemo } from "react";
 import { useAllUsers } from "@/hooks/useUsers";
@@ -33,7 +33,7 @@ export default function ExecutiveOverviewPage() {
   const { users, isLoading: usersLoading } = useAllUsers();
   const { getWeights, isLoading: settingsLoading } = useAllKpiSettings();
   const { departments, isLoading: deptLoading } = useDepartments();
-  const { assignments, kpisMap, reportsByAssignment, isLoading } =
+  const { assignments, kpisMap, isLoading } =
     useAssignmentsForPeriod(period);
 
   const [expandedDepts, setExpandedDepts] = useState<Set<string>>(new Set());
@@ -72,7 +72,7 @@ export default function ExecutiveOverviewPage() {
           }
         });
       } else {
-        const dept = u.department ?? "—";
+        const dept = u.department ?? "â€”";
         if (!map[dept]) map[dept] = [];
         map[dept].push(u);
       }
@@ -144,7 +144,7 @@ export default function ExecutiveOverviewPage() {
         <div>
           <h2 className="text-base font-semibold">Overview Seluruh Karyawan</h2>
           <p className="text-sm text-muted-foreground">
-            {timUsers.length} karyawan · {deptNames.length} departemen
+            {timUsers.length} karyawan Â· {deptNames.length} departemen
           </p>
         </div>
         <PeriodPicker
@@ -198,7 +198,7 @@ export default function ExecutiveOverviewPage() {
             const scores = deptUsers
               .filter((u) => (assignmentsMap[u.id]?.length ?? 0) > 0)
               .map((u) =>
-                calcWeightedScore(assignmentsMap[u.id], getWeights(u.id), reportsByAssignment).total
+                calcWeightedScore(assignmentsMap[u.id], getWeights(u.id)).total
               );
             const deptAvg =
               scores.length > 0
@@ -244,7 +244,7 @@ export default function ExecutiveOverviewPage() {
                       expandedUsers={expandedUsers}
                       onToggleUser={toggleUser}
                       period={period}
-                      reportsByAssignment={reportsByAssignment}
+                      
                     />
                   </div>
                 )}

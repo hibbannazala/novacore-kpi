@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useMemo } from "react";
 import { useAllUsers } from "@/hooks/useUsers";
@@ -28,7 +28,7 @@ export default function HrReportsPage() {
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
 
   const { users } = useAllUsers();
-  const { assignments, kpisMap, reportsByAssignment, isLoading } =
+  const { assignments, kpisMap, isLoading } =
     useAssignmentsForPeriod(period);
 
   const isRange = period.type === "range";
@@ -58,7 +58,7 @@ export default function HrReportsPage() {
 
   function getActual(a: KpiAssignment) {
     if (isRange) {
-      return (reportsByAssignment[a.id] ?? []).reduce((s, r) => s + r.actualValue, 0);
+      return a.actualTotal;
     }
     return a.actualTotal;
   }
@@ -91,7 +91,7 @@ export default function HrReportsPage() {
       const bAvg = getUserAvg(assignmentsByUser[b.id] ?? []);
       return bAvg - aAvg;
     });
-  }, [timUsers, assignmentsByUser, reportsByAssignment, isRange]);
+  }, [timUsers, assignmentsByUser, isRange]);
 
   // Company-wide summary stats
   const { companyAvg, totalKpis, assignedCount } = useMemo(() => {
@@ -101,7 +101,7 @@ export default function HrReportsPage() {
     const avg = allPcts.length > 0 ? allPcts.reduce((s, v) => s + v, 0) / allPcts.length : 0;
     const assigned = new Set(assignments.map((a) => a.userId)).size;
     return { companyAvg: avg, totalKpis: assignments.length, assignedCount: assigned };
-  }, [assignments, reportsByAssignment, isRange]);
+  }, [assignments, isRange]);
 
   const csvEscape = (v: string | number | null | undefined) => {
     const s = v == null ? "" : String(v);
@@ -110,7 +110,7 @@ export default function HrReportsPage() {
 
   function handleExportCsv() {
     const rows: string[][] = [];
-    rows.push(["Laporan Performa KPI — HR"]);
+    rows.push(["Laporan Performa KPI â€” HR"]);
     rows.push(["Periode", periodLabel]);
     rows.push(["Total KPI", String(totalKpis)]);
     rows.push(["Rata-rata Perusahaan", `${formatPercentage(companyAvg)}`]);
@@ -136,7 +136,7 @@ export default function HrReportsPage() {
     });
 
     const csv = rows.map((r) => r.map(csvEscape).join(",")).join("\r\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(["ï»¿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -160,7 +160,7 @@ export default function HrReportsPage() {
         <div>
           <h2 className="text-base font-semibold">Laporan Performa</h2>
           <p className="text-sm text-muted-foreground">
-            {assignedCount} karyawan · {totalKpis} KPI · {periodLabel}
+            {assignedCount} karyawan Â· {totalKpis} KPI Â· {periodLabel}
           </p>
         </div>
         <div className="flex flex-col items-start gap-3 sm:items-end">
@@ -229,7 +229,7 @@ export default function HrReportsPage() {
                 >
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate">{u.name}</p>
-                    <p className="text-xs text-muted-foreground">{u.department ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">{u.department ?? "â€”"}</p>
                   </div>
                   {hasAssignments ? (
                     <div className="flex items-center gap-3 shrink-0">
@@ -259,7 +259,7 @@ export default function HrReportsPage() {
                         <div key={a.id} className="rounded-lg border border-border bg-background px-3 py-2.5 space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-xs font-medium truncate">
-                              {kpisMap[a.kpiId]?.title ?? "—"}
+                              {kpisMap[a.kpiId]?.title ?? "â€”"}
                             </p>
                             <div className="flex items-center gap-1.5 shrink-0">
                               <span className="text-xs font-semibold tabular-nums">

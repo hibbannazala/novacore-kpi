@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useMemo } from "react";
 import { useDepartments } from "@/hooks/useDivisions";
@@ -18,7 +18,7 @@ export default function ExecutiveReportsPage() {
 
   const [period, setPeriod] = useState<Period>({ type: "month" });
   const { departments } = useDepartments();
-  const { assignments, kpisMap, reportsByAssignment, isLoading } = useAssignmentsForPeriod(period);
+  const { assignments, kpisMap, isLoading } = useAssignmentsForPeriod(period);
   const isRange = period.type === "range";
   const periodLabel = isRange ? `${period.start}_to_${period.end}` : monthLabel.replace(" ", "_");
 
@@ -46,7 +46,7 @@ export default function ExecutiveReportsPage() {
     departments.forEach((dept) => {
       (byDepartment[dept] ?? []).forEach((a) => {
         const actual = isRange
-          ? (reportsByAssignment[a.id] ?? []).reduce((s, r) => s + r.actualValue, 0)
+          ? a.actualTotal
           : a.actualTotal;
         const pct = a.monthlyTarget > 0 ? (actual / a.monthlyTarget) * 100 : 0;
         rows.push([
@@ -61,7 +61,7 @@ export default function ExecutiveReportsPage() {
     });
 
     const csv = rows.map((r) => r.map(csvEscape).join(",")).join("\r\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(["ï»¿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = window.URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -102,7 +102,7 @@ export default function ExecutiveReportsPage() {
 
           const displayPcts = deptAssignments.map((a) => {
             if (isRange) {
-              const reports = reportsByAssignment[a.id] ?? [];
+              const reports: any[] = [];
               const actual = reports.reduce((s, r) => s + r.actualValue, 0);
               return a.monthlyTarget > 0 ? (actual / a.monthlyTarget) * 100 : 0;
             }

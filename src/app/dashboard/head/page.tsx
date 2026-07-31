@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -37,7 +37,7 @@ export default function HeadDashboard() {
   const [selectedKpi, setSelectedKpi] = useState<KpiAssignmentWithDetails | null>(null);
 
   const { members, isLoading: membersLoading } = useDivisionMembers(departments);
-  const { assignments, kpisMap, reportsByAssignment, isLoading } = useAssignmentsForPeriod(period, departments);
+  const { assignments, kpisMap, isLoading } = useAssignmentsForPeriod(period, departments);
   const { assignments: myAssignments, isLoading: myLoading } = useMyAssignments(
     user?.id,
     now.getFullYear(),
@@ -71,7 +71,7 @@ export default function HeadDashboard() {
     .forEach((m) => {
       const memberAssignments = isRange
         ? assignmentsMap[m.id].map((a) => {
-            const reports = reportsByAssignment[a.id] ?? [];
+            const reports: any[] = [];
             const actual = reports.reduce((s, r) => s + r.actualValue, 0);
             const pct = a.monthlyTarget > 0 ? (actual / a.monthlyTarget) * 100 : 0;
             return { ...a, achievementPercentage: pct, performanceCategory: getPerformanceCategory(pct) as KpiAssignment["performanceCategory"] };
@@ -208,7 +208,7 @@ export default function HeadDashboard() {
             expandedUsers={expandedUsers}
             onToggleUser={toggleUser}
             period={period}
-            reportsByAssignment={reportsByAssignment}
+            
           />
         )}
       </div>

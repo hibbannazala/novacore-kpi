@@ -29,7 +29,6 @@ export function useAssignmentsForPeriod(period: Period, department?: string | st
   const [assignments, setAssignments] = useState<KpiAssignment[]>([]);
   const [kpisMap, setKpisMap] = useState<Record<string, KPI>>({});
   const [assignmentsLoading, setAssignmentsLoading] = useState(true);
-  const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
 
   useEffect(() => {
     setAssignmentsLoading(true);
@@ -159,79 +158,6 @@ export function useAssignmentsForPeriod(period: Period, department?: string | st
     JSON.stringify(department),
   ]);
 
-  // Fetch daily_reports for the period (for Rincian Harian display)
-  useEffect(() => {
-    const supabase = createClient();
-    const today = todayISODate();
-
-    const rangeStart = period.type === "range"
-      ? period.start
-      : firstDayOfMonth(currentYear, currentMonth);
-    const monthEnd = lastDayOfMonth(currentYear, currentMonth);
-    const rangeEnd = period.type === "range"
-      ? period.end
-      : (today < monthEnd ? today : monthEnd);
-
-    async function fetchReports() {
-      const { data } = await supabase
-        .from("daily_reports")
-        .select("id, assignment_id, kpi_id, user_id, date, value, notes, created_at, updated_at")
-        .gte("date", rangeStart)
-        .lte("date", rangeEnd);
-
-      setDailyReports(
-        (data ?? []).map((r: any) => ({
-          id: r.id,
-          assignmentId: r.assignment_id,
-          kpiId: r.kpi_id ?? "",
-          userId: r.user_id,
-          date: r.date,
-          actualValue: r.value,
-          notes: r.notes ?? "",
-          createdAt: r.created_at,
-          updatedAt: r.updated_at,
-        }))
-      );
-    }
-
-    fetchReports();
-
-    const channel = supabase
-      .channel(`daily_reports_${period.type}_${rangeStart}_${rangeEnd}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "daily_reports" }, fetchReports)
-      .subscribe();
-
-    return () => { channel.unsubscribe(); };
-  }, [
-    currentYear,
-    currentMonth,
-    period.type,
-    period.type === "range" ? period.start : "",
-    period.type === "range" ? period.end : "",
-  ]);
-
-  // Build date range for daily reports
-  const { rangeStart, rangeEnd } = useMemo(() => {
-    if (period.type === "range") {
-      return { rangeStart: period.start, rangeEnd: period.end };
-    }
-    const today = todayISODate();
-    const monthEnd = lastDayOfMonth(currentYear, currentMonth);
-    return {
-      rangeStart: firstDayOfMonth(currentYear, currentMonth),
-      rangeEnd: today < monthEnd ? today : monthEnd,
-    };
-  }, [period, currentYear, currentMonth]);
-
-  const reportsByAssignment = useMemo(() => {
-    const map: Record<string, DailyReport[]> = {};
-    dailyReports.forEach((r) => {
-      if (!map[r.assignmentId]) map[r.assignmentId] = [];
-      map[r.assignmentId].push(r);
-    });
-    return map;
-  }, [dailyReports]);
-
   // Sync quality KPI scores from monthlyScores
   const syncedAssignments = useMemo(() => {
     return assignments.map((a) => {
@@ -262,7 +188,6 @@ export function useAssignmentsForPeriod(period: Period, department?: string | st
   return {
     assignments: syncedAssignments,
     kpisMap,
-    reportsByAssignment,
     isLoading: assignmentsLoading,
   };
 }
