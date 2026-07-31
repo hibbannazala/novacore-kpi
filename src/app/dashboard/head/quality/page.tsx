@@ -61,14 +61,15 @@ export default function HeadQualityPage() {
 
       const supabase = createClient();
 
-      // Get department IDs for managed departments
-      const { data: deptRows } = await supabase
-        .from("departments")
-        .select("id, name")
-        .in("name", managedDepartments);
-      const deptIds = (deptRows ?? []).map((d: any) => d.id);
+      // First, get all users in the managed departments
+      const teamUserIds = users
+        .filter(u => u.department && managedDepartments.includes(u.department))
+        .map(u => u.id);
+      
+      // Also include the head's own ID so they can see their own
+      if (user.id) teamUserIds.push(user.id);
 
-      if (deptIds.length === 0) {
+      if (teamUserIds.length === 0) {
         setQualityItems([]);
         setIsLoading(false);
         return;
@@ -79,7 +80,7 @@ export default function HeadQualityPage() {
         .select("*, kpis(id, title, type, unit, monthly_target, departments(name)), monthly_scores(*)")
         .eq("year", selectedYear)
         .eq("status", "active")
-        .in("department_id", deptIds);
+        .in("user_id", teamUserIds);
 
       const items: QualityItem[] = [];
       const initNotes: Record<string, string> = {};

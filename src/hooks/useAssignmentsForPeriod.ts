@@ -43,19 +43,26 @@ export function useAssignmentsForPeriod(period: Period, department?: string | st
 
     const supabase = createClient();
 
-    async function fetchDeptIds(): Promise<string[]> {
+    async function fetchUserIds(): Promise<string[]> {
       if (!filterByDept || departments.length === 0) return [];
-      const { data } = await supabase
+      const { data: deptRows } = await supabase
         .from("departments")
         .select("id")
         .in("name", departments);
-      return (data ?? []).map((d) => d.id);
+      const deptIds = (deptRows ?? []).map((d) => d.id);
+      if (deptIds.length === 0) return [];
+
+      const { data: userRows } = await supabase
+        .from("users")
+        .select("id")
+        .in("department_id", deptIds);
+      return (userRows ?? []).map((u) => u.id);
     }
 
     async function fetchAll() {
-      const deptIds = await fetchDeptIds();
+      const userIds = await fetchUserIds();
 
-      if (filterByDept && deptIds.length === 0) {
+      if (filterByDept && userIds.length === 0) {
         setAssignments([]);
         setKpisMap({});
         setAssignmentsLoading(false);
@@ -70,7 +77,7 @@ export function useAssignmentsForPeriod(period: Period, department?: string | st
           .eq("month", currentMonth)
           .eq("status", "active");
 
-        if (filterByDept) q = q.in("department_id", deptIds);
+        if (filterByDept) q = q.in("user_id", userIds);
 
         const { data } = await q;
         const rows = (data ?? []).map(rowToAssignmentWithDetails as any) as KpiAssignment[];
@@ -107,7 +114,7 @@ export function useAssignmentsForPeriod(period: Period, department?: string | st
             .in("month", months)
             .in("status", ["active", "completed"]);
 
-          if (filterByDept) q = q.in("department_id", deptIds);
+          if (filterByDept) q = q.in("user_id", userIds);
           return q;
         });
 
