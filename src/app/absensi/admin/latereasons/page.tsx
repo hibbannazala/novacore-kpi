@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { TriangleAlert, Check, X } from "lucide-react";
 import { toast } from "sonner";
+import { parseLateMinutes } from "@/lib/utils";
 
 interface LateLog {
   id: string;
@@ -39,7 +40,7 @@ export default function AdminLateReasonsPage() {
           userName:         ((r.users as unknown) as { name: string } | null)?.name ?? "Unknown",
           date:             r.date as string,
           checkIn:          r.check_in as string | null,
-          lateFine:         (r.late_fine as number) ?? 0,
+          lateFine:         parseLateMinutes((r.late_fine as number) ?? 0),
           lateReason:       (r.late_reason as string) ?? "",
           lateReasonStatus: r.late_reason_status as string | null,
         }))
@@ -66,7 +67,7 @@ export default function AdminLateReasonsPage() {
       const { error } = await supabase.from("attendance").update(payload).eq("id", logId);
       if (error) throw error;
       toast.success(
-        action === "accepted" ? "Alasan diterima, denda dibatalkan." : "Alasan ditolak.",
+        action === "accepted" ? "Alasan diterima, menit telat dibatalkan." : "Alasan ditolak.",
         { id: tid }
       );
     } catch (err: unknown) {
@@ -134,7 +135,7 @@ export default function AdminLateReasonsPage() {
                         </p>
                         {log.lateFine > 0 && (
                           <p className="text-[10px] text-orange-500 font-black mt-1">
-                            Denda: Rp {log.lateFine.toLocaleString("id-ID")}
+                            Telat: {log.lateFine} Menit
                           </p>
                         )}
                       </td>

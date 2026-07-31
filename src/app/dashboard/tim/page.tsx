@@ -9,8 +9,9 @@ import { DailyInputForm } from "@/components/kpi/DailyInputForm";
 import { WeightedScoreCard } from "@/components/kpi/WeightedScoreCard";
 import { PeriodPicker, type Period } from "@/components/kpi/PeriodPicker";
 import { StaffTour } from "@/components/kpi/StaffTour";
+import { AttendanceWidget } from "@/components/absensi/AttendanceWidget";
 import { Input } from "@/components/ui/input";
-import { Search, HelpCircle } from "lucide-react";
+import { Search, HelpCircle, Umbrella, Stethoscope } from "lucide-react";
 import { formatDateDisplay, calcWeightedScore, monthName, todayISODate } from "@/lib/utils";
 import type { KpiAssignmentWithDetails } from "@/types";
 
@@ -70,34 +71,103 @@ export default function TimDashboard() {
         />
       )}
 
-      <div className="flex items-center justify-between flex-wrap gap-4 mb-4">
-        <div className="flex items-center gap-3" id="tour-greeting">
-          <div className="w-12 h-12 bg-white rounded-[18px] flex items-center justify-center shadow-sm border border-slate-100 shrink-0">
-            <span className="text-xl font-black text-slate-800">{user?.name?.charAt(0)}</span>
+      {/* BENTO BOX GRID LAYOUT */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        {/* HEADER SECTION (FULL WIDTH) - Placed inside grid for CSS Order control */}
+        <div className="lg:col-span-12 order-2 lg:order-1 flex items-center justify-between flex-wrap gap-4 lg:mb-2">
+          <div className="flex items-center gap-4" id="tour-greeting">
+            <div className="w-14 h-14 bg-[var(--ab-bg-surface)] rounded-[20px] flex items-center justify-center shadow-sm border border-[var(--ab-border)] shrink-0 transition-transform hover:scale-105">
+              <span className="text-2xl font-black text-[var(--ab-text-main)]">{user?.name?.charAt(0)}</span>
+            </div>
+            <div>
+              <p className="text-xs font-black text-[var(--ab-text-dim)] uppercase tracking-widest leading-none mb-1">
+                Good Morning,
+              </p>
+              <h1 className="text-2xl md:text-3xl font-black text-[var(--ab-text-main)] tracking-tight leading-none truncate max-w-[250px] md:max-w-md">
+                {user?.name?.split(" ")[0]}! <span className="inline-block animate-wave">👋</span>
+              </h1>
+              <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-2">
+                Have a productive day at work.
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Halo,</p>
-            <h1 className="text-xl font-black text-slate-800 tracking-tight leading-none truncate max-w-[200px]">
-              {user?.name?.split(" ")[0]}
-            </h1>
+          <div className="flex items-center gap-3">
+            {/* Tutorial Button */}
+            <button
+              onClick={() => setShowTour(true)}
+              className="flex items-center gap-2 rounded-2xl border border-[var(--ab-border)] bg-[var(--ab-bg-surface)] px-4 py-2.5 text-xs font-black text-[var(--ab-text-dim)] shadow-sm hover:text-[var(--ab-primary)] hover:border-[var(--ab-primary-glow)] hover:shadow-md transition-all duration-300"
+              title="Mulai Tutorial"
+            >
+              <HelpCircle className="h-4 w-4" />
+              <span className="hidden sm:inline">Panduan</span>
+            </button>
+            <div className="text-right" id="tour-period-picker">
+              <PeriodPicker period={period} onChange={setPeriod} monthLabel={monthLabel} maxDate={today} />
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Tutorial Button */}
-          <button
-            onClick={() => setShowTour(true)}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-all duration-200"
-            title="Mulai Tutorial"
-          >
-            <HelpCircle className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Panduan</span>
-          </button>
-          <div className="text-right" id="tour-period-picker">
-            <PeriodPicker period={period} onChange={setPeriod} monthLabel={monthLabel} maxDate={today} />
-            <p className="text-[10px] font-bold text-slate-400 mt-2">{todayDisplay}</p>
+        
+        {/* LEFT COLUMN: Attendance & Time */}
+        <div className="lg:col-span-5 xl:col-span-4 order-1 lg:order-2 space-y-6">
+          {/* Unified Widget (Attendance + Clock) */}
+          <AttendanceWidget />
+        </div>
+
+        {/* BOTTOM ROW (DESKTOP) / MIDDLE ROW (MOBILE): Summary Cards */}
+        <div className="lg:col-span-12 order-2 lg:order-3 grid grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="ab-glass rounded-[30px] !p-6 relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_10px_30px_-10px_var(--ab-primary-glow)] border border-[var(--ab-border)]">
+            <div className="absolute top-0 left-0 w-2 h-full" style={{ background: "var(--ab-primary)" }} />
+            <Umbrella size={18} className="mb-4" style={{ color: "var(--ab-primary)" }} />
+            <p className="text-xs font-black text-[var(--ab-text-dim)] uppercase tracking-widest mb-1 leading-none">
+              Leave Quota
+            </p>
+            <div className="flex items-baseline gap-1">
+              <span className="text-4xl font-black text-[var(--ab-text-main)] font-mono tracking-tighter">
+                {user?.leaveQuota ?? 0}
+              </span>
+              <span className="text-xs font-black text-[var(--ab-text-dim)] uppercase tracking-widest">Days</span>
+            </div>
+            <div className="mt-4 w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-full bg-[var(--ab-primary)] rounded-full" style={{ width: `${Math.min(100, ((user?.leaveQuota ?? 0) / 12) * 100)}%` }} />
+            </div>
+          </div>
+          
+          <div className="ab-glass rounded-[30px] !p-6 relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-md border border-[var(--ab-border)]">
+            <div className="absolute top-0 left-0 w-2 h-full bg-rose-500" />
+            <Stethoscope size={18} className="text-rose-400 mb-4" />
+            <p className="text-xs font-black text-[var(--ab-text-dim)] uppercase tracking-widest mb-1 leading-none">
+              Sick Quota
+            </p>
+            <div className="flex items-baseline gap-1">
+              <span className="text-4xl font-black text-[var(--ab-text-main)] font-mono tracking-tighter">
+                {user?.sickQuota ?? 0}
+              </span>
+              <span className="text-xs font-black text-[var(--ab-text-dim)] uppercase tracking-widest">Days</span>
+            </div>
+            <div className="mt-4 w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-full bg-rose-500 rounded-full" style={{ width: `${Math.min(100, ((user?.sickQuota ?? 0) / 14) * 100)}%` }} />
+            </div>
+          </div>
+
+          <div className="ab-glass rounded-[30px] !p-6 relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-md border border-[var(--ab-border)] col-span-2 lg:col-span-1 hidden lg:block">
+            <div className="absolute top-0 left-0 w-2 h-full bg-emerald-500" />
+            <p className="text-xs font-black text-[var(--ab-text-dim)] uppercase tracking-widest mb-1 leading-none">
+              Attendance Streak
+            </p>
+            <div className="flex items-center gap-3 mt-4">
+              <span className="text-4xl font-black text-[var(--ab-text-main)] font-mono tracking-tighter">
+                100%
+              </span>
+              <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-md">
+                Great Consistency!
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+
+        {/* RIGHT COLUMN: KPI Assignments & Stats */}
+        <div className="lg:col-span-7 xl:col-span-8 order-3 lg:order-2 space-y-6">
 
       {/* Weighted score breakdown — always shows monthly aggregate */}
       {weightedScore && period.type === "month" && (
@@ -108,17 +178,20 @@ export default function TimDashboard() {
 
       {/* Quick input prompt */}
       {assignments.length > 0 && (
-        <div id="tour-quick-prompt" className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 px-4 py-3">
-          <p className="text-sm text-muted-foreground">
-            Klik KPI di bawah untuk input realisasi hari ini.
-          </p>
-          <a
-            id="tour-history-link"
-            href="/dashboard/tim/history"
-            className="text-xs font-semibold text-primary hover:underline shrink-0"
+        <div id="tour-quick-prompt" className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 rounded-[25px] border border-[var(--ab-border)] bg-[var(--ab-bg-main)]/50 px-5 py-4 shadow-inner">
+          <div className="flex flex-col">
+            <span className="text-xs font-black text-[var(--ab-text-dim)] uppercase tracking-wider mb-0.5">Aksi Cepat</span>
+            <span className="text-[13px] font-semibold text-[var(--ab-text-main)]">
+              Mulai bekerja? Isi progress KPI <span className="font-bold text-[var(--ab-primary)]">{firstAssignment.kpi.title}</span>.
+            </span>
+          </div>
+          <button
+            onClick={() => setSelected(firstAssignment)}
+            className="ab-nm-button px-5 py-2.5 rounded-xl text-xs font-black text-white hover:opacity-90 w-full sm:w-auto mt-2 sm:mt-0"
+            style={{ background: "var(--ab-primary)" }}
           >
-            Ada yang salah input? Edit Riwayat &rarr;
-          </a>
+            Isi Sekarang
+          </button>
         </div>
       )}
 
@@ -164,6 +237,9 @@ export default function TimDashboard() {
           )}
         </div>
       )}
+
+        </div>
+      </div>
 
       {/* Daily input dialog */}
       {selected && user && (

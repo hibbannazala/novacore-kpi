@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PerformanceBadge } from "@/components/ui/badge";
 import { ChevronDown } from "lucide-react";
-import { cn, formatPercentage, getPerformanceCategory, monthName } from "@/lib/utils";
+import { cn, formatPercentage, getPerformanceCategory, monthName, getBrandColor } from "@/lib/utils";
 import type { KpiAssignment, KPI } from "@/types";
 
 interface QualityItem {
@@ -47,7 +47,7 @@ export default function ExecutiveQualityPage() {
       const supabase = createClient();
       const { data: aRows } = await supabase
         .from("kpi_assignments")
-        .select("*, kpis(id, title, type, unit, monthly_target, departments(name)), monthly_scores(*)")
+        .select("*, kpis(id, title, type, unit, monthly_target, brand, departments(name)), monthly_scores(*)")
         .eq("year", selectedYear)
         .eq("status", "active");
 
@@ -115,6 +115,7 @@ export default function ExecutiveQualityPage() {
           month: selectedMonthNum,
           createdAt: "",
           updatedAt: "",
+          brand: kpiRow.brand,
         };
 
         items.push({ assignment, kpi });
@@ -327,7 +328,19 @@ export default function ExecutiveQualityPage() {
                                   <div key={assignment.id} className="rounded-lg border border-border bg-card px-4 py-3 flex flex-col gap-3">
                                     <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                                       <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium">{kpi.title}</p>
+                                        <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                          {kpi.brand && (
+                                            <span
+                                              className={cn(
+                                                "text-[10px] px-1.5 py-0.5 rounded border font-semibold shrink-0",
+                                                getBrandColor(kpi.brand)
+                                              )}
+                                            >
+                                              {kpi.brand}
+                                            </span>
+                                          )}
+                                          <p className="text-sm font-medium">{kpi.title}</p>
+                                        </div>
                                         <p className="text-xs text-muted-foreground">
                                           Aktual: {formatPercentage(displayActual)} / {formatPercentage(assignment.monthlyTarget)}
                                         </p>

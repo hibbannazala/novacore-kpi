@@ -60,10 +60,12 @@ export default function HrAssignmentsPage() {
   const kpiMap = Object.fromEntries(kpis.map((k) => [k.id, k]));
 
   const correctedAssignments = useMemo(() => assignments.map((a) => {
-    if ((a.kpiType ?? "result") === "quality") return a;
-    const pct = a.monthlyTarget > 0 ? (a.actualTotal / a.monthlyTarget) * 100 : 0;
-    return { ...a, achievementPercentage: pct, performanceCategory: getPerformanceCategory(pct) as KpiAssignment["performanceCategory"] };
-  }), [assignments]);
+    const actualType = kpiMap[a.kpiId]?.type ?? a.kpiType ?? "result";
+    const newA = { ...a, kpiType: actualType };
+    if (actualType === "quality") return newA;
+    const pct = newA.monthlyTarget > 0 ? (newA.actualTotal / newA.monthlyTarget) * 100 : 0;
+    return { ...newA, achievementPercentage: pct, performanceCategory: getPerformanceCategory(pct) as KpiAssignment["performanceCategory"] };
+  }), [assignments, kpiMap]);
 
   const groupedByUser = useMemo(() => {
     const map: Record<string, KpiAssignment[]> = {};

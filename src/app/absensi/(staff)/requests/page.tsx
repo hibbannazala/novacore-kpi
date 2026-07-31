@@ -228,31 +228,32 @@ export default function StaffRequestsPage() {
   // ─ Render ─────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 pb-24 ab-animate-fadeIn">
-      {/* Header */}
-      <div className="ab-card-tactile flex flex-col gap-4">
-        <div className="flex items-center gap-4">
-          <div
-            className="w-12 h-12 text-white rounded-2xl flex items-center justify-center shadow-lg"
-            style={{ background: "var(--ab-primary)", boxShadow: "0 8px 20px -4px var(--ab-primary-glow)" }}
-          >
-            <FileEdit size={20} />
-          </div>
-          <div>
-            <h2 className="text-xl font-black text-[var(--ab-text-main)] uppercase tracking-tight leading-none mb-1">
-              Pengajuan Staf
-            </h2>
-            <p className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
-              Cuti • Sakit • WFA
-            </p>
-          </div>
+      {/* Header Card */}
+      <div className="bg-[var(--ab-bg-surface)] p-6 rounded-[35px] border border-[var(--ab-border)] shadow-xl flex flex-col items-center text-center relative overflow-hidden">
+        {/* Subtle glow background */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-32 bg-[var(--ab-primary)] opacity-10 blur-3xl rounded-full pointer-events-none" />
+        
+        <div
+          className="w-14 h-14 text-white rounded-[22px] flex items-center justify-center shadow-lg mb-4 z-10"
+          style={{ background: "var(--ab-primary)", boxShadow: "0 8px 25px -5px var(--ab-primary-glow)" }}
+        >
+          <FileEdit size={24} />
+        </div>
+        <div className="z-10">
+          <h2 className="text-2xl font-black text-[var(--ab-text-main)] uppercase tracking-tight leading-none mb-2">
+            Pengajuan Staf
+          </h2>
+          <p className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-[0.3em]">
+            Cuti • Sakit • WFA
+          </p>
         </div>
         {settings && (
           <div
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full border self-start"
+            className="mt-6 flex items-center gap-2 px-4 py-2 rounded-full border z-10"
             style={{ background: "color-mix(in srgb, var(--ab-primary), transparent 90%)", borderColor: "var(--ab-primary-glow)" }}
           >
-            <Info size={12} style={{ color: "var(--ab-primary)" }} />
-            <span className="text-[9px] font-black uppercase tracking-widest" style={{ color: "var(--ab-primary)" }}>
+            <Info size={14} style={{ color: "var(--ab-primary)" }} />
+            <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: "var(--ab-primary)" }}>
               Sakit H-0: {settings.maxTimeSick}
             </span>
           </div>
@@ -263,19 +264,19 @@ export default function StaffRequestsPage() {
       <div className="ab-card-tactile space-y-6">
         {/* Type Selector */}
         <div>
-          <label className="block text-[10px] font-black text-[var(--ab-text-dim)] uppercase mb-3 tracking-widest">
+          <label className="block text-[11px] font-black text-[var(--ab-text-dim)] uppercase mb-3 tracking-[0.2em] pl-1">
             Pilih Jenis Pengajuan
           </label>
-          <div className="flex bg-[var(--ab-bg-main)] p-1.5 rounded-2xl border border-[var(--ab-border)]">
+          <div className="flex bg-[var(--ab-bg-main)] p-2 rounded-[24px] border border-[var(--ab-border)] shadow-inner">
             {(["leave", "sick", "wfa"] as LeaveRequestType[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setReqType(t)}
-                className="flex-1 py-3 rounded-xl text-xs font-black uppercase transition-all duration-300"
+                className="flex-1 py-4 rounded-[18px] text-xs font-black uppercase tracking-widest transition-all duration-300"
                 style={reqType === t ? {
                   background: "var(--ab-bg-surface)",
-                  color: "var(--ab-primary)",
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                  color: t === "leave" ? "#10b981" : t === "sick" ? "#f43f5e" : "#3b82f6",
+                  boxShadow: "0 8px 20px -6px rgba(0,0,0,0.15)",
                   border: "1px solid var(--ab-border)",
                 } : { color: "var(--ab-text-dim)" }}
               >
@@ -287,54 +288,53 @@ export default function StaffRequestsPage() {
 
         {/* Date Range */}
         <div>
-          <label className="block text-[10px] font-black text-[var(--ab-text-dim)] uppercase mb-3 tracking-widest">
+          <label className="block text-[11px] font-black text-[var(--ab-text-dim)] uppercase mb-3 tracking-[0.2em] pl-1">
             Rentang Tanggal
           </label>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="space-y-1.5">
-              <span className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase ml-3">Mulai</span>
+          <div className="grid grid-cols-2 gap-4 mb-5">
+            <div className="space-y-2">
+              <span className="text-[9px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest ml-1">Mulai</span>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="ab-input text-xs font-black"
+                className="ab-input text-xs font-black py-4 px-5 rounded-[20px] text-center"
               />
             </div>
-            <div className="space-y-1.5">
-              <span className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase ml-3">Selesai (Opsional)</span>
+            <div className="space-y-2">
+              <span className="text-[9px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest ml-1">Selesai (Opsional)</span>
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="ab-input text-xs font-black"
+                className="ab-input text-xs font-black py-4 px-5 rounded-[20px] text-center"
               />
             </div>
           </div>
           <button
             onClick={addDateRange}
-            className="ab-btn-primary w-full py-4 rounded-2xl text-[10px] tracking-[0.2em] flex justify-center items-center gap-3"
+            className="w-full py-4 rounded-[20px] text-[10px] font-black tracking-[0.25em] flex justify-center items-center gap-3 transition-transform active:scale-95 text-white bg-emerald-600 hover:bg-emerald-700 shadow-[0_8px_20px_-6px_rgba(5,150,105,0.5)]"
           >
-            <CalendarPlus size={16} /> Tambahkan ke Daftar
+            <CalendarPlus size={16} /> TAMBAHKAN KE DAFTAR
           </button>
 
           {/* Selected Dates */}
-          <div className="mt-5 flex flex-wrap gap-2 p-5 bg-[var(--ab-bg-main)] rounded-2xl border-2 border-dashed border-[var(--ab-border)] min-h-[70px] items-center">
+          <div className="mt-5 flex flex-wrap gap-2 p-6 bg-slate-50 dark:bg-slate-900/50 rounded-[24px] border border-slate-200 dark:border-slate-800 min-h-[90px] items-center justify-center">
             {selectedDates.length === 0 ? (
-              <p className="text-center w-full text-[10px] text-[var(--ab-text-dim)] font-black uppercase tracking-widest italic opacity-50">
+              <p className="text-center w-full text-[10px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-[0.3em] italic">
                 Daftar Tanggal Masih Kosong
               </p>
             ) : (
               selectedDates.map((d) => (
                 <div
                   key={d}
-                  className="bg-[var(--ab-bg-surface)] text-xs font-black px-4 py-2 rounded-xl flex items-center gap-2 border border-[var(--ab-border)] shadow-sm"
-                  style={{ color: "var(--ab-primary)" }}
+                  className="bg-white dark:bg-slate-800 text-xs font-black px-4 py-2.5 rounded-xl flex items-center gap-2 border border-slate-200 dark:border-slate-700 shadow-sm text-emerald-600 dark:text-emerald-400"
                 >
-                  <CalendarDays size={9} className="opacity-60" />
+                  <CalendarDays size={12} className="opacity-60" />
                   {d}
                   <button
                     onClick={() => removeDate(d)}
-                    className="text-red-400 hover:text-red-600 transition ml-2 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20"
+                    className="text-slate-400 hover:text-red-500 transition ml-2 p-1 bg-slate-100 dark:bg-slate-900 rounded-md"
                   >
                     <X size={12} />
                   </button>
@@ -346,14 +346,14 @@ export default function StaffRequestsPage() {
 
         {/* Reason */}
         <div>
-          <label className="block text-[10px] font-black text-[var(--ab-text-dim)] uppercase mb-3 tracking-widest">
+          <label className="block text-[11px] font-black text-[var(--ab-text-dim)] uppercase mb-3 tracking-[0.2em] pl-1">
             Alasan / Keterangan
           </label>
           <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            rows={3}
-            className="ab-input resize-none text-xs"
+            rows={4}
+            className="ab-input resize-none text-xs font-medium py-4 px-5 rounded-[24px]"
             placeholder="Berikan alasan yang jelas untuk mempercepat approval..."
           />
         </div>
@@ -361,39 +361,43 @@ export default function StaffRequestsPage() {
         <button
           onClick={submitRequest}
           disabled={isSubmitting}
-          className="w-full py-5 rounded-[22px] font-black uppercase text-xs tracking-[0.25em] shadow-2xl disabled:opacity-50 active:scale-[0.95] transition-all text-white"
-          style={{ background: "var(--ab-text-main)" }}
+          className="w-full py-5 rounded-[24px] font-black uppercase text-sm tracking-[0.2em] shadow-[0_10px_30px_-10px_rgba(15,23,42,0.8)] disabled:opacity-50 active:scale-[0.98] transition-all text-white bg-slate-900 dark:bg-black border border-slate-800 dark:border-slate-800 mt-2"
         >
-          {isSubmitting ? "Mengirim Data..." : "Kirim Pengajuan Form"}
+          {isSubmitting ? "MENGIRIM DATA..." : "KIRIM PENGAJUAN FORM"}
         </button>
       </div>
 
-      {/* History Header */}
-      <div className="flex items-center gap-2 px-2">
-        <History size={18} style={{ color: "var(--ab-primary)" }} />
-        <h3 className="font-black text-[var(--ab-text-dim)] uppercase text-[10px] tracking-[0.2em]">
-          Riwayat & Status
-        </h3>
-      </div>
+      {/* History Area with Dotted Pattern Background */}
+      <div className="relative mt-8 pt-8 px-4 rounded-[40px]" style={{
+        backgroundImage: "radial-gradient(var(--ab-border) 2px, transparent 2px)",
+        backgroundSize: "20px 20px"
+      }}>
+        {/* History Header */}
+        <div className="flex items-center gap-3 mb-6 bg-[var(--ab-bg-surface)] p-4 rounded-2xl border border-[var(--ab-border)] shadow-sm w-fit mx-auto">
+          <History size={16} className="text-slate-500" />
+          <h3 className="font-black text-[var(--ab-text-main)] uppercase text-[10px] tracking-[0.2em]">
+            Riwayat & Status
+          </h3>
+        </div>
 
       {/* Requests List */}
       {isLoading ? (
         <div className="space-y-4">
           {[1, 2].map((i) => (
-            <div key={i} className="h-32 bg-[var(--ab-bg-surface)] rounded-[30px] animate-pulse" />
+            <div key={i} className="h-32 bg-[var(--ab-bg-surface)] rounded-[30px] border border-[var(--ab-border)] animate-pulse" />
           ))}
         </div>
       ) : requests.length === 0 ? (
-        <div className="p-20 text-center ab-animate-scaleIn">
-          <div className="w-16 h-16 bg-[var(--ab-bg-surface)] rounded-[20px] flex items-center justify-center mx-auto mb-4 text-[var(--ab-text-dim)]">
-            <Smile size={32} />
+        <div className="p-16 text-center ab-animate-scaleIn">
+          <div className="w-20 h-20 bg-white dark:bg-slate-800 rounded-[24px] flex items-center justify-center mx-auto mb-6 text-slate-300 dark:text-slate-600 shadow-sm border border-slate-100 dark:border-slate-700">
+            <Smile size={36} />
           </div>
-          <h4 className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest italic">
+          <h4 className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-[0.3em] italic">
             Belum Ada Histori Pengajuan
           </h4>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-5">
           {requests.map((req) => (
             <RequestCard
               key={req.id}
@@ -403,6 +407,7 @@ export default function StaffRequestsPage() {
           ))}
         </div>
       )}
+      </div>
 
       {/* Dialogs */}
       <ConfirmDialog

@@ -339,6 +339,20 @@ export interface CompanyLetter {
   users?: Partial<User>;
 }
 
+export type PayrollCompany = 'TNT' | 'Hype' | 'Nova';
+
+export interface PayrollStaffSetting {
+  id: string;
+  user_id: string;
+  contract_position: string;
+  company: PayrollCompany;
+  default_base_salary: number;
+  default_mobility_allowance: number;
+  notes: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Payroll {
   id: string;
   user_id: string;
@@ -348,7 +362,10 @@ export interface Payroll {
   mobility_allowance: number;
   performance_bonus: number;
   overtime_pay: number;
+  deductions: number;
+  deduction_notes: string;
   status: 'draft' | 'published';
   created_at?: string;
+  updated_at?: string;
   users?: Partial<User>;
 }

@@ -4,15 +4,18 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { AbsensiStatus } from "@/types";
 import ConfirmDialog from "@/components/absensi/ConfirmDialog";
-import { Search, UserMinus, UserCheck, RotateCcw, User } from "lucide-react";
+import { Search, UserMinus, UserCheck, RotateCcw, User, Settings2, X } from "lucide-react";
 import ExcelJS from "exceljs";
 import { toast } from "sonner";
+import { parseLateMinutes } from "@/lib/utils";
+import type { KpiRole } from "@/types";
 
 interface StaffUser {
   id: string;
   name: string;
   email: string;
   absensiRole: "staff" | "admin";
+  kpiRole: KpiRole;
   absensiStatus: AbsensiStatus;
   leaveQuota: number;
   sickQuota: number;
@@ -43,12 +46,16 @@ export default function AdminStaffPage() {
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState(() => new Date().toISOString().substring(0, 7));
 
+  const [kpiUser, setKpiUser] = useState<StaffUser | null>(null);
+  const [kpiWeights, setKpiWeights] = useState({ result: 40, activity: 30, quality: 30 });
+  const [kpiSaving, setKpiSaving] = useState(false);
+
   useEffect(() => {
     const supabase = createClient();
 
     const fetchAll = async () => {
       const [usersRes, deptsRes] = await Promise.all([
-        supabase.from("users").select("id, name, email, absensi_role, absensi_status, leave_quota, sick_quota, is_hidden, department_id, departments(name)"),
+        supabase.from("users").select("id, name, email, absensi_role, kpi_role, absensi_status, leave_quota, sick_quota, is_hidden, department_id, departments(name)"),
         supabase.from("departments").select("id, name").order("name"),
       ]);
 
@@ -57,6 +64,7 @@ export default function AdminStaffPage() {
         name: r.name as string,
         email: r.email as string,
         absensiRole: (r.absensi_role as "staff" | "admin") ?? "staff",
+        kpiRole: (r.kpi_role as KpiRole) ?? "tim",
         absensiStatus: (r.absensi_status as AbsensiStatus) ?? "pending",
         leaveQuota: (r.leave_quota as number) ?? 12,
         sickQuota: (r.sick_quota as number) ?? 14,
@@ -98,23 +106,68 @@ export default function AdminStaffPage() {
     try {
       const updatePayload: {
         absensi_role?: "staff" | "admin";
+        kpi_role?: string;
         leave_quota?: number;
         sick_quota?: number;
         is_hidden?: boolean;
         department_id?: string | null;
       } = {};
       if (edits.absensiRole    !== undefined) updatePayload.absensi_role    = edits.absensiRole;
+      if (edits.kpiRole        !== undefined) updatePayload.kpi_role        = edits.kpiRole;
       if (edits.leaveQuota     !== undefined) updatePayload.leave_quota     = edits.leaveQuota;
       if (edits.sickQuota      !== undefined) updatePayload.sick_quota      = edits.sickQuota;
       if (edits.isHidden       !== undefined) updatePayload.is_hidden       = edits.isHidden;
       if (edits.departmentId   !== undefined) updatePayload.department_id   = edits.departmentId ?? null;
 
-      const { error } = await supabase.from("users").update(updatePayload).eq("id", user.id);
+      const { error } = await supabase.from("users").update(updatePayload as any).eq("id", user.id);
       if (error) throw error;
       toast.success("Data staf berhasil diperbarui.", { id: tid });
       setLocalEdits((prev) => { const n = { ...prev }; delete n[user.id]; return n; });
     } catch (err: unknown) {
       toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
+    }
+  };
+
+  const openKpiModal = async (u: StaffUser) => {
+    const supabase = createClient();
+    const tid = toast.loading("Memuat pengaturan KPI...");
+    try {
+      const { data } = await supabase.from("kpi_settings").select("*").eq("user_id", u.id).maybeSingle();
+      if (data) {
+        setKpiWeights({ result: data.result_weight, activity: data.activity_weight, quality: data.quality_weight });
+      } else {
+        setKpiWeights({ result: 40, activity: 30, quality: 30 });
+      }
+      setKpiUser(u);
+      toast.dismiss(tid);
+    } catch (err: unknown) {
+      toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
+    }
+  };
+
+  const saveKpiWeights = async () => {
+    if (!kpiUser) return;
+    if (kpiWeights.result + kpiWeights.activity + kpiWeights.quality !== 100) {
+      toast.error("Total bobot harus tepat 100%");
+      return;
+    }
+    const tid = toast.loading("Menyimpan pengaturan KPI...");
+    setKpiSaving(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from("kpi_settings").upsert({
+        user_id: kpiUser.id,
+        result_weight: kpiWeights.result,
+        activity_weight: kpiWeights.activity,
+        quality_weight: kpiWeights.quality,
+      });
+      if (error) throw error;
+      toast.success("Pengaturan KPI berhasil disimpan.", { id: tid });
+      setKpiUser(null);
+    } catch (err: unknown) {
+      toast.error("Gagal menyimpan KPI: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
+    } finally {
+      setKpiSaving(false);
     }
   };
 
@@ -164,7 +217,7 @@ export default function AdminStaffPage() {
         { header: "Status",       key: "status",            width: 15 },
         { header: "Check In",     key: "checkIn",           width: 12 },
         { header: "Check Out",    key: "checkOut",          width: 12 },
-        { header: "Denda (Rp)",   key: "lateFine",          width: 15 },
+        { header: "Menit Telat",  key: "lateFine",          width: 15 },
         { header: "Denda Radius", key: "radiusPenalty",     width: 15 },
         { header: "Status Alasan",key: "lateReasonStatus",  width: 15 },
       ];
@@ -177,7 +230,7 @@ export default function AdminStaffPage() {
           status:           ((l.status as string) ?? "-").replace("_", " ").toUpperCase(),
           checkIn:          (l.check_in as string | null) ?? "-",
           checkOut:         (l.check_out as string | null) ?? "-",
-          lateFine:         (l.late_fine as number) ?? 0,
+          lateFine:         parseLateMinutes((l.late_fine as number) ?? 0),
           radiusPenalty:    (l.radius_penalty as number) ?? 0,
           lateReasonStatus: lrsLabel,
         });
@@ -310,8 +363,22 @@ export default function AdminStaffPage() {
                       {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                   </div>
-                  <div className="w-28 space-y-1">
-                    <label className="text-[8px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Role</label>
+                  <div className="w-24 space-y-1">
+                    <label className="text-[8px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Role KPI</label>
+                    <select
+                      value={getUserVal(u, "kpiRole")}
+                      onChange={(e) => patchEdit(u.id, { kpiRole: e.target.value as KpiRole })}
+                      className="ab-input text-[10px] font-bold py-2 px-3 text-center"
+                    >
+                      <option value="tim">Tim</option>
+                      <option value="head">Head</option>
+                      <option value="hr">HR</option>
+                      <option value="executive">Exec</option>
+                      <option value="developer">Dev</option>
+                    </select>
+                  </div>
+                  <div className="w-24 space-y-1">
+                    <label className="text-[8px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Absensi</label>
                     <select
                       value={getUserVal(u, "absensiRole")}
                       onChange={(e) => patchEdit(u.id, { absensiRole: e.target.value as "staff" | "admin" })}
@@ -363,7 +430,7 @@ export default function AdminStaffPage() {
 
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 mt-4">
                 <button
                   onClick={() => saveUser(u)}
                   disabled={!Object.keys(getEdit(u.id)).length}
@@ -377,7 +444,13 @@ export default function AdminStaffPage() {
                   style={{ background: "var(--ab-primary)", boxShadow: "0 4px 12px -3px var(--ab-primary-glow)" }}
                   onClick={() => handleSlipAbsen(u)}
                 >
-                  <RotateCcw size={10} /> Slip Absen
+                  <RotateCcw size={10} /> Slip
+                </button>
+                <button
+                  className="flex-1 py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all text-[var(--ab-text-main)] flex items-center justify-center gap-2 border border-[var(--ab-border)] bg-[var(--ab-bg-main)] hover:bg-[var(--ab-border)]"
+                  onClick={() => openKpiModal(u)}
+                >
+                  <Settings2 size={10} /> Bobot KPI
                 </button>
               </div>
 
@@ -420,6 +493,63 @@ export default function AdminStaffPage() {
         onConfirm={confirmCfg?.onConfirm ?? (() => {})}
         onCancel={() => setConfirmCfg(null)}
       />
+
+      {kpiUser && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-[var(--ab-bg-surface)] w-full max-w-sm rounded-[30px] border border-[var(--ab-border)] shadow-2xl p-6 relative">
+            <button onClick={() => setKpiUser(null)} className="absolute top-4 right-4 text-[var(--ab-text-dim)] hover:text-red-500">
+              <X size={20} />
+            </button>
+            <h3 className="text-xl font-black text-[var(--ab-text-main)] uppercase tracking-tight mb-1">
+              Bobot KPI
+            </h3>
+            <p className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest mb-6">
+              {kpiUser.name}
+            </p>
+
+            <div className="space-y-4">
+              {[
+                { key: "result", label: "Hasil Kerja", col: "var(--ab-primary)" },
+                { key: "activity", label: "Aktivitas Harian", col: "#a855f7" },
+                { key: "quality", label: "Kualitas & Perilaku", col: "#f97316" },
+              ].map((item) => (
+                <div key={item.key} className="space-y-2">
+                  <div className="flex justify-between items-end">
+                    <label className="text-[10px] font-black uppercase tracking-widest" style={{ color: item.col }}>
+                      {item.label}
+                    </label>
+                    <span className="text-[10px] font-bold text-[var(--ab-text-dim)]">{kpiWeights[item.key as keyof typeof kpiWeights]}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={kpiWeights[item.key as keyof typeof kpiWeights]}
+                    onChange={(e) => setKpiWeights({ ...kpiWeights, [item.key]: parseInt(e.target.value) })}
+                    className="w-full accent-[var(--ab-primary)] h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+              ))}
+              
+              <div className="pt-4 border-t border-[var(--ab-border)] flex justify-between items-center mt-6">
+                <p className="text-xs font-black uppercase tracking-widest">
+                  Total: <span className={kpiWeights.result + kpiWeights.activity + kpiWeights.quality === 100 ? "text-green-500" : "text-rose-500"}>
+                    {kpiWeights.result + kpiWeights.activity + kpiWeights.quality}%
+                  </span>
+                </p>
+                <button
+                  onClick={saveKpiWeights}
+                  disabled={kpiSaving || kpiWeights.result + kpiWeights.activity + kpiWeights.quality !== 100}
+                  className="bg-[var(--ab-text-main)] text-[var(--ab-bg-main)] px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-transform disabled:opacity-50 disabled:scale-100"
+                >
+                  Simpan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

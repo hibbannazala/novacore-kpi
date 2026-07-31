@@ -15,7 +15,7 @@ import {
   cn,
 } from "@/lib/utils";
 import { useDailyReportsForAssignment } from "@/hooks/useDailyReports";
-import { MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
+import { MessageSquare, ChevronDown, ChevronUp, CheckCircle2 } from "lucide-react";
 import type { KpiAssignmentWithDetails } from "@/types";
 import type { Period } from "@/components/kpi/PeriodPicker";
 
@@ -88,15 +88,15 @@ export function KpiCard({ assignment, onClick, showNotes = true, period }: KpiCa
   return (
     <Card
       className={cn(
-        "rounded-3xl border bg-card transition-all duration-300 relative overflow-hidden",
-        onClick ? "cursor-pointer hover:-translate-y-1 hover:shadow-md" : "",
-        isCompleted ? "border-green-300 bg-gradient-to-br from-green-50/40 to-white shadow-[0_4px_16px_rgba(34,197,94,0.15)]" : "border-border shadow-sm"
+        "rounded-[30px] ab-glass transition-all duration-300 relative overflow-hidden",
+        onClick ? "cursor-pointer hover:-translate-y-2 hover:shadow-[0_20px_40px_-12px_var(--ab-primary-glow)]" : "",
+        isCompleted ? "border-green-300/30 bg-green-50/10 dark:bg-green-900/10 shadow-[0_4px_16px_rgba(34,197,94,0.15)]" : "border border-[var(--ab-border)]"
       )}
       onClick={onClick}
     >
       {/* Decorative top border */}
-      <div className={cn("absolute top-0 left-0 right-0 h-1", isCompleted ? "bg-gradient-to-r from-green-400 to-emerald-500" : "bg-gradient-to-r from-slate-200 to-slate-100 hover:from-primary/20 hover:to-primary/10 transition-colors")} />
-      <CardHeader className="pb-3 px-5 pt-5">
+      <div className={cn("absolute top-0 left-0 right-0 h-1.5", isCompleted ? "bg-gradient-to-r from-green-400 to-emerald-500" : "bg-gradient-to-r from-[var(--ab-primary-light)] to-[var(--ab-primary)] opacity-70")} />
+      <CardHeader className="pb-3 px-5 pt-6">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap gap-1.5 mb-2">
@@ -109,10 +109,10 @@ export function KpiCard({ assignment, onClick, showNotes = true, period }: KpiCa
                 {typeLabel[kpi.type] || kpi.type}
               </span>
             </div>
-            <CardTitle className="text-base font-extrabold leading-tight text-slate-800">{kpi.title}</CardTitle>
+            <CardTitle className="text-lg font-black leading-tight text-[var(--ab-text-main)] tracking-tight">{kpi.title}</CardTitle>
             
             {kpi.description && (
-              <div className="mt-2 text-[11px] text-slate-500">
+              <div className="mt-2 text-[11px] text-[var(--ab-text-dim)]">
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setExpandDesc((v) => !v); }}
@@ -132,45 +132,76 @@ export function KpiCard({ assignment, onClick, showNotes = true, period }: KpiCa
       </CardHeader>
 
       <CardContent className="px-5 pb-5 space-y-0">
-        {/* Progress bar */}
-        <div className="pt-2">
-          <div className="mb-2">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pencapaian KPI</span>
+        <div className="flex items-center justify-between pt-2">
+          {/* Stats on Left */}
+          <div className="flex-1">
+            <div className="mb-1">
+              <span className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-wider">Pencapaian</span>
+            </div>
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className="text-3xl font-black text-[var(--ab-text-main)] tracking-tight font-mono">
+                {formatPercentage(displayPct)}
+              </span>
+            </div>
+            {/* Quick Checkbox Visual for Completion */}
+            <div className="flex items-center gap-2 mt-3">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-all ${isCompleted ? "bg-[var(--ab-primary)] border-[var(--ab-primary)] text-white shadow-[0_0_10px_var(--ab-primary-glow)]" : "border-[var(--ab-border)] text-transparent"}`}>
+                <CheckCircle2 size={14} className={isCompleted ? "text-white" : "hidden"} />
+              </div>
+              <span className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
+                {isCompleted ? "Tercapai" : "Proses"}
+              </span>
+            </div>
           </div>
-          <div className="flex items-baseline gap-2 mb-3">
-            <span className="text-4xl font-extrabold text-slate-800 tracking-tight">
-              {formatPercentage(displayPct)}
-            </span>
+
+          {/* Circular Progress on Right */}
+          <div className="relative w-20 h-20 shrink-0 ml-4">
+            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+              <circle
+                cx="50"
+                cy="50"
+                r="40"
+                fill="transparent"
+                stroke="var(--ab-border)"
+                strokeWidth="10"
+              />
+              <circle
+                cx="50"
+                cy="50"
+                r="40"
+                fill="transparent"
+                stroke={isCompleted ? "#22c55e" : "var(--ab-primary)"}
+                strokeWidth="10"
+                strokeDasharray={`${Math.min(displayPct, 100) * 2.512} 251.2`}
+                strokeLinecap="round"
+                className="transition-all duration-1000 ease-out"
+                style={{ filter: isCompleted ? "drop-shadow(0 0 4px rgba(34,197,94,0.6))" : "drop-shadow(0 0 4px var(--ab-primary-glow))" }}
+              />
+            </svg>
           </div>
-          <Progress 
-            value={Math.min(displayPct, 100)} 
-            category={displayCategory} 
-            className={cn("h-3 bg-slate-100", isCompleted && "shadow-[0_0_12px_rgba(34,197,94,0.4)]")}
-            markerValue={!isRange ? expectedPct : undefined}
-          />
         </div>
 
-        {/* Stats */}
+        {/* Stats Grid */}
         <div className="mt-5 grid grid-cols-2 gap-3">
-          <div className="rounded-xl bg-slate-50 p-3 border border-slate-100">
-            <span className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
+          <div className="rounded-2xl bg-[var(--ab-bg-main)] p-3 border border-[var(--ab-border)] shadow-inner">
+            <span className="block text-[9px] uppercase font-black text-[var(--ab-text-dim)] mb-1 tracking-widest">
               {isRange ? "Aktual Periode" : "Total Aktual"}
             </span>
-            <span className="block text-sm font-bold text-slate-800 truncate" title={formatValue(displayActual, unit)}>
+            <span className="block text-sm font-black text-[var(--ab-text-main)] truncate" title={formatValue(displayActual, unit)}>
               {formatValue(displayActual, unit)}
             </span>
           </div>
-          <div className="rounded-xl bg-slate-50 p-3 border border-slate-100">
-            <span className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Target Bulan Ini</span>
-            <span className="block text-sm font-bold text-slate-800 truncate" title={formatValue(monthlyTarget, unit)}>
+          <div className="rounded-2xl bg-[var(--ab-bg-main)] p-3 border border-[var(--ab-border)] shadow-inner">
+            <span className="block text-[9px] uppercase font-black text-[var(--ab-text-dim)] mb-1 tracking-widest">Target Bulanan</span>
+            <span className="block text-sm font-black text-[var(--ab-text-main)] truncate" title={formatValue(monthlyTarget, unit)}>
               {formatValue(monthlyTarget, unit)}
             </span>
           </div>
         </div>
 
-        <div className="mt-4 flex items-center justify-between text-[11px] px-1 font-medium text-slate-500">
-            <span>Tgt Harian: <strong className="text-slate-800">{formatValue(liveCurrentDailyTarget, unit)}</strong></span>
-            <span>Sisa: <strong className="text-slate-800">{liveWorkingDaysRemaining} hari</strong></span>
+        <div className="mt-4 flex items-center justify-between text-[10px] px-1 font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
+            <span>Tgt Harian: <strong className="text-[var(--ab-text-main)] font-black">{formatValue(liveCurrentDailyTarget, unit)}</strong></span>
+            <span>Sisa: <strong className="text-[var(--ab-text-main)] font-black">{liveWorkingDaysRemaining} hr</strong></span>
         </div>
 
         {/* Quality Notes — shown for quality KPIs */}

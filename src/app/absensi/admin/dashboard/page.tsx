@@ -17,6 +17,8 @@ import {
   ClipboardList, DollarSign,
 } from "lucide-react";
 
+import { parseLateMinutes } from "@/lib/utils";
+
 // ─ Types ──────────────────────────────────────────────────────────────────────
 interface AttLog {
   id: string;
@@ -61,12 +63,20 @@ interface DisplayRow {
   isMissed: boolean;
 }
 
-interface FineSummaryRow {
+interface LateLogDetail {
+  date: string;
+  minutes: number;
+  reason: string;
+  checkIn: string;
+}
+
+interface LateSummaryRow {
   id: string;
   name: string;
   dept: string;
   lateCount: number;
-  totalFine: number;
+  totalLateMins: number;
+  lateLogs: LateLogDetail[];
 }
 
 interface EditingLog {
@@ -117,7 +127,8 @@ export default function AdminDashboardPage() {
   const [isLoading, setIsLoading]     = useState(true);
   const [activeTab, setActiveTab]     = useState<"logs" | "fines">("logs");
   const [activeFilter, setActiveFilter] = useState<"all" | "present" | "wfo" | "wfa" | "leave" | "missed">("present");
-  const [fineSummary, setFineSummary] = useState<FineSummaryRow[]>([]);
+  const [lateSummary, setLateSummary] = useState<LateSummaryRow[]>([]);
+  const [expandedLateUser, setExpandedLateUser] = useState<string | null>(null);
 
   // Override forms
   const [showOverrideAtt,   setShowOverrideAtt]   = useState(false);
@@ -214,31 +225,43 @@ export default function AdminDashboardPage() {
   // ─ Fine summary (when tab = fines) ──────────────────────────────────────────
   useEffect(() => {
     if (activeTab !== "fines") return;
-    const fetchFines = async () => {
+    const fetchLates = async () => {
       const supabase = createClient();
       const mm = filterDate.substring(0, 7);
       const lastDay = String(new Date(Number(mm.split("-")[0]), Number(mm.split("-")[1]), 0).getDate()).padStart(2, "0");
       const { data } = await supabase.from("attendance")
-        .select("user_id, late_fine")
+        .select("user_id, late_fine, date, late_reason, check_in")
         .gte("date", `${mm}-01`)
         .lte("date", `${mm}-${lastDay}`)
         .gt("late_fine", 0);
-      const sumMap = new Map<string, { lateCount: number; totalFine: number }>();
+      const sumMap = new Map<string, { lateCount: number; totalLateMins: number; lateLogs: LateLogDetail[] }>();
       (data ?? []).forEach((r) => {
         const uid = r.user_id as string;
-        const cur = sumMap.get(uid) ?? { lateCount: 0, totalFine: 0 };
-        sumMap.set(uid, { lateCount: cur.lateCount + 1, totalFine: cur.totalFine + ((r.late_fine as number) ?? 0) });
+        const cur = sumMap.get(uid) ?? { lateCount: 0, totalLateMins: 0, lateLogs: [] };
+        const mins = parseLateMinutes((r.late_fine as number) ?? 0);
+        cur.lateLogs.push({
+          date: r.date as string,
+          minutes: mins,
+          reason: (r.late_reason as string) || "-",
+          checkIn: (r.check_in as string) || "-"
+        });
+        sumMap.set(uid, { 
+          lateCount: cur.lateCount + 1, 
+          totalLateMins: cur.totalLateMins + mins,
+          lateLogs: cur.lateLogs
+        });
       });
-      const rows: FineSummaryRow[] = activeUsers
+      const rows: LateSummaryRow[] = activeUsers
         .filter((u) => sumMap.has(u.id))
         .map((u) => {
           const s = sumMap.get(u.id)!;
+          s.lateLogs.sort((a, b) => (a.date > b.date ? -1 : 1));
           return { id: u.id, name: u.name, dept: u.dept, ...s };
         })
-        .sort((a, b) => b.totalFine - a.totalFine);
-      setFineSummary(rows);
+        .sort((a, b) => b.totalLateMins - a.totalLateMins);
+      setLateSummary(rows);
     };
-    fetchFines();
+    fetchLates();
   }, [activeTab, filterDate, activeUsers]);
 
 
@@ -311,7 +334,7 @@ export default function AdminDashboardPage() {
         : { late_reason_status: action };
       const { error } = await supabase.from("attendance").update(payload).eq("id", logId);
       if (error) throw error;
-      toast.success(action === "accepted" ? "Alasan diterima, denda dibatalkan." : "Alasan ditolak.", { id: tid });
+      toast.success(action === "accepted" ? "Alasan diterima, menit telat dibatalkan." : "Alasan ditolak.", { id: tid });
       await fetchData();
       setSelectedRow(null);
     } catch (err: unknown) {
@@ -473,7 +496,7 @@ export default function AdminDashboardPage() {
         { header: "Total Telat",    key: "totalLate",    width: 12 },
         { header: "Total Alpha",    key: "totalAlpha",   width: 12 },
         { header: "Catatan Alpha",  key: "alphaNote",    width: 25 },
-        { header: "Total Denda",    key: "totalFine",    width: 15 },
+        { header: "Total Menit Telat", key: "totalFine",    width: 15 },
         { header: "Denda Radius",   key: "totalRadius",  width: 15 },
       ];
 
@@ -485,7 +508,7 @@ export default function AdminDashboardPage() {
         { header: "Check Out",          key: "checkOut", width: 12 },
         { header: "Status",             key: "status",   width: 20 },
         { header: "Tipe",               key: "type",     width: 10 },
-        { header: "Denda Telat (Rp)",   key: "lateFine", width: 15 },
+        { header: "Menit Telat",        key: "lateFine", width: 15 },
         { header: "Keterangan/Alasan",  key: "reason",   width: 35 },
       ];
 
@@ -640,10 +663,13 @@ export default function AdminDashboardPage() {
       )}
 
       {/* Main Card */}
-      <div className="ab-card-tactile !p-0 overflow-hidden">
+      <div className="ab-glass rounded-[35px] border border-[var(--ab-border)] overflow-hidden shadow-2xl relative">
+        {/* Glow effect behind table */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-[var(--ab-primary-glow)] blur-[120px] rounded-full pointer-events-none opacity-50" />
+        
         {/* Tabs */}
-        <div className="p-2 bg-[var(--ab-bg-main)]/50 border-b border-[var(--ab-border)]">
-          <div className="flex p-1 bg-[var(--ab-bg-main)] rounded-2xl w-fit">
+        <div className="p-3 bg-[var(--ab-bg-main)]/70 backdrop-blur-md border-b border-[var(--ab-border)] relative z-10">
+          <div className="flex p-1 bg-[var(--ab-bg-surface)]/80 backdrop-blur-xl rounded-2xl w-fit border border-[var(--ab-border)]">
             <button
               onClick={() => setActiveTab("logs")}
               className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "logs" ? "bg-[var(--ab-bg-surface)] text-[var(--ab-primary)] shadow-sm" : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"}`}
@@ -654,17 +680,17 @@ export default function AdminDashboardPage() {
               onClick={() => setActiveTab("fines")}
               className={`flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "fines" ? "bg-[var(--ab-bg-surface)] text-orange-600 shadow-sm" : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"}`}
             >
-              <DollarSign size={12} /> Rekapan Denda
+              <Clock size={12} /> Rekapan Keterlambatan
             </button>
           </div>
         </div>
 
         {/* Table toolbar */}
-        <div className="p-5 border-b border-[var(--ab-border)] flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="p-6 bg-[var(--ab-bg-surface)]/30 backdrop-blur-md border-b border-[var(--ab-border)] flex flex-col md:flex-row justify-between items-center gap-4 relative z-10">
           <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
             <div className="flex items-center gap-3">
               <h2 className="font-black text-[var(--ab-text-main)] uppercase tracking-tight text-sm">
-                {activeTab === "logs" ? "Riwayat Kehadiran" : "Rekapan Denda Bulan Ini"}
+                {activeTab === "logs" ? "Riwayat Kehadiran" : "Rekapan Keterlambatan Bulan Ini"}
               </h2>
               <span className="text-[9px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest">
                 {activeTab === "logs" ? filterDate : filterDate.substring(0, 7)}
@@ -774,15 +800,15 @@ export default function AdminDashboardPage() {
         )}
 
         {/* Data Table */}
-        <div className="overflow-x-auto min-h-[300px]">
+        <div className="overflow-x-auto min-h-[300px] relative z-10">
           {isLoading ? (
             <div className="p-6 space-y-3 animate-pulse">
-              {[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-10 bg-[var(--ab-bg-main)] rounded-xl" />)}
+              {[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-10 bg-[var(--ab-bg-main)]/50 rounded-xl" />)}
             </div>
           ) : activeTab === "logs" ? (
             <table className="w-full text-xs whitespace-nowrap">
               <thead>
-                <tr className="bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] border-b border-[var(--ab-border)]">
+                <tr className="bg-[var(--ab-bg-main)]/80 backdrop-blur-md text-[var(--ab-text-dim)] border-b border-[var(--ab-border)]">
                   {["Nama Staf", "Dept", "Status", "In", "Out", "Detail"].map((h) => (
                     <th key={h} className="px-4 py-3 text-left font-black uppercase tracking-widest text-[9px]">{h}</th>
                   ))}
@@ -807,16 +833,21 @@ export default function AdminDashboardPage() {
                         setSelectedRow(row);
                         setEditingLog(null);
                       }}
-                      className={`border-t border-[var(--ab-border)] transition-colors text-[10px] hover:bg-[var(--ab-bg-main)]/50 cursor-pointer ${row.isMissed ? "opacity-40 grayscale" : ""}`}
+                      className={`border-b border-[var(--ab-border)]/50 transition-all text-[10px] hover:bg-[var(--ab-bg-surface)]/60 cursor-pointer ${row.isMissed ? "opacity-40 grayscale" : ""}`}
                     >
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col">
-                          <span className="font-black text-[var(--ab-text-main)]">{row.name}</span>
-                          <span className="text-[var(--ab-text-dim)] font-bold text-[9px]">{row.email}</span>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-[var(--ab-bg-main)] border border-[var(--ab-border)] flex items-center justify-center font-black text-xs text-[var(--ab-primary)]">
+                            {row.name.charAt(0)}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-black text-[var(--ab-text-main)] text-xs">{row.name}</span>
+                            <span className="text-[var(--ab-text-dim)] font-bold text-[9px]">{row.email}</span>
+                          </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-black text-[var(--ab-text-dim)] uppercase tracking-widest text-[9px]">{row.dept || "-"}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4 font-black text-[var(--ab-text-dim)] uppercase tracking-widest text-[9px]">{row.dept || "-"}</td>
+                      <td className="px-5 py-4">
                         {row.isMissed ? (
                           <span className="bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] px-2.5 py-1 rounded-xl font-black text-[9px] uppercase border border-[var(--ab-border)]">Belum Absen</span>
                         ) : row.isExcused ? (
@@ -830,14 +861,14 @@ export default function AdminDashboardPage() {
                           </div>
                         ) : "-"}
                       </td>
-                      <td className="px-4 py-3 font-mono font-black text-[var(--ab-text-main)]">{fmt(row.log?.checkIn ?? null)}</td>
-                      <td className="px-4 py-3 font-mono font-black text-[var(--ab-text-main)]">{fmt(row.log?.checkOut ?? null)}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4 font-mono font-black text-[var(--ab-text-main)] text-sm">{fmt(row.log?.checkIn ?? null)}</td>
+                      <td className="px-5 py-4 font-mono font-black text-[var(--ab-text-main)] text-sm">{fmt(row.log?.checkOut ?? null)}</td>
+                      <td className="px-5 py-4">
                         {row.log ? (
                           <div className="flex flex-col gap-0.5">
                             <span className="text-[9px] text-[var(--ab-text-dim)] font-bold">{row.log.locationStatus ?? "-"}</span>
                             {(row.log.lateFine ?? 0) > 0 && (
-                              <span className="text-[8px] font-black text-orange-500">Denda: Rp{row.log.lateFine.toLocaleString("id-ID")}</span>
+                              <span className="text-[8px] font-black text-orange-500">Telat: {row.log.lateFine} Menit</span>
                             )}
                             {row.log.lateReasonStatus === "pending" && (
                               <span className="text-[8px] font-black text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800">Review</span>
@@ -851,29 +882,69 @@ export default function AdminDashboardPage() {
               </tbody>
             </table>
           ) : (
-            <table className="w-full text-xs whitespace-nowrap">
-              <thead>
-                <tr className="bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] border-b border-[var(--ab-border)]">
-                  {["Nama Staf", "Departemen", "Total Terlambat", "Total Denda (Rp)"].map((h) => (
-                    <th key={h} className="px-4 py-3 text-left font-black uppercase tracking-widest text-[9px]">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {fineSummary.length === 0 ? (
-                  <tr><td colSpan={4} className="p-16 text-center text-[var(--ab-text-dim)] text-[10px] font-black uppercase tracking-widest">Tidak ada record keterlambatan bulan ini.</td></tr>
+              <table className="w-full text-xs whitespace-nowrap">
+                <thead>
+                  <tr className="bg-[var(--ab-bg-main)]/80 backdrop-blur-md text-[var(--ab-text-dim)] border-b border-[var(--ab-border)]">
+                    {["Nama Staf", "Departemen", "Total Terlambat", "Total Menit Telat", "Rata-rata Menit"].map((h) => (
+                      <th key={h} className="px-6 py-4 text-left font-black uppercase tracking-widest text-[9px]">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                {lateSummary.length === 0 ? (
+                  <tbody>
+                    <tr><td colSpan={5} className="p-16 text-center text-[var(--ab-text-dim)] text-[10px] font-black uppercase tracking-widest">Tidak ada record keterlambatan bulan ini.</td></tr>
+                  </tbody>
                 ) : (
-                  fineSummary.map((r) => (
-                    <tr key={r.id} className="border-t border-[var(--ab-border)] hover:bg-[var(--ab-bg-main)]/50 transition-colors">
-                      <td className="px-4 py-3 font-black text-[var(--ab-text-main)]">{r.name}</td>
-                      <td className="px-4 py-3 font-bold text-[var(--ab-text-dim)] uppercase tracking-widest text-[9px]">{r.dept}</td>
-                      <td className="px-4 py-3 text-center font-black text-orange-500">{r.lateCount} x</td>
-                      <td className="px-4 py-3 text-center font-black text-rose-600">Rp {r.totalFine.toLocaleString("id-ID")}</td>
-                    </tr>
+                  lateSummary.map((r) => (
+                    <tbody key={r.id}>
+                      <tr 
+                        className="border-b border-[var(--ab-border)]/50 hover:bg-[var(--ab-bg-surface)]/60 transition-all cursor-pointer group"
+                        onClick={() => setExpandedLateUser(expandedLateUser === r.id ? null : r.id)}
+                      >
+                        <td className="px-6 py-5 font-black text-[var(--ab-text-main)] flex items-center gap-3">
+                          <ChevronRight size={14} className={`transition-transform text-[var(--ab-primary)] ${expandedLateUser === r.id ? "rotate-90" : ""}`} />
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-[var(--ab-bg-main)] border border-[var(--ab-border)] flex items-center justify-center font-black text-xs text-[var(--ab-primary)]">
+                              {r.name.charAt(0)}
+                            </div>
+                            <span className="text-sm">{r.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-5 font-bold text-[var(--ab-text-dim)] uppercase tracking-widest text-[9px]">{r.dept}</td>
+                        <td className="px-6 py-5 text-center font-black text-orange-400 group-hover:text-orange-500 transition-colors text-sm">{r.lateCount} x</td>
+                        <td className="px-6 py-5 text-center font-black text-rose-500 group-hover:text-rose-400 transition-colors text-sm shadow-sm">{r.totalLateMins} Menit</td>
+                        <td className="px-6 py-5 text-center font-bold text-[var(--ab-text-dim)]">{Math.round(r.totalLateMins / r.lateCount)} Menit/kali</td>
+                      </tr>
+                      {expandedLateUser === r.id && (
+                        <tr>
+                          <td colSpan={5} className="p-0 border-b border-[var(--ab-border)]">
+                            <div className="bg-[var(--ab-bg-surface)]/80 backdrop-blur-2xl p-6 pl-14 space-y-3 shadow-inner relative overflow-hidden">
+                              <div className="absolute left-0 top-0 w-1 h-full bg-orange-500" />
+                              <p className="text-[10px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest flex items-center gap-2">
+                                <Clock size={12} className="text-orange-500" /> Detail Keterlambatan
+                              </p>
+                              <div className="space-y-2">
+                                {r.lateLogs.map((log, idx) => (
+                                  <div key={idx} className="flex items-center gap-6 text-xs bg-[var(--ab-bg-main)]/50 p-3 rounded-2xl border border-[var(--ab-border)] hover:border-orange-500/30 transition-colors">
+                                    <span className="font-black text-[var(--ab-text-main)] w-24 tabular-nums">{log.date}</span>
+                                    <span className="font-black text-orange-500 w-20 flex items-center gap-1">
+                                      {log.minutes} Menit
+                                    </span>
+                                    <span className="font-bold text-[var(--ab-text-dim)] font-mono w-20">In: {log.checkIn}</span>
+                                    <span className="text-[var(--ab-text-main)] italic flex-1 border-l border-[var(--ab-border)] pl-4">
+                                      "{log.reason}"
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
                   ))
                 )}
-              </tbody>
-            </table>
+              </table>
           )}
         </div>
       </div>
@@ -1011,8 +1082,8 @@ export default function AdminDashboardPage() {
 
                       {(selectedRow.log.lateFine ?? 0) > 0 && (
                         <div className="bg-orange-50 dark:bg-orange-900/10 p-4 rounded-3xl border border-orange-100 dark:border-orange-900/30">
-                          <p className="text-[9px] font-black text-orange-400 uppercase tracking-widest mb-1">Denda Keterlambatan</p>
-                          <p className="text-lg font-black text-orange-600 dark:text-orange-400 font-mono">Rp {selectedRow.log.lateFine.toLocaleString("id-ID")}</p>
+                          <p className="text-[9px] font-black text-orange-400 uppercase tracking-widest mb-1">Total Keterlambatan</p>
+                          <p className="text-lg font-black text-orange-600 dark:text-orange-400 font-mono">{selectedRow.log.lateFine} Menit</p>
                         </div>
                       )}
                     </>
@@ -1059,7 +1130,7 @@ export default function AdminDashboardPage() {
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-[var(--ab-primary)] uppercase tracking-widest">Nominal Denda (Rp)</label>
+                    <label className="text-[9px] font-black text-[var(--ab-primary)] uppercase tracking-widest">Menit Telat</label>
                     <input type="number" className="ab-input text-xs w-full text-orange-600" value={editingLog.lateFine} onChange={(e) => setEditingLog({ ...editingLog, lateFine: Number(e.target.value) })} />
                   </div>
                   <button onClick={handleSaveEdit} className="w-full text-white py-4 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2" style={{ background: "var(--ab-primary)" }}>

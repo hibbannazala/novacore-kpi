@@ -6,6 +6,17 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Parses late_fine column into minutes. Safely handles legacy Rupiah data.
+export function parseLateMinutes(value: number | null | undefined): number {
+  if (!value) return 0;
+  // If the value is 1000 or more, it's likely the old Rupiah fine system.
+  // The old formula was: lateFine = Math.ceil(diffMins / 10) * 30000;
+  if (value >= 1000) {
+    return Math.round((value / 30000) * 10);
+  }
+  return value; // New system simply stores minutes.
+}
+
 export function formatCurrency(value: number): string {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",

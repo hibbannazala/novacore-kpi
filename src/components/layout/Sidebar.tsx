@@ -19,6 +19,12 @@ import {
   Mail,
   Banknote,
   Clock,
+  Settings,
+  CalendarDays,
+  FilePen,
+  TriangleAlert,
+  ClipboardCheck,
+  PieChart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -30,46 +36,76 @@ interface NavItem {
   label: string;
   href: string;
   icon: React.ElementType;
+  group?: string;
 }
 
-const navByRole: Record<Exclude<KpiRole, "developer">, NavItem[]> = {
+export const navByRole: Record<Exclude<KpiRole, "developer">, NavItem[]> = {
   tim: [
     { label: "Dashboard", href: "/dashboard/tim", icon: LayoutDashboard },
-    { label: "KPI Saya", href: "/dashboard/tim/kpi", icon: Target },
-    { label: "Input Harian", href: "/dashboard/tim/input", icon: ClipboardList },
-    { label: "Riwayat", href: "/dashboard/tim/history", icon: FileText },
+    { label: "Check In / Out", href: "/dashboard/tim", icon: Clock, group: "Kehadiran" },
+    { label: "Kalender Kehadiran", href: "/absensi/team", icon: CalendarDays, group: "Kehadiran" },
+    { label: "Cuti & Izin", href: "/absensi/requests", icon: FilePen, group: "Kehadiran" },
+    { label: "Surat & Dokumen", href: "/absensi/letters", icon: Mail, group: "Kehadiran" },
+    { label: "KPI Dashboard", href: "/dashboard/tim/kpi", icon: Target, group: "Penugasan" },
+    { label: "Tasks Harian", href: "/dashboard/tim/input", icon: ClipboardList, group: "Penugasan" },
+    { label: "Evaluasi & Riwayat", href: "/dashboard/tim/history", icon: FileText, group: "Penugasan" },
+    { label: "Slip Gaji", href: "/absensi/payroll", icon: Banknote, group: "Payroll" },
   ],
   head: [
     { label: "Dashboard", href: "/dashboard/head", icon: LayoutDashboard },
-    { label: "Tim Saya", href: "/dashboard/head/team", icon: Users },
-    { label: "KPI Divisi", href: "/dashboard/head/kpi", icon: Target },
-    { label: "Kelola KPI", href: "/dashboard/head/kpi-setup", icon: Target },
-    { label: "Penugasan", href: "/dashboard/head/penugasan", icon: ClipboardList },
-    { label: "Kualitas", href: "/dashboard/head/quality", icon: BarChart3 },
-    { label: "Laporan", href: "/dashboard/head/reports", icon: BarChart3 },
+    { label: "Check In / Out", href: "/dashboard/tim", icon: Clock, group: "Pribadi" },
+    { label: "Cuti & Izin", href: "/absensi/requests", icon: FilePen, group: "Pribadi" },
+    { label: "Surat & Dokumen", href: "/absensi/letters", icon: Mail, group: "Pribadi" },
+    { label: "KPI Saya", href: "/dashboard/tim/kpi", icon: Target, group: "Pribadi" },
+    { label: "Input Harian", href: "/dashboard/tim/input", icon: ClipboardList, group: "Pribadi" },
+    { label: "Slip Gaji", href: "/absensi/payroll", icon: Banknote, group: "Pribadi" },
+    { label: "Rekap Kehadiran", href: "/absensi/admin/dashboard", icon: PieChart, group: "Kehadiran" },
+    { label: "KPI Divisi", href: "/dashboard/head/kpi", icon: Target, group: "Penugasan" },
+    { label: "Kelola KPI", href: "/dashboard/head/kpi-setup", icon: Target, group: "Penugasan" },
+    { label: "Tasks & Penugasan", href: "/dashboard/head/penugasan", icon: ClipboardList, group: "Penugasan" },
+    { label: "Evaluasi Kualitas", href: "/dashboard/head/quality", icon: BarChart3, group: "Penugasan" },
+    { label: "Tim Saya", href: "/dashboard/head/team", icon: Users, group: "Admin" },
+    { label: "Laporan Divisi", href: "/dashboard/head/reports", icon: FileText, group: "Admin" },
   ],
   hr: [
     { label: "Dashboard", href: "/dashboard/hr", icon: LayoutDashboard },
-    { label: "Overview Karyawan", href: "/dashboard/executive/overview", icon: BarChart3 },
-    { label: "Manajemen KPI", href: "/dashboard/hr/kpi", icon: Target },
-    { label: "Penugasan", href: "/dashboard/hr/assignments", icon: ClipboardList },
-    { label: "Laporan", href: "/dashboard/hr/reports", icon: FileText },
-    { label: "Aktivitas Harian", href: "/dashboard/hr/activity", icon: Activity },
-    { label: "Kualitas", href: "/dashboard/hr/quality", icon: BarChart3 },
-    { label: "Karyawan", href: "/dashboard/hr/employees", icon: Users },
-    { label: "Departemen", href: "/dashboard/hr/divisions", icon: Building2 },
+    { label: "Check In / Out", href: "/dashboard/tim", icon: Clock, group: "Pribadi" },
+    { label: "Cuti & Izin", href: "/absensi/requests", icon: FilePen, group: "Pribadi" },
+    { label: "Surat & Dokumen", href: "/absensi/letters", icon: Mail, group: "Pribadi" },
+    { label: "KPI Saya", href: "/dashboard/tim/kpi", icon: Target, group: "Pribadi" },
+    { label: "Input Harian", href: "/dashboard/tim/input", icon: ClipboardList, group: "Pribadi" },
+    { label: "Slip Gaji", href: "/absensi/payroll", icon: Banknote, group: "Pribadi" },
+    { label: "Rekapan Keterlambatan", href: "/absensi/admin/dashboard", icon: PieChart, group: "Kehadiran" },
+    { label: "Approval Cuti", href: "/absensi/admin/approvals", icon: ClipboardCheck, group: "Kehadiran" },
+    { label: "Approval Telat", href: "/absensi/admin/latereasons", icon: TriangleAlert, group: "Kehadiran" },
+    { label: "Overview KPI", href: "/dashboard/executive/overview", icon: BarChart3, group: "Penugasan" },
+    { label: "Manajemen KPI", href: "/dashboard/hr/kpi", icon: Target, group: "Penugasan" },
+    { label: "Penugasan KPI", href: "/dashboard/hr/assignments", icon: ClipboardList, group: "Penugasan" },
+    { label: "Kualitas & Evaluasi", href: "/dashboard/hr/quality", icon: BarChart3, group: "Penugasan" },
+    { label: "Kelola Karyawan", href: "/absensi/admin/staff", icon: Users, group: "Admin" },
+    { label: "Kelola Gaji", href: "/absensi/admin/payroll", icon: Banknote, group: "Admin" },
+    { label: "Laporan HR", href: "/dashboard/hr/reports", icon: FileText, group: "Admin" },
+    { label: "Pengaturan Sistem", href: "/absensi/admin/settings", icon: Settings, group: "Admin" },
   ],
   executive: [
     { label: "Dashboard", href: "/dashboard/executive", icon: LayoutDashboard },
-    { label: "Overview", href: "/dashboard/executive/overview", icon: BarChart3 },
-    { label: "Aktivitas Harian", href: "/dashboard/executive/activity", icon: Activity },
-    { label: "Divisi", href: "/dashboard/executive/divisions", icon: Building2 },
-    { label: "Tim", href: "/dashboard/executive/team", icon: Users },
-    { label: "Kualitas", href: "/dashboard/executive/quality", icon: BarChart3 },
-    { label: "Laporan", href: "/dashboard/executive/reports", icon: FileText },
-    { label: "Karyawan", href: "/dashboard/hr/employees", icon: Users },
-    { label: "Manajemen KPI", href: "/dashboard/hr/kpi", icon: Target },
-    { label: "Penugasan", href: "/dashboard/hr/assignments", icon: ClipboardList },
+    { label: "Check In / Out", href: "/dashboard/tim", icon: Clock, group: "Pribadi" },
+    { label: "Cuti & Izin", href: "/absensi/requests", icon: FilePen, group: "Pribadi" },
+    { label: "Surat & Dokumen", href: "/absensi/letters", icon: Mail, group: "Pribadi" },
+    { label: "KPI Saya", href: "/dashboard/tim/kpi", icon: Target, group: "Pribadi" },
+    { label: "Input Harian", href: "/dashboard/tim/input", icon: ClipboardList, group: "Pribadi" },
+    { label: "Slip Gaji", href: "/absensi/payroll", icon: Banknote, group: "Pribadi" },
+    { label: "Rekap Kehadiran", href: "/absensi/admin/dashboard", icon: PieChart, group: "Kehadiran" },
+    { label: "Overview KPI", href: "/dashboard/executive/overview", icon: BarChart3, group: "Penugasan" },
+    { label: "Penugasan KPI", href: "/dashboard/hr/assignments", icon: ClipboardList, group: "Penugasan" },
+    { label: "Aktivitas Harian", href: "/dashboard/executive/activity", icon: Activity, group: "Penugasan" },
+    { label: "Manajemen KPI", href: "/dashboard/hr/kpi", icon: Target, group: "Penugasan" },
+    { label: "Evaluasi Kualitas", href: "/dashboard/executive/quality", icon: BarChart3, group: "Penugasan" },
+    { label: "Kelola Karyawan", href: "/absensi/admin/staff", icon: Users, group: "Admin" },
+    { label: "Kelola Gaji", href: "/absensi/admin/payroll", icon: Banknote, group: "Admin" },
+    { label: "Divisi", href: "/dashboard/executive/divisions", icon: Building2, group: "Admin" },
+    { label: "Laporan Tim", href: "/dashboard/executive/team", icon: PieChart, group: "Admin" },
+    { label: "Laporan Eksekutif", href: "/dashboard/executive/reports", icon: FileText, group: "Admin" },
   ],
 };
 
@@ -96,45 +132,55 @@ export function Sidebar() {
   const navItems = navByRole[effectiveRole];
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800">
+    <aside className="hidden md:flex h-screen w-64 flex-col border-r border-[var(--ab-border)] bg-[var(--ab-bg-surface)] z-50 shadow-xl transition-all duration-300">
       {/* Brand */}
-      <div className="flex h-24 items-center gap-3 px-8 mt-2">
-        <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center shadow-lg shrink-0 text-white">
+      <div className="flex h-24 items-center gap-3 px-8 mt-2 border-b border-[var(--ab-border)] pb-2 mb-2">
+        <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 text-white" style={{ background: "var(--ab-primary)", boxShadow: "0 10px 25px -5px var(--ab-primary-glow)" }}>
           <Target className="h-6 w-6" />
         </div>
         <div>
-          <h1 className="text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight leading-none">NovaCore</h1>
-          <p className="text-[10px] font-black text-primary uppercase tracking-[0.15em] mt-1">KPI Management</p>
+          <h1 className="text-lg font-black text-[var(--ab-text-main)] tracking-tight leading-none">NovaCore</h1>
+          <p className="text-[10px] font-black uppercase tracking-[0.15em] mt-1" style={{ color: "var(--ab-primary)" }}>KPI Management</p>
         </div>
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-4 py-4">
         <ul className="space-y-1">
-          <li className="pt-2 pb-2 px-2">
-            <p className="text-[10px] font-black uppercase tracking-widest leading-none text-slate-400 dark:text-slate-500">
-              Menu Utama
-            </p>
-          </li>
-          {navItems.map((item) => {
+          {navItems.map((item, index) => {
             const Icon = item.icon;
             const basePath = `/dashboard/${effectiveRole}`;
             const isActive =
               pathname === item.href ||
               (item.href !== basePath && pathname.startsWith(item.href));
+            
+            const prevItem = index > 0 ? navItems[index - 1] : null;
+            const showGroup = item.group && (!prevItem || prevItem.group !== item.group);
+
             return (
               <li key={item.href}>
+                {showGroup && (
+                  <div className="pt-6 pb-2 px-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest leading-none text-slate-400 dark:text-slate-500">
+                      {item.group}
+                    </p>
+                  </div>
+                )}
                 <Link
                   href={item.href}
                   className={cn(
-                    "flex items-center gap-4 rounded-2xl px-5 py-3.5 text-[13px] font-black transition-all duration-300 group",
+                    "flex items-center gap-4 rounded-2xl px-5 py-3.5 text-[13px] font-black transition-all duration-300 group relative mt-1",
                     isActive
-                      ? "bg-primary text-primary-foreground shadow-md scale-[1.02]"
-                      : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+                      ? "text-white"
+                      : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
                   )}
+                  style={isActive ? { background: "var(--ab-primary)", boxShadow: "0 10px 25px -5px var(--ab-primary-glow)" } : {}}
                 >
-                  <Icon className={cn("h-[18px] w-[18px] shrink-0 transition-transform duration-300", isActive ? "scale-110" : "group-hover:scale-110")} />
-                  <span className="tracking-tight whitespace-nowrap">{item.label}</span>
+                  <Icon className={cn("h-[18px] w-[18px] shrink-0 transition-transform duration-300 relative z-10", isActive ? "scale-110" : "group-hover:scale-110")} />
+                  <span className="tracking-tight whitespace-nowrap relative z-10">{item.label}</span>
+                  {!isActive && (
+                    <div className="absolute inset-0 bg-black/5 dark:bg-white/5 opacity-0 group-hover:opacity-100 rounded-2xl transition-opacity duration-300" />
+                  )}
                 </Link>
               </li>
             );
@@ -143,41 +189,18 @@ export function Sidebar() {
       </nav>
 
       {/* User footer */}
-      <div className="border-t border-slate-200 dark:border-slate-800 p-4 space-y-2">
-        <div className="px-2 mb-2">
-          <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-200">{user.name}</p>
-          <p className="text-[10px] font-black uppercase tracking-widest text-primary">{roleLabel[kpiRole]}</p>
+      <div className="border-t border-[var(--ab-border)] p-4 space-y-2 bg-[var(--ab-bg-main)]/30 m-4 rounded-[30px]">
+        <div className="px-2 mb-3 flex items-center gap-3">
+          <div className="w-10 h-10 bg-[var(--ab-bg-surface)] rounded-2xl border border-[var(--ab-border)] flex items-center justify-center shadow-sm shrink-0">
+             <span className="font-black text-[var(--ab-text-main)]">{user.name?.charAt(0)}</span>
+          </div>
+          <div className="overflow-hidden">
+            <p className="truncate text-sm font-semibold text-[var(--ab-text-main)]">{user.name}</p>
+            <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: "var(--ab-primary)" }}>{roleLabel[kpiRole]}</p>
+          </div>
         </div>
 
-        {/* Akun Saya — KPI pribadi (untuk role manajer: HR, Executive, Head) */}
-        {(kpiRole === "hr" || kpiRole === "executive" || kpiRole === "head") && (
-          <>
-            <Link
-              href="/dashboard/tim/kpi"
-              className={cn(
-                "flex w-full items-center gap-3 rounded-2xl px-4 py-2.5 text-xs font-bold transition-all",
-                pathname === "/dashboard/tim/kpi"
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-              )}
-            >
-              <Target className="h-3.5 w-3.5 shrink-0" />
-              KPI Saya
-            </Link>
-            <Link
-              href="/dashboard/tim/input"
-              className={cn(
-                "flex w-full items-center gap-3 rounded-2xl px-4 py-2.5 text-xs font-bold transition-all",
-                pathname === "/dashboard/tim/input"
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-              )}
-            >
-              <ClipboardList className="h-3.5 w-3.5 shrink-0" />
-              Input Harian Saya
-            </Link>
-          </>
-        )}
+
 
         {/* Developer tools */}
         {kpiRole === "developer" && (
@@ -234,21 +257,7 @@ export function Sidebar() {
           Lapor Bug / Fitur
         </button>
 
-        <Link
-          href="/absensi/home"
-          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-teal-600 transition-all hover:bg-teal-50 mt-2"
-        >
-          <Clock className="h-4 w-4 shrink-0" />
-          Ke Aplikasi Absensi
-        </Link>
 
-        <Link
-          href="/"
-          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-800"
-        >
-          <Building2 className="h-4 w-4 shrink-0" />
-          Portal Utama
-        </Link>
 
         <button
           onClick={signOut}

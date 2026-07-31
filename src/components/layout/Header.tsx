@@ -31,11 +31,15 @@ export function Header() {
   const title = pageTitles[pathname] ?? "NovaCore KPI";
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-border bg-background px-6">
-      <h1 className="text-sm font-semibold">{title}</h1>
-      <span className="text-xs text-muted-foreground">
-        {monthName(now.getMonth() + 1)} {now.getFullYear()}
-      </span>
-    </header>
+    <div className="px-6 pt-4 pb-2">
+      <header className="flex h-16 items-center justify-between ab-glass rounded-[25px] px-6 shadow-sm border border-[var(--ab-border)] z-40 relative">
+        <h1 className="text-sm font-black uppercase tracking-widest text-[var(--ab-text-main)]">{title}</h1>
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--ab-text-dim)]">
+            {monthName(now.getMonth() + 1)} {now.getFullYear()}
+          </span>
+        </div>
+      </header>
+    </div>
   );
 }
