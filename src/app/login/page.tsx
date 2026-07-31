@@ -16,15 +16,8 @@ function LoginContent() {
 
   // Already authenticated — redirect to role dashboard
   useEffect(() => {
-    if (!isLoading && user && kpiRole) {
-      const roleRoutes: Record<string, string> = {
-        tim: "/dashboard/tim",
-        head: "/dashboard/head",
-        hr: "/dashboard/hr",
-        executive: "/dashboard/executive",
-        developer: devMode === "employee" ? "/dashboard/tim" : "/dashboard/executive",
-      };
-      router.replace(roleRoutes[kpiRole] ?? "/dashboard");
+    if (!isLoading && user) {
+      router.replace("/");
     }
   }, [isLoading, user, kpiRole, devMode, router]);
 
