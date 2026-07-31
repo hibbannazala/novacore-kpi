@@ -157,7 +157,37 @@ export function ExpandableStaffGrid({
                     Tidak ada KPI aktif
                   </p>
                 ) : (
-                  [...userAssignments]
+                  <>
+                    {score && (
+                      <div className="px-4 py-3 bg-muted/30">
+                        <p className="text-xs font-semibold mb-2">Rincian Perhitungan:</p>
+                        <div className="space-y-1 text-xs text-muted-foreground">
+                          {score.resultCount > 0 && (
+                            <div className="flex justify-between">
+                              <span>Result ({score.resultCount} KPI)</span>
+                              <span>{formatPercentage(score.resultAvg)} × {score.resultWeight}% = <span className="font-medium text-foreground">{formatPercentage(score.resultAvg * (score.resultWeight / 100))}</span></span>
+                            </div>
+                          )}
+                          {score.activityCount > 0 && (
+                            <div className="flex justify-between">
+                              <span>Activity ({score.activityCount} KPI)</span>
+                              <span>{formatPercentage(score.activityAvg)} × {score.activityWeight}% = <span className="font-medium text-foreground">{formatPercentage(score.activityAvg * (score.activityWeight / 100))}</span></span>
+                            </div>
+                          )}
+                          {score.qualityCount > 0 && (
+                            <div className="flex justify-between">
+                              <span>Quality ({score.qualityCount} KPI)</span>
+                              <span>{formatPercentage(score.qualityAvg)} × {score.qualityWeight}% = <span className="font-medium text-foreground">{formatPercentage(score.qualityAvg * (score.qualityWeight / 100))}</span></span>
+                            </div>
+                          )}
+                          <div className="flex justify-between border-t border-border/50 pt-1 mt-1 font-semibold text-foreground">
+                            <span>Total Skor</span>
+                            <span>{formatPercentage(score.total)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  {[...userAssignments]
                     .sort((a, b) => {
                       const typeOrder: Record<string, number> = { result: 1, activity: 2, quality: 3 };
                       const typeA = kpisMap[a.kpiId]?.type || a.kpiType;
@@ -279,8 +309,9 @@ export function ExpandableStaffGrid({
                           )}
                         </div>
                       </div>
-                    );
-                  })
+                      );
+                    })}
+                  </>
                 )}
               </div>
             )}
