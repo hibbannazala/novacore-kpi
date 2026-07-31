@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useKpis } from "@/hooks/useKpis";
 import { useDivisionMembers } from "@/hooks/useUsers";
 import { useDivisionAssignments } from "@/hooks/useAssignments";
+import { useAllKpiSettings } from "@/hooks/useKpiSettings";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,7 @@ import {
   getPerformanceCategory,
   getBrandColor,
   monthName,
+  calcWeightedScore,
 } from "@/lib/utils";
 import { Plus, PauseCircle, XCircle, CheckCircle, Search, Pencil, Check } from "lucide-react";
 import type { KpiAssignment } from "@/types";
@@ -32,13 +34,14 @@ const typeColor: Record<string, string> = {
 
 export default function HeadPenugasanPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user: currentUser } = useAuth();
+  const { getWeights } = useAllKpiSettings();
   const now = new Date();
 
   const managedDepartments: string[] =
-    user?.managedDepartments && user.managedDepartments.length > 0
-      ? user.managedDepartments
-      : user?.department ? [user.department] : [];
+    currentUser?.managedDepartments && currentUser.managedDepartments.length > 0
+      ? currentUser.managedDepartments
+      : currentUser?.department ? [currentUser.department] : [];
 
   const [selectedMonth, setSelectedMonth] = useState(
     () => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
@@ -202,7 +205,7 @@ export default function HeadPenugasanPage() {
             const initials = (u?.name ?? userId).slice(0, 2).toUpperCase();
             const activeAssignments = userAssignments.filter(a => a.status === 'active' || a.status === 'completed');
             const avgPct = activeAssignments.length > 0
-              ? activeAssignments.reduce((s, a) => s + (a.achievementPercentage || 0), 0) / activeAssignments.length
+              ? calcWeightedScore(activeAssignments, getWeights(userId)).total
               : 0;
 
             const byType: Record<string, KpiAssignment[]> = { result: [], activity: [], quality: [] };

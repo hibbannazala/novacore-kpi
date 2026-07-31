@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useMemo } from "react";
 
@@ -10,7 +10,8 @@ import { PeriodPicker, type Period } from "@/components/kpi/PeriodPicker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PerformanceBadge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { getPerformanceCategory, formatPercentage, monthName, todayISODate, formatDateDisplay } from "@/lib/utils";
+import { getPerformanceCategory, formatPercentage, monthName, todayISODate, formatDateDisplay, calcWeightedScore } from "@/lib/utils";
+import { useAllKpiSettings } from "@/hooks/useKpiSettings";
 import { getKpiRole } from "@/types";
 import type { KpiAssignment } from "@/types";
 
@@ -32,6 +33,7 @@ export default function ExecutiveDashboard() {
   const { departments, isLoading: deptLoading } = useDepartments();
   const { users } = useAllUsers();
   const { assignments, isLoading } = useAssignmentsForPeriod(period);
+  const { getWeights } = useAllKpiSettings();
   const isRange = period.type === "range";
 
   const { summaries, companyAvg } = useMemo(() => {
@@ -42,33 +44,30 @@ export default function ExecutiveDashboard() {
         if (u.department) usersByDept[u.department] = (usersByDept[u.department] ?? 0) + 1;
       });
 
-    const byDept: Record<string, KpiAssignment[]> = {};
+    const byDeptAndUser: Record<string, Record<string, KpiAssignment[]>> = {};
     assignments.forEach((a) => {
-      if (!byDept[a.department]) byDept[a.department] = [];
-      byDept[a.department].push(a);
+      if (!byDeptAndUser[a.department]) byDeptAndUser[a.department] = {};
+      if (!byDeptAndUser[a.department][a.userId]) byDeptAndUser[a.department][a.userId] = [];
+      byDeptAndUser[a.department][a.userId].push(a);
     });
-
 
     const allPcts: number[] = [];
     const s: DeptSummary[] = departments.map((dept) => {
-      const deptAssignments = byDept[dept] ?? [];
-      const pcts = deptAssignments.map((a) => {
-        if (isRange) {
-          const reports: any[] = [];
-          const actual = reports.reduce((sum, r) => sum + r.actualValue, 0);
-          return a.monthlyTarget > 0 ? (actual / a.monthlyTarget) * 100 : 0;
-        }
-        return a.achievementPercentage;
+      const usersInDept = byDeptAndUser[dept] ?? {};
+      const userScores = Object.entries(usersInDept).map(([userId, userAssignments]) => {
+        const active = userAssignments.filter(a => a.status === 'active' || a.status === 'completed');
+        return active.length > 0 ? calcWeightedScore(active, getWeights(userId)).total : 0;
       });
-      allPcts.push(...pcts);
-      const avg = pcts.length > 0 ? pcts.reduce((s, v) => s + v, 0) / pcts.length : 0;
-      const critical = pcts.filter((p) => getPerformanceCategory(p) === "critical").length;
+
+      allPcts.push(...userScores);
+      const avg = userScores.length > 0 ? userScores.reduce((s, v) => s + v, 0) / userScores.length : 0;
+      const critical = userScores.filter((p) => getPerformanceCategory(p) === "critical").length;
       return { department: dept, avgAchievement: avg, memberCount: usersByDept[dept] ?? 0, criticalCount: critical };
     });
 
     const avg = allPcts.length > 0 ? allPcts.reduce((s, v) => s + v, 0) / allPcts.length : 0;
     return { summaries: s, companyAvg: avg };
-  }, [assignments, departments, users, isRange]);
+  }, [assignments, departments, users, getWeights, isRange]);
 
   if (isLoading || deptLoading) {
     return (

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useMemo } from "react";
 import { useAllUsers } from "@/hooks/useUsers";
@@ -15,12 +15,14 @@ import {
 } from "@/components/ui/dialog";
 import {
   getPerformanceCategory,
+  calcWeightedScore,
   formatPercentage,
   formatNumber,
   formatCurrency,
   monthName,
   todayISODate,
 } from "@/lib/utils";
+import { useAllKpiSettings } from "@/hooks/useKpiSettings";
 import { getKpiRole } from "@/types";
 import type { User } from "@/types";
 
@@ -47,6 +49,7 @@ export default function ExecutiveTeamPage() {
 
   const { users, isLoading: ul } = useAllUsers();
   const { assignments, kpisMap, isLoading } = useAssignmentsForPeriod(period);
+  const { getWeights, isLoading: sl } = useAllKpiSettings();
   const isRange = period.type === "range";
 
   const byUser = useMemo(() => {
@@ -58,7 +61,7 @@ export default function ExecutiveTeamPage() {
     return map;
   }, [assignments]);
 
-  if (isLoading || ul) {
+  if (isLoading || ul || sl) {
     return (
       <div className="flex h-40 items-center justify-center">
         <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -80,15 +83,9 @@ export default function ExecutiveTeamPage() {
           {users.map((u) => {
             const role = getKpiRole(u);
             const userAssignments = byUser[u.id] ?? [];
-            const pcts = userAssignments.map((a) => {
-              if (isRange) {
-                const reports: any[] = [];
-                const actual = reports.reduce((s, r) => s + r.actualValue, 0);
-                return a.monthlyTarget > 0 ? (actual / a.monthlyTarget) * 100 : 0;
-              }
-              return a.achievementPercentage;
-            });
-            const avg = pcts.length > 0 ? pcts.reduce((s, v) => s + v, 0) / pcts.length : null;
+            const activeAssignments = userAssignments.filter(a => a.status === 'active' || a.status === 'completed');
+            const score = activeAssignments.length > 0 ? calcWeightedScore(activeAssignments, getWeights(u.id)) : null;
+            const avg = score ? score.total : null;
             const cat = avg !== null ? getPerformanceCategory(avg) : null;
 
             return (

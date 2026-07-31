@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,9 +8,10 @@ import { PeriodPicker, type Period } from "@/components/kpi/PeriodPicker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PerformanceBadge } from "@/components/ui/badge";
-import { getPerformanceCategory, formatPercentage, monthName, todayISODate } from "@/lib/utils";
+import { getPerformanceCategory, formatPercentage, monthName, todayISODate, calcWeightedScore } from "@/lib/utils";
 import { getManagedDepartments } from "@/types";
 import type { KpiAssignment } from "@/types";
+import { useAllKpiSettings } from "@/hooks/useKpiSettings";
 
 export default function HeadReportsPage() {
   const { user } = useAuth();
@@ -22,6 +23,7 @@ export default function HeadReportsPage() {
   const departments = user ? getManagedDepartments(user) : [];
   const departmentLabel = departments.length > 1 ? departments.join(", ") : departments[0] ?? "Umum";
   const { members } = useDivisionMembers(departments);
+  const { getWeights } = useAllKpiSettings();
   const { assignments, kpisMap, isLoading } = useAssignmentsForPeriod(period, departments);
   const isRange = period.type === "range";
 
@@ -212,15 +214,8 @@ export default function HeadReportsPage() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         {Object.entries(byUser).map(([userId, userAssignments]) => {
-          const pcts = userAssignments.map((a) => {
-            if (isRange) {
-              const reports: any[] = [];
-              const actual = reports.reduce((s, r) => s + r.actualValue, 0);
-              return a.monthlyTarget > 0 ? (actual / a.monthlyTarget) * 100 : 0;
-            }
-            return a.achievementPercentage;
-          });
-          const avg = pcts.reduce((s, v) => s + v, 0) / pcts.length;
+          const activeAssignments = userAssignments.filter(a => a.status === 'active' || a.status === 'completed');
+          const avg = activeAssignments.length > 0 ? calcWeightedScore(activeAssignments, getWeights(userId)).total : 0;
           const category = getPerformanceCategory(avg);
           return (
             <Card key={userId}>

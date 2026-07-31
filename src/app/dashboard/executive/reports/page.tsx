@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useMemo } from "react";
 import { useDepartments } from "@/hooks/useDivisions";
@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PerformanceBadge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { getPerformanceCategory, formatPercentage, monthName, todayISODate } from "@/lib/utils";
+import { getPerformanceCategory, formatPercentage, monthName, todayISODate, calcWeightedScore } from "@/lib/utils";
+import { useAllKpiSettings } from "@/hooks/useKpiSettings";
 import { Download } from "lucide-react";
 
 export default function ExecutiveReportsPage() {
@@ -18,6 +19,7 @@ export default function ExecutiveReportsPage() {
 
   const [period, setPeriod] = useState<Period>({ type: "month" });
   const { departments } = useDepartments();
+  const { getWeights } = useAllKpiSettings();
   const { assignments, kpisMap, isLoading } = useAssignmentsForPeriod(period);
   const isRange = period.type === "range";
   const periodLabel = isRange ? `${period.start}_to_${period.end}` : monthLabel.replace(" ", "_");
@@ -99,23 +101,24 @@ export default function ExecutiveReportsPage() {
       <div className="grid gap-4 sm:grid-cols-2">
         {departments.map((dept) => {
           const deptAssignments = byDepartment[dept] ?? [];
+          const byUser: Record<string, typeof deptAssignments> = {};
+          deptAssignments.forEach(a => {
+            if (!byUser[a.userId]) byUser[a.userId] = [];
+            byUser[a.userId].push(a);
+          });
 
-          const displayPcts = deptAssignments.map((a) => {
-            if (isRange) {
-              const reports: any[] = [];
-              const actual = reports.reduce((s, r) => s + r.actualValue, 0);
-              return a.monthlyTarget > 0 ? (actual / a.monthlyTarget) * 100 : 0;
-            }
-            return a.achievementPercentage;
+          const userScores = Object.entries(byUser).map(([userId, userAssignments]) => {
+            const active = userAssignments.filter(a => a.status === 'active' || a.status === 'completed');
+            return active.length > 0 ? calcWeightedScore(active, getWeights(userId)).total : 0;
           });
 
           const avg =
-            displayPcts.length > 0
-              ? displayPcts.reduce((s, v) => s + v, 0) / displayPcts.length
+            userScores.length > 0
+              ? userScores.reduce((s, v) => s + v, 0) / userScores.length
               : 0;
           const cat = getPerformanceCategory(avg);
           const counts = { excellent: 0, good: 0, warning: 0, critical: 0 };
-          displayPcts.forEach((pct) => { counts[getPerformanceCategory(pct)]++; });
+          userScores.forEach((pct) => { counts[getPerformanceCategory(pct)]++; });
 
           return (
             <Card key={dept}>

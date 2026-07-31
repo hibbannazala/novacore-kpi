@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useMemo } from "react";
 import { useAllUsers } from "@/hooks/useUsers";
@@ -13,7 +13,9 @@ import {
   formatPercentage,
   monthName,
   todayISODate,
+  calcWeightedScore,
 } from "@/lib/utils";
+import { useAllKpiSettings } from "@/hooks/useKpiSettings";
 import { getKpiRole } from "@/types";
 import type { KpiAssignment } from "@/types";
 import { Download, ChevronDown, ChevronUp } from "lucide-react";
@@ -28,6 +30,7 @@ export default function HrReportsPage() {
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
 
   const { users } = useAllUsers();
+  const { getWeights } = useAllKpiSettings();
   const { assignments, kpisMap, isLoading } =
     useAssignmentsForPeriod(period);
 
@@ -63,12 +66,11 @@ export default function HrReportsPage() {
     return a.actualTotal;
   }
 
-  function getUserAvg(userAssignments: KpiAssignment[]) {
+  function getUserAvg(userId: string, userAssignments: KpiAssignment[]) {
     if (userAssignments.length === 0) return 0;
-    const pcts = userAssignments.map((a) =>
-      a.monthlyTarget > 0 ? (getActual(a) / a.monthlyTarget) * 100 : 0
-    );
-    return pcts.reduce((s, v) => s + v, 0) / pcts.length;
+    const active = userAssignments.filter(a => a.status === 'active' || a.status === 'completed');
+    if (active.length === 0) return 0;
+    return calcWeightedScore(active, getWeights(userId)).total;
   }
 
   function toggleUser(userId: string) {
@@ -87,21 +89,19 @@ export default function HrReportsPage() {
       const bHas = (assignmentsByUser[b.id]?.length ?? 0) > 0;
       if (aHas !== bHas) return aHas ? -1 : 1;
       // Sort by avg achievement descending
-      const aAvg = getUserAvg(assignmentsByUser[a.id] ?? []);
-      const bAvg = getUserAvg(assignmentsByUser[b.id] ?? []);
+      const aAvg = getUserAvg(a.id, assignmentsByUser[a.id] ?? []);
+      const bAvg = getUserAvg(b.id, assignmentsByUser[b.id] ?? []);
       return bAvg - aAvg;
     });
   }, [timUsers, assignmentsByUser, isRange]);
 
   // Company-wide summary stats
   const { companyAvg, totalKpis, assignedCount } = useMemo(() => {
-    const allPcts = assignments.map((a) =>
-      a.monthlyTarget > 0 ? (getActual(a) / a.monthlyTarget) * 100 : 0
-    );
-    const avg = allPcts.length > 0 ? allPcts.reduce((s, v) => s + v, 0) / allPcts.length : 0;
+    const userScores = Object.keys(assignmentsByUser).map(userId => getUserAvg(userId, assignmentsByUser[userId]));
+    const avg = userScores.length > 0 ? userScores.reduce((s, v) => s + v, 0) / userScores.length : 0;
     const assigned = new Set(assignments.map((a) => a.userId)).size;
     return { companyAvg: avg, totalKpis: assignments.length, assignedCount: assigned };
-  }, [assignments, isRange]);
+  }, [assignments, assignmentsByUser, getWeights, isRange]);
 
   const csvEscape = (v: string | number | null | undefined) => {
     const s = v == null ? "" : String(v);
@@ -213,7 +213,7 @@ export default function HrReportsPage() {
         ) : (
           sortedUsers.map((u) => {
             const userAssignments = assignmentsByUser[u.id] ?? [];
-            const avg = getUserAvg(userAssignments);
+            const avg = getUserAvg(u.id, userAssignments);
             const cat = getPerformanceCategory(avg);
             const isExpanded = expandedUsers.has(u.id);
             const hasAssignments = userAssignments.length > 0;
