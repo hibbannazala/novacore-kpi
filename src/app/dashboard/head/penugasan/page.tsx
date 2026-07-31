@@ -200,8 +200,9 @@ export default function HeadPenugasanPage() {
             const userAssignments = groupedByUser[userId];
             const u = userMap[userId];
             const initials = (u?.name ?? userId).slice(0, 2).toUpperCase();
-            const avgPct = userAssignments.length > 0
-              ? userAssignments.reduce((s, a) => s + (a.achievementPercentage || 0), 0) / userAssignments.length
+            const activeAssignments = userAssignments.filter(a => a.status === 'active' || a.status === 'completed');
+            const avgPct = activeAssignments.length > 0
+              ? activeAssignments.reduce((s, a) => s + (a.achievementPercentage || 0), 0) / activeAssignments.length
               : 0;
 
             const byType: Record<string, KpiAssignment[]> = { result: [], activity: [], quality: [] };

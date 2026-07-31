@@ -164,11 +164,16 @@ export function calcWeightedScore(
   const activityAvg = avg(buckets.activity);
   const qualityAvg = avg(buckets.quality);
 
-  const total =
-    (resultAvg * weights.result +
-      activityAvg * weights.activity +
-      qualityAvg * weights.quality) /
-    100;
+  let activeWeightSum = 0;
+  if (buckets.result.length > 0) activeWeightSum += weights.result;
+  if (buckets.activity.length > 0) activeWeightSum += weights.activity;
+  if (buckets.quality.length > 0) activeWeightSum += weights.quality;
+
+  const total = activeWeightSum > 0
+    ? (resultAvg * (buckets.result.length > 0 ? weights.result : 0) +
+       activityAvg * (buckets.activity.length > 0 ? weights.activity : 0) +
+       qualityAvg * (buckets.quality.length > 0 ? weights.quality : 0)) / activeWeightSum
+    : 0;
 
   return {
     resultAvg,

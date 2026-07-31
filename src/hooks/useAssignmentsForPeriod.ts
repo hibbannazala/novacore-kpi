@@ -127,9 +127,34 @@ export function useAssignmentsForPeriod(period: Period, department?: string | st
           if (seen.has(a.id)) return false;
           seen.add(a.id);
           return true;
-        });
+        }) as KpiAssignment[];
 
-        setAssignments(unique as KpiAssignment[]);
+        // Dynamically override actualTotal for the custom date range
+        if (period.type === "range") {
+          const assignIds = unique.map((a) => a.id);
+          if (assignIds.length > 0) {
+            const { data: reports } = await supabase
+              .from("daily_reports")
+              .select("assignment_id, value")
+              .gte("date", period.start)
+              .lte("date", period.end)
+              .in("assignment_id", assignIds);
+            
+            const sums: Record<string, number> = {};
+            reports?.forEach((r) => {
+              sums[r.assignment_id] = (sums[r.assignment_id] || 0) + (r.value || 0);
+            });
+            
+            unique.forEach((a) => {
+              a.actualTotal = sums[a.id] || 0;
+              // Recalculate achievement percentage based on the new actualTotal
+              a.achievementPercentage = a.monthlyTarget > 0 ? (a.actualTotal / a.monthlyTarget) * 100 : 0;
+              a.performanceCategory = getPerformanceCategory(a.achievementPercentage) as any;
+            });
+          }
+        }
+
+        setAssignments(unique);
 
         const map: Record<string, KPI> = {};
         unique.forEach((a: any) => { if (a.kpi) map[a.kpiId] = a.kpi; });
