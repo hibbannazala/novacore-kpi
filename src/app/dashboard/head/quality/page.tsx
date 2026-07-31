@@ -167,6 +167,22 @@ export default function HeadQualityPage() {
     users.forEach((u) => { userMap[u.id] = u.name; });
 
     const map: Record<string, Record<string, { userName: string; items: QualityItem[] }>> = {};
+    
+    // 1. Pre-populate map with all users in managedDepartments
+    users.forEach(u => {
+      if (u.department && managedDepartments.includes(u.department)) {
+        if (!map[u.department]) map[u.department] = {};
+        map[u.department][u.id] = { userName: u.name, items: [] };
+      }
+    });
+
+    // 2. Also pre-populate the Head's own department if they have one, to show their own KPIs
+    if (user && user.department && !map[user.department]) {
+      map[user.department] = {};
+      map[user.department][user.id] = { userName: user.name, items: [] };
+    }
+
+    // 3. Fill in the actual items
     qualityItems.forEach((item) => {
       const dept = item.assignment.department || "—";
       const uid = item.assignment.userId;
@@ -174,12 +190,22 @@ export default function HeadQualityPage() {
       if (!map[dept][uid]) map[dept][uid] = { userName: userMap[uid] ?? uid, items: [] };
       map[dept][uid].items.push(item);
     });
+
     return map;
-  }, [qualityItems, users]);
+  }, [qualityItems, users, managedDepartments, user]);
 
   const deptNames = useMemo(
-    () => managedDepartments.filter((d) => grouped[d]),
-    [managedDepartments, grouped]
+    () => {
+      // Sort so managed departments come first, then others
+      const allDepts = Object.keys(grouped);
+      return allDepts.sort((a, b) => {
+        const aManaged = managedDepartments.includes(a) ? 0 : 1;
+        const bManaged = managedDepartments.includes(b) ? 0 : 1;
+        if (aManaged !== bManaged) return aManaged - bManaged;
+        return a.localeCompare(b);
+      });
+    },
+    [grouped, managedDepartments]
   );
 
   async function handleSave(assignmentId: string, monthlyTarget: number) {
@@ -356,57 +382,67 @@ export default function HeadQualityPage() {
 
                           {isUserOpen && (
                             <div className="px-6 pb-3 space-y-2 bg-background/50">
-                              {items.map(({ assignment, kpi }) => {
-                                const monthScore = assignment.monthlyScores?.[scoreKey];
-                                const displayActual = monthScore?.actualTotal ?? 0;
-                                const displayPct = monthScore?.achievementPercentage ?? 0;
-                                const displayCat = (monthScore?.performanceCategory ?? getPerformanceCategory(displayPct)) as KpiAssignment["performanceCategory"];
-                                return (
-                                  <div key={assignment.id} className="rounded-lg border border-border bg-card px-4 py-3 flex flex-col gap-3">
-                                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium">{kpi.title}</p>
-                                        <p className="text-xs text-muted-foreground">
-                                          Aktual: {formatPercentage(displayActual)} / {formatPercentage(assignment.monthlyTarget)}
-                                        </p>
+                              {items.length === 0 ? (
+                                <div className="rounded-lg border border-dashed border-border bg-card px-4 py-6 text-center">
+                                  <p className="text-sm font-medium text-muted-foreground mb-1">Belum ada KPI Kualitas</p>
+                                  <p className="text-xs text-muted-foreground/70">
+                                    Staf ini belum diberikan penugasan KPI yang berjenis "Quality". 
+                                    Silakan buat penugasan baru di menu Penugasan.
+                                  </p>
+                                </div>
+                              ) : (
+                                items.map(({ assignment, kpi }) => {
+                                  const monthScore = assignment.monthlyScores?.[scoreKey];
+                                  const displayActual = monthScore?.actualTotal ?? 0;
+                                  const displayPct = monthScore?.achievementPercentage ?? 0;
+                                  const displayCat = (monthScore?.performanceCategory ?? getPerformanceCategory(displayPct)) as KpiAssignment["performanceCategory"];
+                                  return (
+                                    <div key={assignment.id} className="rounded-lg border border-border bg-card px-4 py-3 flex flex-col gap-3">
+                                      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm font-medium">{kpi.title}</p>
+                                          <p className="text-xs text-muted-foreground">
+                                            Aktual: {formatPercentage(displayActual)} / {formatPercentage(assignment.monthlyTarget)}
+                                          </p>
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                          <PerformanceBadge category={displayCat} />
+                                          <Input
+                                            type="number"
+                                            inputMode="decimal"
+                                            step="any"
+                                            min="0"
+                                            max="100"
+                                            className="w-24 h-8 text-sm"
+                                            placeholder="Nilai %"
+                                            value={inputValues[assignment.id] ?? ""}
+                                            onChange={(e) =>
+                                              setInputValues((prev) => ({ ...prev, [assignment.id]: e.target.value }))
+                                            }
+                                          />
+                                          <Button
+                                            size="sm"
+                                            className="h-8"
+                                            disabled={saving === assignment.id || !inputValues[assignment.id]}
+                                            onClick={() => handleSave(assignment.id, assignment.monthlyTarget)}
+                                          >
+                                            {saving === assignment.id ? "..." : "Simpan"}
+                                          </Button>
+                                        </div>
                                       </div>
-                                      <div className="flex items-center gap-2 shrink-0">
-                                        <PerformanceBadge category={displayCat} />
-                                        <Input
-                                          type="number"
-                                          inputMode="decimal"
-                                          step="any"
-                                          min="0"
-                                          max="100"
-                                          className="w-24 h-8 text-sm"
-                                          placeholder="Nilai %"
-                                          value={inputValues[assignment.id] ?? ""}
-                                          onChange={(e) =>
-                                            setInputValues((prev) => ({ ...prev, [assignment.id]: e.target.value }))
-                                          }
-                                        />
-                                        <Button
-                                          size="sm"
-                                          className="h-8"
-                                          disabled={saving === assignment.id || !inputValues[assignment.id]}
-                                          onClick={() => handleSave(assignment.id, assignment.monthlyTarget)}
-                                        >
-                                          {saving === assignment.id ? "..." : "Simpan"}
-                                        </Button>
-                                      </div>
+                                      <textarea
+                                        rows={2}
+                                        placeholder="Catatan evaluasi (opsional)..."
+                                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+                                        value={noteValues[assignment.id] ?? ""}
+                                        onChange={(e) =>
+                                          setNoteValues((prev) => ({ ...prev, [assignment.id]: e.target.value }))
+                                        }
+                                      />
                                     </div>
-                                    <textarea
-                                      rows={2}
-                                      placeholder="Catatan evaluasi (opsional)..."
-                                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
-                                      value={noteValues[assignment.id] ?? ""}
-                                      onChange={(e) =>
-                                        setNoteValues((prev) => ({ ...prev, [assignment.id]: e.target.value }))
-                                      }
-                                    />
-                                  </div>
-                                );
-                              })}
+                                  );
+                                })
+                              )}
                             </div>
                           )}
                         </div>
