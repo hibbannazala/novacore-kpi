@@ -18,6 +18,7 @@ import {
   Bug,
   Mail,
   Banknote,
+  Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -233,9 +234,25 @@ export function Sidebar() {
           Lapor Bug / Fitur
         </button>
 
+        <Link
+          href="/absensi/home"
+          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-teal-600 transition-all hover:bg-teal-50 mt-2"
+        >
+          <Clock className="h-4 w-4 shrink-0" />
+          Ke Aplikasi Absensi
+        </Link>
+
+        <Link
+          href="/"
+          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-800"
+        >
+          <Building2 className="h-4 w-4 shrink-0" />
+          Portal Utama
+        </Link>
+
         <button
           onClick={signOut}
-          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-slate-500 transition-all hover:bg-red-50 hover:text-red-600 mt-2"
+          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-slate-500 transition-all hover:bg-red-50 hover:text-red-600"
         >
           <LogOut className="h-4 w-4 shrink-0" />
           Keluar
