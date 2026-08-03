@@ -115,6 +115,11 @@ export default function TimKpiPage() {
               assignment={a}
               onClick={() => setSelected(a)}
               period={period}
+              readonlyMessage={
+                a.kpi?.type === "quality" ? "Akan diinput oleh Head" :
+                (a.kpi?.type === "hr" || a.kpi?.type === "lead_hr") ? "Akan diinput oleh HR" :
+                undefined
+              }
             />
           ))}
         </div>

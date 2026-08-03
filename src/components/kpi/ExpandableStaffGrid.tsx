@@ -182,6 +182,18 @@ export function ExpandableStaffGrid({
                               <span>{formatPercentage(score.qualityAvg)} × {score.qualityWeight}% = <span className="font-medium text-foreground">{formatPercentage(score.qualityAvg * (score.qualityWeight / 100))}</span></span>
                             </div>
                           )}
+                          {score.leadHrCount > 0 && (
+                            <div className="flex justify-between">
+                              <span>Lead HR ({score.leadHrCount} KPI)</span>
+                              <span>{formatPercentage(score.leadHrAvg)} × {score.leadHrWeight}% = <span className="font-medium text-foreground">{formatPercentage(score.leadHrAvg * (score.leadHrWeight / 100))}</span></span>
+                            </div>
+                          )}
+                          {score.hrCount > 0 && (
+                            <div className="flex justify-between">
+                              <span>HR ({score.hrCount} KPI)</span>
+                              <span>{formatPercentage(score.hrAvg)} × {score.hrWeight}% = <span className="font-medium text-foreground">{formatPercentage(score.hrAvg * (score.hrWeight / 100))}</span></span>
+                            </div>
+                          )}
                           <div className="flex justify-between border-t border-border/50 pt-1 mt-1 font-semibold text-foreground">
                             <span>Total Skor</span>
                             <span>{formatPercentage(score.total)}</span>

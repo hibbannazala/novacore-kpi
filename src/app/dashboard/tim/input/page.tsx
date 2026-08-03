@@ -92,9 +92,15 @@ export default function TimInputPage() {
                   </div>
                   <div className="ml-4 flex items-center gap-3">
                     <PerformanceBadge category={a.performanceCategory} />
-                    <Button size="sm" onClick={() => setSelected(a)}>
-                      Input
-                    </Button>
+                    {a.kpi?.type === "quality" ? (
+                      <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-100 px-2 py-1.5 rounded-md">Diinput Head</span>
+                    ) : (a.kpi?.type === "hr" || a.kpi?.type === "lead_hr") ? (
+                      <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-100 px-2 py-1.5 rounded-md">Diinput HR</span>
+                    ) : (
+                      <Button size="sm" onClick={() => setSelected(a)}>
+                        Input
+                      </Button>
+                    )}
                   </div>
                 </div>
                 );
