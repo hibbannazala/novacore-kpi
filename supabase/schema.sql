@@ -338,6 +338,9 @@ create policy "daily_reports_manage_privileged" on public.daily_reports
 create policy "kpi_settings_own" on public.kpi_settings
   for all using (user_id = auth.uid());
 
+create policy "kpi_settings_manage_privileged" on public.kpi_settings
+  for all using (public.my_kpi_role() in ('head','hr','executive','developer'));
+
 create policy "kpi_settings_read_privileged" on public.kpi_settings
   for select using (public.my_kpi_role() in ('head','hr','executive','developer'));
 
