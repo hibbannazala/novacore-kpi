@@ -232,7 +232,7 @@ export default function TimDashboard() {
                     period={period}
                     readonlyMessage={
                       a.kpi?.type === "quality" ? "Akan diinput oleh Head" :
-                      (a.kpi?.type === "hr" || a.kpi?.type === "lead_hr") ? "Akan diinput oleh HR" :
+                      (a.kpi?.type === "hr" || a.kpi?.type === "lead_tim") ? "Akan diinput oleh HR" :
                       undefined
                     }
                   />

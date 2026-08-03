@@ -49,7 +49,7 @@ export default function EvaluasiHrPage() {
         .eq("year", selectedYear)
         .eq("month", selectedMonth)
         .eq("status", "active")
-        .in("kpis.type", ["lead_hr", "hr"]);
+        .in("kpis.type", ["lead_tim", "hr"]);
 
       const userMap: Record<string, string> = {};
       users.forEach((u) => { userMap[u.id] = u.name; });
@@ -59,7 +59,7 @@ export default function EvaluasiHrPage() {
         const kpiRow = row.kpis;
         // Supabase sometimes returns rows where inner join filter fails but keeps the row with kpis=null if not inner joined properly, but .in("kpis.type", ...) might work.
         // Let's filter client side just in case
-        if (!kpiRow || (kpiRow.type !== "lead_hr" && kpiRow.type !== "hr")) return;
+        if (!kpiRow || (kpiRow.type !== "lead_tim" && kpiRow.type !== "hr")) return;
 
         const assignment: KpiAssignment = {
           id: row.id,
@@ -184,7 +184,7 @@ export default function EvaluasiHrPage() {
                   <p className="text-xs text-muted-foreground">{userName} · {assignment.department}</p>
                   <div className="mt-1 flex items-center gap-2">
                     <span className="text-[10px] uppercase font-bold tracking-widest text-primary/80 bg-primary/10 px-2 py-0.5 rounded-full">
-                      {kpi.type === 'lead_hr' ? 'Lead Tim' : 'HR'}
+                      {kpi.type === 'lead_tim' ? 'Lead Tim' : 'HR'}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       Aktual: {formatPercentage(assignment.actualTotal)} / {formatPercentage(assignment.monthlyTarget)}

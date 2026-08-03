@@ -145,21 +145,21 @@ export function monthName(month: number): string {
 
 export function calcWeightedScore(
   assignments: KpiAssignment[],
-  weights: { result: number; activity: number; quality: number; leadHr: number; hr: number },
+  weights: { result: number; activity: number; quality: number; leadTim: number; hr: number },
   reportsByAssignment?: Record<string, { actualValue: number }[]>
 ): WeightedScore {
   const buckets = { 
     result: [] as number[], 
     activity: [] as number[], 
     quality: [] as number[],
-    lead_hr: [] as number[],
+    lead_tim: [] as number[],
     hr: [] as number[]
   };
 
   for (const a of assignments) {
     if (a.status !== "active" && a.status !== "completed") continue;
     const t = a.kpiType ?? "result";
-    if (t !== "result" && t !== "activity" && t !== "quality" && t !== "lead_hr" && t !== "hr") continue;
+    if (t !== "result" && t !== "activity" && t !== "quality" && t !== "lead_tim" && t !== "hr") continue;
 
     const reports = reportsByAssignment?.[a.id];
     let pct: number;
@@ -178,7 +178,7 @@ export function calcWeightedScore(
   const resultAvg = avg(buckets.result);
   const activityAvg = avg(buckets.activity);
   const qualityAvg = avg(buckets.quality);
-  const leadHrAvg = avg(buckets.lead_hr);
+  const leadTimAvg = avg(buckets.lead_tim);
   const hrAvg = avg(buckets.hr);
 
   let activePerfWeightSum = 0;
@@ -187,7 +187,7 @@ export function calcWeightedScore(
   if (buckets.quality.length > 0) activePerfWeightSum += weights.quality;
 
   let activePersWeightSum = 0;
-  if (buckets.lead_hr.length > 0) activePersWeightSum += weights.leadHr;
+  if (buckets.lead_tim.length > 0) activePersWeightSum += weights.leadTim;
   if (buckets.hr.length > 0) activePersWeightSum += weights.hr;
 
   const performanceTotal = activePerfWeightSum > 0
@@ -197,7 +197,7 @@ export function calcWeightedScore(
     : 0;
 
   const personalityTotal = activePersWeightSum > 0
-    ? (leadHrAvg * (buckets.lead_hr.length > 0 ? weights.leadHr : 0) +
+    ? (leadTimAvg * (buckets.lead_tim.length > 0 ? weights.leadTim : 0) +
        hrAvg * (buckets.hr.length > 0 ? weights.hr : 0)) / activePersWeightSum
     : 0;
 
@@ -216,17 +216,17 @@ export function calcWeightedScore(
     resultAvg,
     activityAvg,
     qualityAvg,
-    leadHrAvg,
+    leadTimAvg,
     hrAvg,
     resultWeight: weights.result,
     activityWeight: weights.activity,
     qualityWeight: weights.quality,
-    leadHrWeight: weights.leadHr,
+    leadTimWeight: weights.leadTim,
     hrWeight: weights.hr,
     resultCount: buckets.result.length,
     activityCount: buckets.activity.length,
     qualityCount: buckets.quality.length,
-    leadHrCount: buckets.lead_hr.length,
+    leadTimCount: buckets.lead_tim.length,
     hrCount: buckets.hr.length,
     performanceTotal,
     personalityTotal,

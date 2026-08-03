@@ -94,7 +94,7 @@ export default function TimInputPage() {
                     <PerformanceBadge category={a.performanceCategory} />
                     {a.kpi?.type === "quality" ? (
                       <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-100 px-2 py-1.5 rounded-md">Diinput Head</span>
-                    ) : (a.kpi?.type === "hr" || a.kpi?.type === "lead_hr") ? (
+                    ) : (a.kpi?.type === "hr" || a.kpi?.type === "lead_tim") ? (
                       <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-100 px-2 py-1.5 rounded-md">Diinput HR</span>
                     ) : (
                       <Button size="sm" onClick={() => setSelected(a)}>

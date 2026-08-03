@@ -19,12 +19,12 @@ import { DailyReportsViewer } from "@/components/kpi/DailyReportsViewer";
 import type { User, KpiAssignment, KPI, DailyReport } from "@/types";
 import type { Period } from "@/components/kpi/PeriodPicker";
 
-const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality", lead_hr: "Lead Tim", hr: "HR" };
+const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality", lead_tim: "Lead Tim", hr: "HR" };
 const typeColor: Record<string, string> = {
   result: "text-blue-600 bg-blue-50",
   activity: "text-amber-600 bg-amber-50",
   quality: "text-purple-600 bg-purple-50",
-  lead_hr: "text-sky-600 bg-sky-50",
+  lead_tim: "text-sky-600 bg-sky-50",
   hr: "text-emerald-600 bg-emerald-50",
 };
 
@@ -48,7 +48,7 @@ interface ExpandableStaffGridProps {
   users: User[];
   assignmentsMap: Record<string, KpiAssignment[]>;
   kpisMap: Record<string, KPI>;
-  getWeights: (userId: string) => { result: number; activity: number; quality: number; leadHr: number; hr: number; };
+  getWeights: (userId: string) => { result: number; activity: number; quality: number; leadTim: number; hr: number; };
   expandedUsers: Set<string>;
   onToggleUser: (userId: string) => void;
   period?: Period;
@@ -182,10 +182,10 @@ export function ExpandableStaffGrid({
                               <span>{formatPercentage(score.qualityAvg)} × {score.qualityWeight}% = <span className="font-medium text-foreground">{formatPercentage(score.qualityAvg * (score.qualityWeight / 100))}</span></span>
                             </div>
                           )}
-                          {score.leadHrCount > 0 && (
+                          {score.leadTimCount > 0 && (
                             <div className="flex justify-between">
-                              <span>Lead Tim ({score.leadHrCount} KPI)</span>
-                              <span>{formatPercentage(score.leadHrAvg)} × {score.leadHrWeight}% = <span className="font-medium text-foreground">{formatPercentage(score.leadHrAvg * (score.leadHrWeight / 100))}</span></span>
+                              <span>Lead Tim ({score.leadTimCount} KPI)</span>
+                              <span>{formatPercentage(score.leadTimAvg)} × {score.leadTimWeight}% = <span className="font-medium text-foreground">{formatPercentage(score.leadTimAvg * (score.leadTimWeight / 100))}</span></span>
                             </div>
                           )}
                           {score.hrCount > 0 && (

@@ -4,7 +4,7 @@ export type KpiRole = "executive" | "hr" | "head" | "tim" | "developer";
 
 export type AbsensiRole = "admin" | "staff";
 
-export type KpiType = "result" | "activity" | "quality" | "lead_hr" | "hr";
+export type KpiType = "result" | "activity" | "quality" | "lead_tim" | "hr";
 export type KpiUnit = "number" | "currency" | "percentage";
 export type KpiPeriod = "daily" | "weekly" | "monthly";
 export type KpiStatus =
@@ -230,7 +230,7 @@ export const DEFAULT_KPI_WEIGHTS = {
   result: 50, 
   activity: 30, 
   quality: 20,
-  leadHr: 50,
+  leadTim: 50,
   hr: 50
 };
 
@@ -239,7 +239,7 @@ export interface KpiUserSettings {
   resultWeight: number;
   activityWeight: number;
   qualityWeight: number;
-  leadHrWeight: number;
+  leadTimWeight: number;
   hrWeight: number;
   updatedAt: string;
   updatedBy: string;
@@ -249,17 +249,17 @@ export interface WeightedScore {
   resultAvg: number;
   activityAvg: number;
   qualityAvg: number;
-  leadHrAvg: number;
+  leadTimAvg: number;
   hrAvg: number;
   resultWeight: number;
   activityWeight: number;
   qualityWeight: number;
-  leadHrWeight: number;
+  leadTimWeight: number;
   hrWeight: number;
   resultCount: number;
   activityCount: number;
   qualityCount: number;
-  leadHrCount: number;
+  leadTimCount: number;
   hrCount: number;
   performanceTotal: number;
   personalityTotal: number;

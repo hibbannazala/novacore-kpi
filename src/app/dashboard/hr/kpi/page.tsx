@@ -62,12 +62,12 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
-const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality", lead_hr: "Lead Tim", hr: "HR" };
+const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality", lead_tim: "Lead Tim", hr: "HR" };
 const typeColor: Record<string, string> = {
   result: "text-blue-600 bg-blue-50",
   activity: "text-amber-600 bg-amber-50",
   quality: "text-purple-600 bg-purple-50",
-  lead_hr: "text-sky-600 bg-sky-50",
+  lead_tim: "text-sky-600 bg-sky-50",
   hr: "text-emerald-600 bg-emerald-50",
 };
 
@@ -415,7 +415,7 @@ export default function HrKpiPage() {
                 <SelectItem value="result">Result</SelectItem>
                 <SelectItem value="activity">Activity</SelectItem>
                 <SelectItem value="quality">Quality</SelectItem>
-                <SelectItem value="lead_hr">Lead Tim</SelectItem>
+                <SelectItem value="lead_tim">Lead Tim</SelectItem>
                 <SelectItem value="hr">HR</SelectItem>
               </SelectContent>
             </Select>

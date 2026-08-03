@@ -62,7 +62,7 @@ export default function HrEmployeesPage() {
   const [resultW, setResultW] = useState("");
   const [activityW, setActivityW] = useState("");
   const [qualityW, setQualityW] = useState("");
-  const [leadHrW, setLeadHrW] = useState("");
+  const [leadTimW, setLeadTimW] = useState("");
   const [hrW, setHrW] = useState("");
   const [weightLoading, setWeightLoading] = useState(false);
   const [weightSaving, setWeightSaving] = useState(false);
@@ -131,13 +131,13 @@ export default function HrEmployeesPage() {
       setResultW(String(data.result_weight));
       setActivityW(String(data.activity_weight));
       setQualityW(String(data.quality_weight));
-      setLeadHrW(String(data.lead_hr_weight ?? DEFAULT_KPI_WEIGHTS.leadHr));
+      setLeadTimW(String(data.lead_tim_weight ?? DEFAULT_KPI_WEIGHTS.leadTim));
       setHrW(String(data.hr_weight ?? DEFAULT_KPI_WEIGHTS.hr));
     } else {
       setResultW(String(DEFAULT_KPI_WEIGHTS.result));
       setActivityW(String(DEFAULT_KPI_WEIGHTS.activity));
       setQualityW(String(DEFAULT_KPI_WEIGHTS.quality));
-      setLeadHrW(String(DEFAULT_KPI_WEIGHTS.leadHr));
+      setLeadTimW(String(DEFAULT_KPI_WEIGHTS.leadTim));
       setHrW(String(DEFAULT_KPI_WEIGHTS.hr));
     }
     setWeightLoading(false);
@@ -148,7 +148,7 @@ export default function HrEmployeesPage() {
     const r = parseInt(resultW) || 0;
     const a = parseInt(activityW) || 0;
     const q = parseInt(qualityW) || 0;
-    const lh = parseInt(leadHrW) || 0;
+    const lh = parseInt(leadTimW) || 0;
     const h = parseInt(hrW) || 0;
     
     if (r + a + q !== 100) {
@@ -171,7 +171,7 @@ export default function HrEmployeesPage() {
         result_weight: r,
         activity_weight: a,
         quality_weight: q,
-        lead_hr_weight: lh,
+        lead_tim_weight: lh,
         hr_weight: h,
         updated_by: currentUser.id,
       }, { onConflict: "user_id" });
@@ -375,7 +375,7 @@ export default function HrEmployeesPage() {
                 <p className="text-xs font-semibold">Grup Personality (30%)</p>
                 {(
                   [
-                    { label: "Lead Tim", value: leadHrW, set: setLeadHrW },
+                    { label: "Lead Tim", value: leadTimW, set: setLeadTimW },
                     { label: "HR", value: hrW, set: setHrW },
                   ] as { label: string; value: string; set: (v: string) => void }[]
                 ).map(({ label, value, set }) => (
@@ -393,7 +393,7 @@ export default function HrEmployeesPage() {
                   </div>
                 ))}
                 {(() => {
-                  const total = (parseInt(leadHrW) || 0) + (parseInt(hrW) || 0);
+                  const total = (parseInt(leadTimW) || 0) + (parseInt(hrW) || 0);
                   return (
                     <div className={`text-xs font-medium ${total === 100 ? "text-green-600" : "text-amber-600"}`}>
                       Sub-Total: {total}%{total === 100 ? " ✓" : " (harus 100%)"}

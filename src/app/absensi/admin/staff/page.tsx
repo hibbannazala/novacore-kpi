@@ -47,7 +47,7 @@ export default function AdminStaffPage() {
   const [selectedPeriod, setSelectedPeriod] = useState(() => new Date().toISOString().substring(0, 7));
 
   const [kpiUser, setKpiUser] = useState<StaffUser | null>(null);
-  const [kpiWeights, setKpiWeights] = useState({ result: 50, activity: 30, quality: 20, leadHr: 50, hr: 50 });
+  const [kpiWeights, setKpiWeights] = useState({ result: 50, activity: 30, quality: 20, leadTim: 50, hr: 50 });
   const [globalKpiModalOpen, setGlobalKpiModalOpen] = useState(false);
   const [kpiSaving, setKpiSaving] = useState(false);
 
@@ -139,11 +139,11 @@ export default function AdminStaffPage() {
           result: data.result_weight, 
           activity: data.activity_weight, 
           quality: data.quality_weight,
-          leadHr: data.lead_hr_weight ?? 50,
+          leadTim: data.lead_tim_weight ?? 50,
           hr: data.hr_weight ?? 50
         });
       } else {
-        setKpiWeights({ result: 50, activity: 30, quality: 20, leadHr: 50, hr: 50 });
+        setKpiWeights({ result: 50, activity: 30, quality: 20, leadTim: 50, hr: 50 });
       }
       setKpiUser(u);
       toast.dismiss(tid);
@@ -158,7 +158,7 @@ export default function AdminStaffPage() {
       toast.error("Total bobot Performance harus tepat 100%");
       return;
     }
-    if (kpiWeights.leadHr + kpiWeights.hr !== 100) {
+    if (kpiWeights.leadTim + kpiWeights.hr !== 100) {
       toast.error("Total bobot Personality harus tepat 100%");
       return;
     }
@@ -171,7 +171,7 @@ export default function AdminStaffPage() {
         result_weight: kpiWeights.result,
         activity_weight: kpiWeights.activity,
         quality_weight: kpiWeights.quality,
-        lead_hr_weight: kpiWeights.leadHr,
+        lead_tim_weight: kpiWeights.leadTim,
         hr_weight: kpiWeights.hr,
       });
       if (error) throw error;
@@ -189,7 +189,7 @@ export default function AdminStaffPage() {
       toast.error("Total bobot Performance harus tepat 100%");
       return;
     }
-    if (kpiWeights.leadHr + kpiWeights.hr !== 100) {
+    if (kpiWeights.leadTim + kpiWeights.hr !== 100) {
       toast.error("Total bobot Personality harus tepat 100%");
       return;
     }
@@ -203,7 +203,7 @@ export default function AdminStaffPage() {
         result_weight: kpiWeights.result,
         activity_weight: kpiWeights.activity,
         quality_weight: kpiWeights.quality,
-        lead_hr_weight: kpiWeights.leadHr,
+        lead_tim_weight: kpiWeights.leadTim,
         hr_weight: kpiWeights.hr,
       }));
       const { error } = await supabase.from("kpi_settings").upsert(upserts);
@@ -331,7 +331,7 @@ export default function AdminStaffPage() {
             />
           </div>
           <button 
-            onClick={() => { setKpiWeights({ result: 50, activity: 30, quality: 20, leadHr: 50, hr: 50 }); setGlobalKpiModalOpen(true); }}
+            onClick={() => { setKpiWeights({ result: 50, activity: 30, quality: 20, leadTim: 50, hr: 50 }); setGlobalKpiModalOpen(true); }}
             className="px-4 py-2 bg-[var(--ab-primary)] text-white font-black uppercase text-[10px] tracking-widest rounded-xl hover:scale-105 transition-transform whitespace-nowrap"
           >
             Set Bobot Global
@@ -601,7 +601,7 @@ export default function AdminStaffPage() {
                   <span className="text-[10px] font-black uppercase tracking-widest text-[var(--ab-text-main)]">Grup Personality (30%)</span>
                 </div>
                 {[
-                  { key: "leadHr", label: "Lead Tim", col: "#3b82f6" },
+                  { key: "leadTim", label: "Lead Tim", col: "#3b82f6" },
                   { key: "hr", label: "HR", col: "#10b981" },
                 ].map((item) => (
                   <div key={item.key} className="space-y-2">
@@ -623,8 +623,8 @@ export default function AdminStaffPage() {
                   </div>
                 ))}
                 <p className="text-[9px] font-black uppercase tracking-widest text-right">
-                  Sub-Total: <span className={kpiWeights.leadHr + kpiWeights.hr === 100 ? "text-green-500" : "text-rose-500"}>
-                    {kpiWeights.leadHr + kpiWeights.hr}%
+                  Sub-Total: <span className={kpiWeights.leadTim + kpiWeights.hr === 100 ? "text-green-500" : "text-rose-500"}>
+                    {kpiWeights.leadTim + kpiWeights.hr}%
                   </span>
                 </p>
               </div>
@@ -632,7 +632,7 @@ export default function AdminStaffPage() {
               <div className="pt-4 border-t border-[var(--ab-border)] flex justify-end mt-6">
                 <button
                   onClick={globalKpiModalOpen ? saveGlobalKpiWeights : saveKpiWeights}
-                  disabled={kpiSaving || (kpiWeights.result + kpiWeights.activity + kpiWeights.quality !== 100) || (kpiWeights.leadHr + kpiWeights.hr !== 100)}
+                  disabled={kpiSaving || (kpiWeights.result + kpiWeights.activity + kpiWeights.quality !== 100) || (kpiWeights.leadTim + kpiWeights.hr !== 100)}
                   className="bg-[var(--ab-text-main)] text-[var(--ab-bg-main)] px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-transform disabled:opacity-50 disabled:scale-100"
                 >
                   Simpan
