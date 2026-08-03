@@ -10,16 +10,14 @@ interface Props {
   compact?: boolean;
 }
 
-const typeLabel: Record<string, string> = {
-  result: "Result",
-  activity: "Activity",
-  quality: "Quality",
-};
+const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality", lead_hr: "Lead HR", hr: "HR" };
 
 const typeColor: Record<string, string> = {
   result: "text-blue-600",
   activity: "text-amber-600",
   quality: "text-purple-600",
+  lead_hr: "text-sky-600 bg-sky-50",
+  hr: "text-emerald-600 bg-emerald-50",
 };
 
 interface Row {

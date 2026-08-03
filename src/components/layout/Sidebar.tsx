@@ -82,6 +82,7 @@ export const navByRole: Record<Exclude<KpiRole, "developer">, NavItem[]> = {
     { label: "Manajemen KPI", href: "/dashboard/hr/kpi", icon: Target, group: "Penugasan" },
     { label: "Penugasan KPI", href: "/dashboard/hr/assignments", icon: ClipboardList, group: "Penugasan" },
     { label: "Kualitas & Evaluasi", href: "/dashboard/hr/quality", icon: BarChart3, group: "Penugasan" },
+    { label: "Evaluasi HR", href: "/dashboard/hr/evaluasi-hr", icon: ClipboardList, group: "Penugasan" },
     { label: "Kelola Karyawan", href: "/absensi/admin/staff", icon: Users, group: "Admin" },
     { label: "Kelola Gaji", href: "/absensi/admin/payroll", icon: Banknote, group: "Admin" },
     { label: "Laporan HR", href: "/dashboard/hr/reports", icon: FileText, group: "Admin" },

@@ -33,9 +33,13 @@ const statusLabel: Record<string, string> = {
 const statusVariant: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   draft: "secondary", active: "default", hold: "outline", cancelled: "destructive", completed: "secondary", archived: "outline",
 };
-const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality" };
+const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality", lead_hr: "Lead HR", hr: "HR" };
 const typeColor: Record<string, string> = {
-  result: "text-blue-600 bg-blue-50", activity: "text-amber-600 bg-amber-50", quality: "text-purple-600 bg-purple-50",
+  result: "text-blue-600 bg-blue-50",
+  activity: "text-amber-600 bg-amber-50",
+  quality: "text-purple-600 bg-purple-50",
+  lead_hr: "text-sky-600 bg-sky-50",
+  hr: "text-emerald-600 bg-emerald-50",
 };
 
 function formatTarget(kpi: KPI): string {
@@ -185,6 +189,8 @@ export default function HeadKpiSetupPage() {
             <SelectItem value="result">Result</SelectItem>
             <SelectItem value="activity">Activity</SelectItem>
             <SelectItem value="quality">Quality</SelectItem>
+            <SelectItem value="lead_hr">Lead HR</SelectItem>
+            <SelectItem value="hr">HR</SelectItem>
           </SelectContent>
         </Select>
         <Select value={filterStatus} onValueChange={setFilterStatus}>

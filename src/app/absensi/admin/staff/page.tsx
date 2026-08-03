@@ -47,7 +47,8 @@ export default function AdminStaffPage() {
   const [selectedPeriod, setSelectedPeriod] = useState(() => new Date().toISOString().substring(0, 7));
 
   const [kpiUser, setKpiUser] = useState<StaffUser | null>(null);
-  const [kpiWeights, setKpiWeights] = useState({ result: 40, activity: 30, quality: 30 });
+  const [kpiWeights, setKpiWeights] = useState({ result: 50, activity: 30, quality: 20, leadHr: 50, hr: 50 });
+  const [globalKpiModalOpen, setGlobalKpiModalOpen] = useState(false);
   const [kpiSaving, setKpiSaving] = useState(false);
 
   useEffect(() => {
@@ -134,9 +135,15 @@ export default function AdminStaffPage() {
     try {
       const { data } = await supabase.from("kpi_settings").select("*").eq("user_id", u.id).maybeSingle();
       if (data) {
-        setKpiWeights({ result: data.result_weight, activity: data.activity_weight, quality: data.quality_weight });
+        setKpiWeights({ 
+          result: data.result_weight, 
+          activity: data.activity_weight, 
+          quality: data.quality_weight,
+          leadHr: data.lead_hr_weight ?? 50,
+          hr: data.hr_weight ?? 50
+        });
       } else {
-        setKpiWeights({ result: 40, activity: 30, quality: 30 });
+        setKpiWeights({ result: 50, activity: 30, quality: 20, leadHr: 50, hr: 50 });
       }
       setKpiUser(u);
       toast.dismiss(tid);
@@ -148,7 +155,11 @@ export default function AdminStaffPage() {
   const saveKpiWeights = async () => {
     if (!kpiUser) return;
     if (kpiWeights.result + kpiWeights.activity + kpiWeights.quality !== 100) {
-      toast.error("Total bobot harus tepat 100%");
+      toast.error("Total bobot Performance harus tepat 100%");
+      return;
+    }
+    if (kpiWeights.leadHr + kpiWeights.hr !== 100) {
+      toast.error("Total bobot Personality harus tepat 100%");
       return;
     }
     const tid = toast.loading("Menyimpan pengaturan KPI...");
@@ -160,12 +171,47 @@ export default function AdminStaffPage() {
         result_weight: kpiWeights.result,
         activity_weight: kpiWeights.activity,
         quality_weight: kpiWeights.quality,
+        lead_hr_weight: kpiWeights.leadHr,
+        hr_weight: kpiWeights.hr,
       });
       if (error) throw error;
       toast.success("Pengaturan KPI berhasil disimpan.", { id: tid });
       setKpiUser(null);
     } catch (err: unknown) {
       toast.error("Gagal menyimpan KPI: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
+    } finally {
+      setKpiSaving(false);
+    }
+  };
+
+  const saveGlobalKpiWeights = async () => {
+    if (kpiWeights.result + kpiWeights.activity + kpiWeights.quality !== 100) {
+      toast.error("Total bobot Performance harus tepat 100%");
+      return;
+    }
+    if (kpiWeights.leadHr + kpiWeights.hr !== 100) {
+      toast.error("Total bobot Personality harus tepat 100%");
+      return;
+    }
+    const tid = toast.loading("Menerapkan bobot global...");
+    setKpiSaving(true);
+    try {
+      const supabase = createClient();
+      const activeUsers = users.filter(u => u.absensiStatus === 'active');
+      const upserts = activeUsers.map(u => ({
+        user_id: u.id,
+        result_weight: kpiWeights.result,
+        activity_weight: kpiWeights.activity,
+        quality_weight: kpiWeights.quality,
+        lead_hr_weight: kpiWeights.leadHr,
+        hr_weight: kpiWeights.hr,
+      }));
+      const { error } = await supabase.from("kpi_settings").upsert(upserts);
+      if (error) throw error;
+      toast.success("Bobot global berhasil diterapkan ke seluruh staf aktif.", { id: tid });
+      setGlobalKpiModalOpen(false);
+    } catch (err: unknown) {
+      toast.error("Gagal menyimpan bobot global: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
     } finally {
       setKpiSaving(false);
     }
@@ -284,6 +330,12 @@ export default function AdminStaffPage() {
               className="ab-input pl-9 text-xs w-full md:w-64"
             />
           </div>
+          <button 
+            onClick={() => { setKpiWeights({ result: 50, activity: 30, quality: 20, leadHr: 50, hr: 50 }); setGlobalKpiModalOpen(true); }}
+            className="px-4 py-2 bg-[var(--ab-primary)] text-white font-black uppercase text-[10px] tracking-widest rounded-xl hover:scale-105 transition-transform whitespace-nowrap"
+          >
+            Set Bobot Global
+          </button>
         </div>
       </div>
 
@@ -494,53 +546,93 @@ export default function AdminStaffPage() {
         onCancel={() => setConfirmCfg(null)}
       />
 
-      {kpiUser && (
+      {(kpiUser || globalKpiModalOpen) && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[var(--ab-bg-surface)] w-full max-w-sm rounded-[30px] border border-[var(--ab-border)] shadow-2xl p-6 relative">
-            <button onClick={() => setKpiUser(null)} className="absolute top-4 right-4 text-[var(--ab-text-dim)] hover:text-red-500">
+          <div className="bg-[var(--ab-bg-surface)] w-full max-w-sm rounded-[30px] border border-[var(--ab-border)] shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto">
+            <button onClick={() => { setKpiUser(null); setGlobalKpiModalOpen(false); }} className="absolute top-4 right-4 text-[var(--ab-text-dim)] hover:text-red-500">
               <X size={20} />
             </button>
             <h3 className="text-xl font-black text-[var(--ab-text-main)] uppercase tracking-tight mb-1">
-              Bobot KPI
+              {globalKpiModalOpen ? "Bobot KPI Global" : "Bobot KPI"}
             </h3>
             <p className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest mb-6">
-              {kpiUser.name}
+              {globalKpiModalOpen ? "Diterapkan ke seluruh staf aktif" : kpiUser?.name}
             </p>
 
-            <div className="space-y-4">
-              {[
-                { key: "result", label: "Hasil Kerja", col: "var(--ab-primary)" },
-                { key: "activity", label: "Aktivitas Harian", col: "#a855f7" },
-                { key: "quality", label: "Kualitas & Perilaku", col: "#f97316" },
-              ].map((item) => (
-                <div key={item.key} className="space-y-2">
-                  <div className="flex justify-between items-end">
-                    <label className="text-[10px] font-black uppercase tracking-widest" style={{ color: item.col }}>
-                      {item.label}
-                    </label>
-                    <span className="text-[10px] font-bold text-[var(--ab-text-dim)]">{kpiWeights[item.key as keyof typeof kpiWeights]}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    value={kpiWeights[item.key as keyof typeof kpiWeights]}
-                    onChange={(e) => setKpiWeights({ ...kpiWeights, [item.key]: parseInt(e.target.value) })}
-                    className="w-full accent-[var(--ab-primary)] h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                  />
+            <div className="space-y-6">
+              {/* Grup Performance 70% */}
+              <div className="space-y-4">
+                <div className="bg-slate-100 dark:bg-slate-800 p-2 rounded-lg text-center">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[var(--ab-text-main)]">Grup Performance (70%)</span>
                 </div>
-              ))}
-              
-              <div className="pt-4 border-t border-[var(--ab-border)] flex justify-between items-center mt-6">
-                <p className="text-xs font-black uppercase tracking-widest">
-                  Total: <span className={kpiWeights.result + kpiWeights.activity + kpiWeights.quality === 100 ? "text-green-500" : "text-rose-500"}>
+                {[
+                  { key: "result", label: "Hasil Kerja", col: "var(--ab-primary)" },
+                  { key: "activity", label: "Aktivitas Harian", col: "#a855f7" },
+                  { key: "quality", label: "Kualitas", col: "#f97316" },
+                ].map((item) => (
+                  <div key={item.key} className="space-y-2">
+                    <div className="flex justify-between items-end">
+                      <label className="text-[10px] font-black uppercase tracking-widest" style={{ color: item.col }}>
+                        {item.label}
+                      </label>
+                      <span className="text-[10px] font-bold text-[var(--ab-text-dim)]">{kpiWeights[item.key as keyof typeof kpiWeights]}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={kpiWeights[item.key as keyof typeof kpiWeights]}
+                      onChange={(e) => setKpiWeights({ ...kpiWeights, [item.key]: parseInt(e.target.value) })}
+                      className="w-full accent-[var(--ab-primary)] h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                ))}
+                <p className="text-[9px] font-black uppercase tracking-widest text-right">
+                  Sub-Total: <span className={kpiWeights.result + kpiWeights.activity + kpiWeights.quality === 100 ? "text-green-500" : "text-rose-500"}>
                     {kpiWeights.result + kpiWeights.activity + kpiWeights.quality}%
                   </span>
                 </p>
+              </div>
+
+              {/* Grup Personality 30% */}
+              <div className="space-y-4 border-t border-[var(--ab-border)] pt-4">
+                <div className="bg-slate-100 dark:bg-slate-800 p-2 rounded-lg text-center">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[var(--ab-text-main)]">Grup Personality (30%)</span>
+                </div>
+                {[
+                  { key: "leadHr", label: "Lead HR", col: "#3b82f6" },
+                  { key: "hr", label: "HR", col: "#10b981" },
+                ].map((item) => (
+                  <div key={item.key} className="space-y-2">
+                    <div className="flex justify-between items-end">
+                      <label className="text-[10px] font-black uppercase tracking-widest" style={{ color: item.col }}>
+                        {item.label}
+                      </label>
+                      <span className="text-[10px] font-bold text-[var(--ab-text-dim)]">{kpiWeights[item.key as keyof typeof kpiWeights]}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={kpiWeights[item.key as keyof typeof kpiWeights]}
+                      onChange={(e) => setKpiWeights({ ...kpiWeights, [item.key]: parseInt(e.target.value) })}
+                      className="w-full accent-[var(--ab-primary)] h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                ))}
+                <p className="text-[9px] font-black uppercase tracking-widest text-right">
+                  Sub-Total: <span className={kpiWeights.leadHr + kpiWeights.hr === 100 ? "text-green-500" : "text-rose-500"}>
+                    {kpiWeights.leadHr + kpiWeights.hr}%
+                  </span>
+                </p>
+              </div>
+              
+              <div className="pt-4 border-t border-[var(--ab-border)] flex justify-end mt-6">
                 <button
-                  onClick={saveKpiWeights}
-                  disabled={kpiSaving || kpiWeights.result + kpiWeights.activity + kpiWeights.quality !== 100}
+                  onClick={globalKpiModalOpen ? saveGlobalKpiWeights : saveKpiWeights}
+                  disabled={kpiSaving || (kpiWeights.result + kpiWeights.activity + kpiWeights.quality !== 100) || (kpiWeights.leadHr + kpiWeights.hr !== 100)}
                   className="bg-[var(--ab-text-main)] text-[var(--ab-bg-main)] px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-transform disabled:opacity-50 disabled:scale-100"
                 >
                   Simpan

@@ -62,6 +62,8 @@ export default function HrEmployeesPage() {
   const [resultW, setResultW] = useState("");
   const [activityW, setActivityW] = useState("");
   const [qualityW, setQualityW] = useState("");
+  const [leadHrW, setLeadHrW] = useState("");
+  const [hrW, setHrW] = useState("");
   const [weightLoading, setWeightLoading] = useState(false);
   const [weightSaving, setWeightSaving] = useState(false);
   const [weightError, setWeightError] = useState("");
@@ -129,10 +131,14 @@ export default function HrEmployeesPage() {
       setResultW(String(data.result_weight));
       setActivityW(String(data.activity_weight));
       setQualityW(String(data.quality_weight));
+      setLeadHrW(String(data.lead_hr_weight ?? DEFAULT_KPI_WEIGHTS.leadHr));
+      setHrW(String(data.hr_weight ?? DEFAULT_KPI_WEIGHTS.hr));
     } else {
       setResultW(String(DEFAULT_KPI_WEIGHTS.result));
       setActivityW(String(DEFAULT_KPI_WEIGHTS.activity));
       setQualityW(String(DEFAULT_KPI_WEIGHTS.quality));
+      setLeadHrW(String(DEFAULT_KPI_WEIGHTS.leadHr));
+      setHrW(String(DEFAULT_KPI_WEIGHTS.hr));
     }
     setWeightLoading(false);
   }
@@ -142,11 +148,18 @@ export default function HrEmployeesPage() {
     const r = parseInt(resultW) || 0;
     const a = parseInt(activityW) || 0;
     const q = parseInt(qualityW) || 0;
+    const lh = parseInt(leadHrW) || 0;
+    const h = parseInt(hrW) || 0;
+    
     if (r + a + q !== 100) {
-      setWeightError("Total bobot harus 100%.");
+      setWeightError("Total bobot Performance harus 100%.");
       return;
     }
-    if (r < 0 || a < 0 || q < 0) {
+    if (lh + h !== 100) {
+      setWeightError("Total bobot Personality harus 100%.");
+      return;
+    }
+    if (r < 0 || a < 0 || q < 0 || lh < 0 || h < 0) {
       setWeightError("Bobot tidak boleh negatif.");
       return;
     }
@@ -158,6 +171,8 @@ export default function HrEmployeesPage() {
         result_weight: r,
         activity_weight: a,
         quality_weight: q,
+        lead_hr_weight: lh,
+        hr_weight: h,
         updated_by: currentUser.id,
       }, { onConflict: "user_id" });
       if (error) throw error;
@@ -323,35 +338,70 @@ export default function HrEmployeesPage() {
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
             </div>
           ) : (
-            <div className="space-y-3 mt-1">
-              {(
-                [
-                  { label: "Result", value: resultW, set: setResultW },
-                  { label: "Activity", value: activityW, set: setActivityW },
-                  { label: "Quality", value: qualityW, set: setQualityW },
-                ] as { label: string; value: string; set: (v: string) => void }[]
-              ).map(({ label, value, set }) => (
-                <div key={label} className="flex items-center gap-3">
-                  <span className="text-sm w-20 shrink-0">{label}</span>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={value}
-                    onChange={(e) => { set(e.target.value); setWeightError(""); }}
-                    className="h-8 text-sm"
-                  />
-                  <span className="text-sm text-muted-foreground">%</span>
-                </div>
-              ))}
-              {(() => {
-                const total = (parseInt(resultW) || 0) + (parseInt(activityW) || 0) + (parseInt(qualityW) || 0);
-                return (
-                  <div className={`text-xs font-medium ${total === 100 ? "text-green-600" : "text-amber-600"}`}>
-                    Total: {total}%{total === 100 ? " ✓" : " (harus 100%)"}
+            <div className="space-y-4 mt-1">
+              <div className="space-y-3">
+                <p className="text-xs font-semibold">Grup Performance (70%)</p>
+                {(
+                  [
+                    { label: "Result", value: resultW, set: setResultW },
+                    { label: "Activity", value: activityW, set: setActivityW },
+                    { label: "Quality", value: qualityW, set: setQualityW },
+                  ] as { label: string; value: string; set: (v: string) => void }[]
+                ).map(({ label, value, set }) => (
+                  <div key={label} className="flex items-center gap-3">
+                    <span className="text-sm w-20 shrink-0">{label}</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={value}
+                      onChange={(e) => { set(e.target.value); setWeightError(""); }}
+                      className="h-8 text-sm"
+                    />
+                    <span className="text-sm text-muted-foreground">%</span>
                   </div>
-                );
-              })()}
+                ))}
+                {(() => {
+                  const total = (parseInt(resultW) || 0) + (parseInt(activityW) || 0) + (parseInt(qualityW) || 0);
+                  return (
+                    <div className={`text-xs font-medium ${total === 100 ? "text-green-600" : "text-amber-600"}`}>
+                      Sub-Total: {total}%{total === 100 ? " ✓" : " (harus 100%)"}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="space-y-3 pt-3 border-t">
+                <p className="text-xs font-semibold">Grup Personality (30%)</p>
+                {(
+                  [
+                    { label: "Lead HR", value: leadHrW, set: setLeadHrW },
+                    { label: "HR", value: hrW, set: setHrW },
+                  ] as { label: string; value: string; set: (v: string) => void }[]
+                ).map(({ label, value, set }) => (
+                  <div key={label} className="flex items-center gap-3">
+                    <span className="text-sm w-20 shrink-0">{label}</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={value}
+                      onChange={(e) => { set(e.target.value); setWeightError(""); }}
+                      className="h-8 text-sm"
+                    />
+                    <span className="text-sm text-muted-foreground">%</span>
+                  </div>
+                ))}
+                {(() => {
+                  const total = (parseInt(leadHrW) || 0) + (parseInt(hrW) || 0);
+                  return (
+                    <div className={`text-xs font-medium ${total === 100 ? "text-green-600" : "text-amber-600"}`}>
+                      Sub-Total: {total}%{total === 100 ? " ✓" : " (harus 100%)"}
+                    </div>
+                  );
+                })()}
+              </div>
+
               {weightError && <p className="text-sm text-destructive">{weightError}</p>}
             </div>
           )}

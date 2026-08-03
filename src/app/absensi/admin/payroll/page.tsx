@@ -72,6 +72,7 @@ export default function HrPayrollPage() {
           overtime_pay: existing?.overtime_pay ?? 0,
           deductions: existing?.deductions ?? 0,
           deduction_notes: existing?.deduction_notes ?? "",
+          notes: existing?.notes ?? "",
           status: existing?.status ?? "draft",
         },
       };
@@ -102,6 +103,7 @@ export default function HrPayrollPage() {
         overtime_pay: row.payroll.overtime_pay || 0,
         deductions: row.payroll.deductions || 0,
         deduction_notes: row.payroll.deduction_notes || "",
+        notes: row.payroll.notes || "",
         status: "draft",
       };
 
@@ -134,6 +136,7 @@ export default function HrPayrollPage() {
         overtime_pay: row.payroll.overtime_pay || 0,
         deductions: row.payroll.deductions || 0,
         deduction_notes: row.payroll.deduction_notes || "",
+        notes: row.payroll.notes || "",
         status: "published",
       };
 
@@ -336,11 +339,22 @@ export default function HrPayrollPage() {
                       </div>
                     </div>
 
+                    <div className="space-y-1 mb-4">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Catatan Slip Gaji</label>
+                      <textarea
+                        disabled={isPublished}
+                        value={row.payroll.notes || ""}
+                        onChange={(e) => updateField(row.id, "notes", e.target.value)}
+                        className="ab-input text-sm w-full py-2 min-h-[50px] resize-none disabled:opacity-40"
+                        placeholder="Tambahkan catatan khusus untuk slip gaji ini (opsional)..."
+                      />
+                    </div>
+
                     {/* THP & Actions Container */}
                     <div className="flex flex-col md:flex-row items-center gap-4 bg-[var(--ab-bg-main)] p-4 rounded-2xl border border-[var(--ab-border)]">
                       {/* THP */}
                       <div className="flex-1 flex justify-between md:justify-start md:gap-4 items-center w-full md:w-auto border-b md:border-b-0 md:border-r border-[var(--ab-border)] pb-3 md:pb-0 md:pr-4">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Take Home Pay</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Total Diterima</span>
                         <span className="text-xl font-black font-mono" style={{ color: companyColor }}>{formatRp(thp)}</span>
                       </div>
 
@@ -529,8 +543,16 @@ export default function HrPayrollPage() {
                     )}
                   </tbody>
                   <tfoot>
+                    {previewRow.payroll.notes && (
+                      <tr>
+                        <td colSpan={2} className="py-3 px-3 italic text-slate-600 bg-slate-50 text-sm whitespace-pre-wrap rounded-md mb-2">
+                          <span className="font-semibold block mb-1 not-italic text-slate-800">Catatan:</span>
+                          {previewRow.payroll.notes}
+                        </td>
+                      </tr>
+                    )}
                     <tr className="border-t-2" style={{ borderColor: COMPANY_COLORS[previewRow.setting?.company || "Nova"] }}>
-                      <td className="py-3 font-black uppercase">Take Home Pay</td>
+                      <td className="py-3 font-black uppercase">Total Diterima</td>
                       <td className="py-3 text-right font-black font-mono text-lg" style={{ color: COMPANY_COLORS[previewRow.setting?.company || "Nova"] }}>
                         {formatRp(calcTHP(previewRow.payroll))}
                       </td>

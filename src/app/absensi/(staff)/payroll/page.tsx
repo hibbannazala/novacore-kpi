@@ -145,7 +145,7 @@ export default function MyPayrollPage() {
                 </div>
 
                 <div className="bg-[var(--ab-bg-main)] p-4 rounded-2xl border border-[var(--ab-border)] flex justify-between items-center mb-4">
-                  <span className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest">Take Home Pay</span>
+                  <span className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest">Total Diterima</span>
                   <span className="text-lg font-black font-mono" style={{ color: companyColor }}>
                     {formatRp(thp)}
                   </span>
@@ -183,7 +183,7 @@ export default function MyPayrollPage() {
                   ref={printRef}
                   employeeName={user?.name || "Karyawan"}
                   contractPosition={previewPayroll.setting?.contract_position || "Karyawan"}
-                  company={(previewPayroll.setting?.company as PayrollCompany) || "Nova"}
+                  company={previewPayroll.setting?.company || "Nova"}
                   month={previewPayroll.month}
                   year={previewPayroll.year}
                   baseSalary={previewPayroll.base_salary}
@@ -192,6 +192,7 @@ export default function MyPayrollPage() {
                   overtimePay={previewPayroll.overtime_pay}
                   deductions={previewPayroll.deductions}
                   deductionNotes={previewPayroll.deduction_notes}
+                  notes={previewPayroll.notes}
                 />
               </div>
             </div>

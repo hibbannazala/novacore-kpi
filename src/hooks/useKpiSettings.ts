@@ -11,6 +11,8 @@ function rowToSettings(row: Record<string, unknown>): KpiUserSettings {
     resultWeight: (row.result_weight as number) ?? DEFAULT_KPI_WEIGHTS.result,
     activityWeight: (row.activity_weight as number) ?? DEFAULT_KPI_WEIGHTS.activity,
     qualityWeight: (row.quality_weight as number) ?? DEFAULT_KPI_WEIGHTS.quality,
+    leadHrWeight: (row.lead_hr_weight as number) ?? DEFAULT_KPI_WEIGHTS.leadHr,
+    hrWeight: (row.hr_weight as number) ?? DEFAULT_KPI_WEIGHTS.hr,
     updatedAt: row.updated_at as KpiUserSettings["updatedAt"],
     updatedBy: "",
   };
@@ -53,8 +55,8 @@ export function useKpiSettings(userId: string | undefined) {
   }, [userId]);
 
   const weights = settings
-    ? { result: settings.resultWeight, activity: settings.activityWeight, quality: settings.qualityWeight }
-    : { result: DEFAULT_KPI_WEIGHTS.result, activity: DEFAULT_KPI_WEIGHTS.activity, quality: DEFAULT_KPI_WEIGHTS.quality };
+    ? { result: settings.resultWeight, activity: settings.activityWeight, quality: settings.qualityWeight, leadHr: settings.leadHrWeight, hr: settings.hrWeight }
+    : { result: DEFAULT_KPI_WEIGHTS.result, activity: DEFAULT_KPI_WEIGHTS.activity, quality: DEFAULT_KPI_WEIGHTS.quality, leadHr: (DEFAULT_KPI_WEIGHTS as any).leadHr ?? 50, hr: (DEFAULT_KPI_WEIGHTS as any).hr ?? 50 };
 
   return { settings, weights, isLoading };
 }
@@ -90,8 +92,8 @@ export function useAllKpiSettings() {
   function getWeights(userId: string) {
     const s = settingsMap[userId];
     return s
-      ? { result: s.resultWeight, activity: s.activityWeight, quality: s.qualityWeight }
-      : { result: DEFAULT_KPI_WEIGHTS.result, activity: DEFAULT_KPI_WEIGHTS.activity, quality: DEFAULT_KPI_WEIGHTS.quality };
+      ? { result: s.resultWeight, activity: s.activityWeight, quality: s.qualityWeight, leadHr: (s as any).leadHrWeight ?? 50, hr: (s as any).hrWeight ?? 50 }
+      : { result: DEFAULT_KPI_WEIGHTS.result, activity: DEFAULT_KPI_WEIGHTS.activity, quality: DEFAULT_KPI_WEIGHTS.quality, leadHr: (DEFAULT_KPI_WEIGHTS as any).leadHr ?? 50, hr: DEFAULT_KPI_WEIGHTS.hr ?? 50 };
   }
 
   return { settingsMap, getWeights, isLoading };

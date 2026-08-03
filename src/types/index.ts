@@ -4,7 +4,7 @@ export type KpiRole = "executive" | "hr" | "head" | "tim" | "developer";
 
 export type AbsensiRole = "admin" | "staff";
 
-export type KpiType = "result" | "activity" | "quality";
+export type KpiType = "result" | "activity" | "quality" | "lead_hr" | "hr";
 export type KpiUnit = "number" | "currency" | "percentage";
 export type KpiPeriod = "daily" | "weekly" | "monthly";
 export type KpiStatus =
@@ -226,13 +226,21 @@ export interface PerformanceSummary {
 
 // ─── KPI User Settings (weighted scores) ─────────────────────────────────────
 
-export const DEFAULT_KPI_WEIGHTS = { result: 40, activity: 30, quality: 30 } as const;
+export const DEFAULT_KPI_WEIGHTS = { 
+  result: 50, 
+  activity: 30, 
+  quality: 20,
+  leadHr: 50,
+  hr: 50
+};
 
 export interface KpiUserSettings {
   id: string;
   resultWeight: number;
   activityWeight: number;
   qualityWeight: number;
+  leadHrWeight: number;
+  hrWeight: number;
   updatedAt: string;
   updatedBy: string;
 }
@@ -241,12 +249,20 @@ export interface WeightedScore {
   resultAvg: number;
   activityAvg: number;
   qualityAvg: number;
+  leadHrAvg: number;
+  hrAvg: number;
   resultWeight: number;
   activityWeight: number;
   qualityWeight: number;
+  leadHrWeight: number;
+  hrWeight: number;
   resultCount: number;
   activityCount: number;
   qualityCount: number;
+  leadHrCount: number;
+  hrCount: number;
+  performanceTotal: number;
+  personalityTotal: number;
   total: number;
   category: PerformanceCategory;
 }
@@ -364,6 +380,7 @@ export interface Payroll {
   overtime_pay: number;
   deductions: number;
   deduction_notes: string;
+  notes?: string | null;
   status: 'draft' | 'published';
   created_at?: string;
   updated_at?: string;

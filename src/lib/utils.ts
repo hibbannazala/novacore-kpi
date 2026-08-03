@@ -145,17 +145,22 @@ export function monthName(month: number): string {
 
 export function calcWeightedScore(
   assignments: KpiAssignment[],
-  weights: { result: number; activity: number; quality: number },
+  weights: { result: number; activity: number; quality: number; leadHr: number; hr: number },
   reportsByAssignment?: Record<string, { actualValue: number }[]>
 ): WeightedScore {
-  const buckets = { result: [] as number[], activity: [] as number[], quality: [] as number[] };
+  const buckets = { 
+    result: [] as number[], 
+    activity: [] as number[], 
+    quality: [] as number[],
+    lead_hr: [] as number[],
+    hr: [] as number[]
+  };
 
   for (const a of assignments) {
     if (a.status !== "active" && a.status !== "completed") continue;
     const t = a.kpiType ?? "result";
+    if (t !== "result" && t !== "activity" && t !== "quality" && t !== "lead_hr" && t !== "hr") continue;
 
-    // Pakai displayPct dari daily reports jika tersedia (konsisten dengan tampilan kartu individual)
-    // Fallback ke achievementPercentage Firestore jika tidak ada reports (misal: quality KPI)
     const reports = reportsByAssignment?.[a.id];
     let pct: number;
     if (reports && reports.length > 0) {
@@ -168,36 +173,65 @@ export function calcWeightedScore(
     buckets[t].push(pct);
   }
 
-  const avg = (arr: number[]) =>
-    arr.length > 0 ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+  const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
 
   const resultAvg = avg(buckets.result);
   const activityAvg = avg(buckets.activity);
   const qualityAvg = avg(buckets.quality);
+  const leadHrAvg = avg(buckets.lead_hr);
+  const hrAvg = avg(buckets.hr);
 
-  let activeWeightSum = 0;
-  if (buckets.result.length > 0) activeWeightSum += weights.result;
-  if (buckets.activity.length > 0) activeWeightSum += weights.activity;
-  if (buckets.quality.length > 0) activeWeightSum += weights.quality;
+  let activePerfWeightSum = 0;
+  if (buckets.result.length > 0) activePerfWeightSum += weights.result;
+  if (buckets.activity.length > 0) activePerfWeightSum += weights.activity;
+  if (buckets.quality.length > 0) activePerfWeightSum += weights.quality;
 
-  const total = activeWeightSum > 0
+  let activePersWeightSum = 0;
+  if (buckets.lead_hr.length > 0) activePersWeightSum += weights.leadHr;
+  if (buckets.hr.length > 0) activePersWeightSum += weights.hr;
+
+  const performanceTotal = activePerfWeightSum > 0
     ? (resultAvg * (buckets.result.length > 0 ? weights.result : 0) +
        activityAvg * (buckets.activity.length > 0 ? weights.activity : 0) +
-       qualityAvg * (buckets.quality.length > 0 ? weights.quality : 0)) / activeWeightSum
+       qualityAvg * (buckets.quality.length > 0 ? weights.quality : 0)) / activePerfWeightSum
     : 0;
+
+  const personalityTotal = activePersWeightSum > 0
+    ? (leadHrAvg * (buckets.lead_hr.length > 0 ? weights.leadHr : 0) +
+       hrAvg * (buckets.hr.length > 0 ? weights.hr : 0)) / activePersWeightSum
+    : 0;
+
+  // Final Total: 70% Performance + 30% Personality
+  // If one of the groups is empty (e.g. no personality KPIs), we scale the other up to 100% to avoid unfair 0 scores.
+  let finalTotal = 0;
+  if (activePerfWeightSum > 0 && activePersWeightSum > 0) {
+    finalTotal = (performanceTotal * 0.7) + (personalityTotal * 0.3);
+  } else if (activePerfWeightSum > 0) {
+    finalTotal = performanceTotal;
+  } else if (activePersWeightSum > 0) {
+    finalTotal = personalityTotal;
+  }
 
   return {
     resultAvg,
     activityAvg,
     qualityAvg,
+    leadHrAvg,
+    hrAvg,
     resultWeight: weights.result,
     activityWeight: weights.activity,
     qualityWeight: weights.quality,
+    leadHrWeight: weights.leadHr,
+    hrWeight: weights.hr,
     resultCount: buckets.result.length,
     activityCount: buckets.activity.length,
     qualityCount: buckets.quality.length,
-    total,
-    category: getPerformanceCategory(total),
+    leadHrCount: buckets.lead_hr.length,
+    hrCount: buckets.hr.length,
+    performanceTotal,
+    personalityTotal,
+    total: finalTotal,
+    category: getPerformanceCategory(finalTotal),
   };
 }
 

@@ -13,11 +13,13 @@ import { Label } from "@/components/ui/label";
 import { getWorkingDaysInMonth, getBrandColor, monthName } from "@/lib/utils";
 import { Search, ChevronLeft } from "lucide-react";
 
-const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality" };
+const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality", lead_hr: "Lead HR", hr: "HR" };
 const typeColor: Record<string, string> = {
   result: "text-blue-600 bg-blue-50",
   activity: "text-amber-600 bg-amber-50",
   quality: "text-purple-600 bg-purple-50",
+  lead_hr: "text-sky-600 bg-sky-50",
+  hr: "text-emerald-600 bg-emerald-50",
 };
 
 export default function HeadNewAssignmentPage() {

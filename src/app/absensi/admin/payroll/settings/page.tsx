@@ -157,7 +157,7 @@ export default function PayrollSettingsPage() {
           </div>
           <input
             type="text"
-            className="ab-input pl-10 w-full"
+            className="ab-input !pl-10 w-full"
             placeholder="Cari nama karyawan..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -169,7 +169,7 @@ export default function PayrollSettingsPage() {
             <Filter size={18} style={{ color: 'var(--ab-text-dim)' }} />
           </div>
           <select
-            className="ab-input pl-10 w-full appearance-none"
+            className="ab-input !pl-10 w-full appearance-none"
             value={companyFilter}
             onChange={(e) => setCompanyFilter(e.target.value as any)}
           >
@@ -248,7 +248,7 @@ export default function PayrollSettingsPage() {
                     </div>
                     <input
                       type="number"
-                      className="ab-input w-full pl-10"
+                      className="ab-input w-full !pl-10"
                       placeholder="0"
                       value={setting.default_base_salary === null || setting.default_base_salary === undefined ? '' : setting.default_base_salary}
                       onChange={(e) => handleSettingChange(user.id, 'default_base_salary', e.target.value ? parseInt(e.target.value) : 0)}
@@ -266,7 +266,7 @@ export default function PayrollSettingsPage() {
                     </div>
                     <input
                       type="number"
-                      className="ab-input w-full pl-10"
+                      className="ab-input w-full !pl-10"
                       placeholder="0"
                       value={setting.default_mobility_allowance === null || setting.default_mobility_allowance === undefined ? '' : setting.default_mobility_allowance}
                       onChange={(e) => handleSettingChange(user.id, 'default_mobility_allowance', e.target.value ? parseInt(e.target.value) : 0)}
@@ -276,7 +276,7 @@ export default function PayrollSettingsPage() {
 
                 <div>
                   <label className="text-xs uppercase tracking-widest font-black mb-1 flex items-center gap-1" style={{ color: 'var(--ab-text-dim)' }}>
-                    <StickyNote size={12} /> Catatan Khusus
+                    <StickyNote size={12} /> Catatan Internal Finance
                   </label>
                   <textarea
                     className="ab-input w-full min-h-[60px] resize-none ab-scrollbar"
@@ -284,6 +284,7 @@ export default function PayrollSettingsPage() {
                     value={setting.notes || ''}
                     onChange={(e) => handleSettingChange(user.id, 'notes', e.target.value)}
                   />
+                  <p className="text-[10px] text-muted-foreground mt-1 italic">Hanya untuk catatan internal saja tidak akan dilihat oleh staff.</p>
                 </div>
               </div>
 

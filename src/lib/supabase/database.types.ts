@@ -298,7 +298,7 @@ export interface Database {
           id: string;
           title: string;
           description: string | null;
-          type: "result" | "activity" | "quality";
+          type: "result" | "activity" | "quality" | "lead_hr" | "hr";
           unit: string;
           period: string;
           category: KpiCategory;
@@ -317,7 +317,7 @@ export interface Database {
           id?: string;
           title: string;
           description?: string | null;
-          type?: "result" | "activity" | "quality";
+          type?: "result" | "activity" | "quality" | "lead_hr" | "hr";
           unit?: string;
           period?: string;
           category?: KpiCategory;
@@ -336,7 +336,7 @@ export interface Database {
           id?: string;
           title?: string;
           description?: string | null;
-          type?: "result" | "activity" | "quality";
+          type?: "result" | "activity" | "quality" | "lead_hr" | "hr";
           unit?: string;
           period?: string;
           category?: KpiCategory;
@@ -492,6 +492,8 @@ export interface Database {
           result_weight: number;
           activity_weight: number;
           quality_weight: number;
+          lead_hr_weight: number;
+          hr_weight: number;
           updated_by: string | null;
           updated_at: string;
         };
@@ -501,6 +503,8 @@ export interface Database {
           result_weight?: number;
           activity_weight?: number;
           quality_weight?: number;
+          lead_hr_weight?: number;
+          hr_weight?: number;
           updated_by?: string | null;
           updated_at?: string;
         };
@@ -510,6 +514,8 @@ export interface Database {
           result_weight?: number;
           activity_weight?: number;
           quality_weight?: number;
+          lead_hr_weight?: number;
+          hr_weight?: number;
           updated_by?: string | null;
           updated_at?: string;
         };

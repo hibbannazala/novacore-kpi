@@ -15,6 +15,7 @@ interface PayslipPrintViewProps {
   overtimePay: number;
   deductions: number;
   deductionNotes?: string;
+  notes?: string | null;
 }
 
 const MONTHS = [
@@ -45,7 +46,8 @@ export const PayslipPrintView = forwardRef<HTMLDivElement, PayslipPrintViewProps
   performanceBonus,
   overtimePay,
   deductions,
-  deductionNotes
+  deductionNotes,
+  notes
 }, ref) => {
   const formatCurrency = (amount: number) => {
     return 'Rp ' + amount.toLocaleString('id-ID');
@@ -181,8 +183,16 @@ export const PayslipPrintView = forwardRef<HTMLDivElement, PayslipPrintViewProps
             </tr>
           </tbody>
           <tfoot>
+            {notes && (
+              <tr>
+                <td colSpan={2} className="border border-gray-400 p-3 italic text-gray-700 bg-gray-50 whitespace-pre-wrap text-sm">
+                  <span className="font-semibold block mb-1 not-italic text-black">Catatan:</span>
+                  {notes}
+                </td>
+              </tr>
+            )}
             <tr className="bg-gray-100">
-              <td className="border border-gray-400 p-3 text-right font-black uppercase tracking-widest text-sm">Take Home Pay</td>
+              <td className="border border-gray-400 p-3 text-right font-black uppercase tracking-widest text-sm">Total Diterima</td>
               <td className="border border-gray-400 p-3 text-right font-black">{formatCurrency(thp)}</td>
             </tr>
           </tfoot>

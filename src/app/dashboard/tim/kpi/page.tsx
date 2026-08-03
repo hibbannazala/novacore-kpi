@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useMyAssignments } from "@/hooks/useAssignments";
 import { KpiCard } from "@/components/kpi/KpiCard";
 import { DailyInputForm } from "@/components/kpi/DailyInputForm";
+import { useKpiSettings } from "@/hooks/useKpiSettings";
 import { PeriodPicker, type Period } from "@/components/kpi/PeriodPicker";
 import { monthName, todayISODate } from "@/lib/utils";
 import type { KpiAssignmentWithDetails } from "@/types";
@@ -22,11 +23,15 @@ export default function TimKpiPage() {
   const selectedMonthNum = parseInt(filterMonth.split("-")[1]);
   const monthLabel = `${monthName(selectedMonthNum)} ${selectedYear}`;
 
-  const { assignments, isLoading } = useMyAssignments(
+  const { assignments, isLoading: loadingAssignments } = useMyAssignments(
     user?.id,
     selectedYear,
     selectedMonthNum
   );
+  
+  // Use the KPI settings hook to fetch user's specific weights
+  const { settings, isLoading: loadingSettings } = useKpiSettings(user?.id);
+  
   const [selected, setSelected] = useState<KpiAssignmentWithDetails | null>(null);
   const [period, setPeriod] = useState<Period>({ type: "month" });
 
@@ -35,7 +40,7 @@ export default function TimKpiPage() {
     setPeriod({ type: "month" });
   }
 
-  if (isLoading) {
+  if (loadingAssignments || loadingSettings) {
     return (
       <div className="flex h-40 items-center justify-center">
         <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -60,6 +65,43 @@ export default function TimKpiPage() {
           <PeriodPicker period={period} onChange={setPeriod} monthLabel={currentMonthLabel} maxDate={today} />
         </div>
       </div>
+
+      {settings && (
+        <div className="bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm">
+          <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">Rincian Komposisi Penilaian (Total 100%)</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-sm font-bold text-[var(--ab-primary)]">
+                <span>Performance (70%)</span>
+              </div>
+              <div className="h-2 flex rounded-full overflow-hidden bg-slate-200">
+                <div style={{ width: `${settings.resultWeight}%` }} className="bg-blue-500" title={`Result: ${settings.resultWeight}%`} />
+                <div style={{ width: `${settings.activityWeight}%` }} className="bg-purple-500" title={`Activity: ${settings.activityWeight}%`} />
+                <div style={{ width: `${settings.qualityWeight}%` }} className="bg-orange-500" title={`Quality: ${settings.qualityWeight}%`} />
+              </div>
+              <div className="flex justify-between text-[10px] uppercase font-bold text-slate-500 pt-1">
+                <span className="text-blue-500">Result: {settings.resultWeight}%</span>
+                <span className="text-purple-500">Activity: {settings.activityWeight}%</span>
+                <span className="text-orange-500">Quality: {settings.qualityWeight}%</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-sm font-bold text-teal-600">
+                <span>Personality & Behavior (30%)</span>
+              </div>
+              <div className="h-2 flex rounded-full overflow-hidden bg-slate-200">
+                <div style={{ width: `${settings.leadHrWeight}%` }} className="bg-sky-500" title={`Lead HR: ${settings.leadHrWeight}%`} />
+                <div style={{ width: `${settings.hrWeight}%` }} className="bg-emerald-500" title={`HR: ${settings.hrWeight}%`} />
+              </div>
+              <div className="flex justify-between text-[10px] uppercase font-bold text-slate-500 pt-1">
+                <span className="text-sky-500">Lead HR: {settings.leadHrWeight}%</span>
+                <span className="text-emerald-500">HR: {settings.hrWeight}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {assignments.length === 0 ? (
         <div className="flex h-40 flex-col items-center justify-center rounded-xl border border-dashed border-border text-center">

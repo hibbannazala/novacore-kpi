@@ -19,11 +19,13 @@ import { DailyReportsViewer } from "@/components/kpi/DailyReportsViewer";
 import type { User, KpiAssignment, KPI, DailyReport } from "@/types";
 import type { Period } from "@/components/kpi/PeriodPicker";
 
-const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality" };
+const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality", lead_hr: "Lead HR", hr: "HR" };
 const typeColor: Record<string, string> = {
   result: "text-blue-600 bg-blue-50",
   activity: "text-amber-600 bg-amber-50",
   quality: "text-purple-600 bg-purple-50",
+  lead_hr: "text-sky-600 bg-sky-50",
+  hr: "text-emerald-600 bg-emerald-50",
 };
 
 // Removed local getBrandColorClass in favor of getBrandColor utility
@@ -46,7 +48,7 @@ interface ExpandableStaffGridProps {
   users: User[];
   assignmentsMap: Record<string, KpiAssignment[]>;
   kpisMap: Record<string, KPI>;
-  getWeights: (userId: string) => { result: number; activity: number; quality: number };
+  getWeights: (userId: string) => { result: number; activity: number; quality: number; leadHr: number; hr: number; };
   expandedUsers: Set<string>;
   onToggleUser: (userId: string) => void;
   period?: Period;
