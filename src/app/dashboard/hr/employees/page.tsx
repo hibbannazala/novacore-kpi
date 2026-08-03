@@ -375,7 +375,7 @@ export default function HrEmployeesPage() {
                 <p className="text-xs font-semibold">Grup Personality (30%)</p>
                 {(
                   [
-                    { label: "Lead HR", value: leadHrW, set: setLeadHrW },
+                    { label: "Lead Tim", value: leadHrW, set: setLeadHrW },
                     { label: "HR", value: hrW, set: setHrW },
                   ] as { label: string; value: string; set: (v: string) => void }[]
                 ).map(({ label, value, set }) => (

@@ -35,7 +35,7 @@ function formatValue(value: number, unit: string): string {
 
 // Removed local getBrandColorClass logic to use global utility
 
-const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality", lead_hr: "Lead HR", hr: "HR" };
+const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality", lead_hr: "Lead Tim", hr: "HR" };
 const typeColor: Record<string, string> = {
   result: "text-blue-700 bg-blue-50 border-blue-200",
   activity: "text-amber-700 bg-amber-50 border-amber-200",

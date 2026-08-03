@@ -252,7 +252,7 @@ export function KpiFormPage({ kpiId, allowedDepartments, backHref }: KpiFormPage
                 <SelectItem value="result">Result</SelectItem>
                 <SelectItem value="activity">Activity</SelectItem>
                 <SelectItem value="quality">Quality</SelectItem>
-                <SelectItem value="lead_hr">Lead HR</SelectItem>
+                <SelectItem value="lead_hr">Lead Tim</SelectItem>
                 <SelectItem value="hr">HR</SelectItem>
               </SelectContent>
             </Select>

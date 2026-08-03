@@ -26,7 +26,7 @@ import type { KpiAssignment } from "@/types";
 
 type UserSortKey = "name" | "score";
 
-const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality", lead_hr: "Lead HR", hr: "HR" };
+const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality", lead_hr: "Lead Tim", hr: "HR" };
 const typeColor: Record<string, string> = {
   result: "text-blue-600 bg-blue-50",
   activity: "text-amber-600 bg-amber-50",

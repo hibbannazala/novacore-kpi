@@ -33,7 +33,7 @@ const statusLabel: Record<string, string> = {
 const statusVariant: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   draft: "secondary", active: "default", hold: "outline", cancelled: "destructive", completed: "secondary", archived: "outline",
 };
-const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality", lead_hr: "Lead HR", hr: "HR" };
+const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality", lead_hr: "Lead Tim", hr: "HR" };
 const typeColor: Record<string, string> = {
   result: "text-blue-600 bg-blue-50",
   activity: "text-amber-600 bg-amber-50",
@@ -189,7 +189,7 @@ export default function HeadKpiSetupPage() {
             <SelectItem value="result">Result</SelectItem>
             <SelectItem value="activity">Activity</SelectItem>
             <SelectItem value="quality">Quality</SelectItem>
-            <SelectItem value="lead_hr">Lead HR</SelectItem>
+            <SelectItem value="lead_hr">Lead Tim</SelectItem>
             <SelectItem value="hr">HR</SelectItem>
           </SelectContent>
         </Select>

@@ -167,12 +167,12 @@ export default function EvaluasiHrPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-base font-semibold">Evaluasi HR (Personality & Work Behavior)</h2>
-        <p className="text-sm text-muted-foreground">{assignments.length} KPI Lead HR / HR aktif bulan ini</p>
+        <p className="text-sm text-muted-foreground">{assignments.length} KPI Lead Tim / HR aktif bulan ini</p>
       </div>
 
       {assignments.length === 0 ? (
         <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-border">
-          <p className="text-sm text-muted-foreground">Tidak ada KPI Personality (Lead HR / HR) aktif bulan ini</p>
+          <p className="text-sm text-muted-foreground">Tidak ada KPI Personality (Lead Tim / HR) aktif bulan ini</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -184,7 +184,7 @@ export default function EvaluasiHrPage() {
                   <p className="text-xs text-muted-foreground">{userName} · {assignment.department}</p>
                   <div className="mt-1 flex items-center gap-2">
                     <span className="text-[10px] uppercase font-bold tracking-widest text-primary/80 bg-primary/10 px-2 py-0.5 rounded-full">
-                      {kpi.type === 'lead_hr' ? 'Lead HR' : 'HR'}
+                      {kpi.type === 'lead_hr' ? 'Lead Tim' : 'HR'}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       Aktual: {formatPercentage(assignment.actualTotal)} / {formatPercentage(assignment.monthlyTarget)}

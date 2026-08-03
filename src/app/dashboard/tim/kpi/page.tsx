@@ -91,11 +91,11 @@ export default function TimKpiPage() {
                 <span>Personality & Behavior (30%)</span>
               </div>
               <div className="h-2 flex rounded-full overflow-hidden bg-slate-200">
-                <div style={{ width: `${settings.leadHrWeight}%` }} className="bg-sky-500" title={`Lead HR: ${settings.leadHrWeight}%`} />
+                <div style={{ width: `${settings.leadHrWeight}%` }} className="bg-sky-500" title={`Lead Tim: ${settings.leadHrWeight}%`} />
                 <div style={{ width: `${settings.hrWeight}%` }} className="bg-emerald-500" title={`HR: ${settings.hrWeight}%`} />
               </div>
               <div className="flex justify-between text-[10px] uppercase font-bold text-slate-500 pt-1">
-                <span className="text-sky-500">Lead HR: {settings.leadHrWeight}%</span>
+                <span className="text-sky-500">Lead Tim: {settings.leadHrWeight}%</span>
                 <span className="text-emerald-500">HR: {settings.hrWeight}%</span>
               </div>
             </div>

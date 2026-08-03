@@ -10,7 +10,7 @@ interface Props {
   compact?: boolean;
 }
 
-const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality", lead_hr: "Lead HR", hr: "HR" };
+const typeLabel: Record<string, string> = { result: "Result", activity: "Activity", quality: "Quality", lead_hr: "Lead Tim", hr: "HR" };
 
 const typeColor: Record<string, string> = {
   result: "text-blue-600",

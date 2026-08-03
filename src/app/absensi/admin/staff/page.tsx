@@ -601,7 +601,7 @@ export default function AdminStaffPage() {
                   <span className="text-[10px] font-black uppercase tracking-widest text-[var(--ab-text-main)]">Grup Personality (30%)</span>
                 </div>
                 {[
-                  { key: "leadHr", label: "Lead HR", col: "#3b82f6" },
+                  { key: "leadHr", label: "Lead Tim", col: "#3b82f6" },
                   { key: "hr", label: "HR", col: "#10b981" },
                 ].map((item) => (
                   <div key={item.key} className="space-y-2">
