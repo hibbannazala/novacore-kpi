@@ -173,7 +173,7 @@ export default function AdminStaffPage() {
         quality_weight: kpiWeights.quality,
         lead_tim_weight: kpiWeights.leadTim,
         hr_weight: kpiWeights.hr,
-      });
+      }, { onConflict: "user_id" });
       if (error) throw error;
       toast.success("Pengaturan KPI berhasil disimpan.", { id: tid });
       setKpiUser(null);
@@ -206,7 +206,7 @@ export default function AdminStaffPage() {
         lead_tim_weight: kpiWeights.leadTim,
         hr_weight: kpiWeights.hr,
       }));
-      const { error } = await supabase.from("kpi_settings").upsert(upserts);
+      const { error } = await supabase.from("kpi_settings").upsert(upserts, { onConflict: "user_id" });
       if (error) throw error;
       toast.success("Bobot global berhasil diterapkan ke seluruh staf aktif.", { id: tid });
       setGlobalKpiModalOpen(false);
