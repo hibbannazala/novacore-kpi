@@ -195,7 +195,7 @@ create trigger trg_daily_reports_updated_at
 -- TRIGGER: recalculate kpi_assignments.actual_total setelah daily_report insert/update/delete
 -- ============================================================
 create or replace function public.recalculate_assignment_totals()
-returns trigger language plpgsql as $$
+  returns trigger language plpgsql security definer as $$
 declare
   v_assignment_id uuid;
   v_total         numeric;

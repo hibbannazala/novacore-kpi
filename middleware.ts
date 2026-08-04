@@ -3,12 +3,12 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Old routes that should redirect to correct routes
 const OLD_ROUTE_REDIRECTS: Record<string, string> = {
-  "/absensi/staff":    "/absensi/home",
-  "/absensi/checkin":  "/absensi/home",
-  "/absensi/check-in": "/absensi/home",
-  "/absensi/presensi": "/absensi/home",
-  "/absensi/user":     "/absensi/home",
-  "/absensi/karyawan": "/absensi/home",
+  "/absensi/staff":    "/absensi/guide",
+  "/absensi/checkin":  "/absensi/guide",
+  "/absensi/check-in": "/absensi/guide",
+  "/absensi/presensi": "/absensi/guide",
+  "/absensi/user":     "/absensi/guide",
+  "/absensi/karyawan": "/absensi/guide",
 };
 
 // Admin/privileged routes - skip time-based redirect for these
