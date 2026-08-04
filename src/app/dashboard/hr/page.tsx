@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export default function HrDashboard() {
   const { user } = useAuth();
   const now = new Date();
-  const todayDisplay = formatDateDisplay(now.toISOString().split("T")[0]);
+  const todayDisplay = formatDateDisplay((() => { const _d = new Date(); return `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, "0")}-${String(_d.getDate()).padStart(2, "0")}`; })());
   const { kpis } = useKpis(now.getFullYear(), now.getMonth() + 1);
   const { departments } = useDepartments();
   const { users } = useAllUsers();

@@ -104,7 +104,7 @@ function buildDateRange(start: string, end: string): string[] {
   let cur = new Date(start);
   const endD = new Date(end);
   while (cur <= endD) {
-    out.push(cur.toISOString().split("T")[0]);
+    out.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`);
     cur.setDate(cur.getDate() + 1);
   }
   return out;
@@ -117,7 +117,8 @@ export default function AdminDashboardPage() {
   const { settings } = useAbsensiSettings();
   const { holidays, holidayDates } = useHolidays();
 
-  const today = new Date().toISOString().split("T")[0];
+  const todayLocal = new Date();
+  const today = `${todayLocal.getFullYear()}-${String(todayLocal.getMonth() + 1).padStart(2, "0")}-${String(todayLocal.getDate()).padStart(2, "0")}`;
   const [filterDate, setFilterDate]   = useState(today);
   const [logs, setLogs]               = useState<AttLog[]>([]);
   const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);

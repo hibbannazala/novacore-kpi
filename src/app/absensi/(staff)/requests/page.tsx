@@ -16,7 +16,8 @@ import {
 import { toast } from "sonner";
 
 function getToday() {
-  return new Date().toISOString().split("T")[0];
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 type ConfirmCfg = {
@@ -58,7 +59,7 @@ export default function StaffRequestsPage() {
     let added = 0, holidayFound = 0;
 
     while (cur <= endObj) {
-      const s = cur.toISOString().split("T")[0];
+      const s = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
       const dow = cur.getDay();
       const isHol = holidayDates.includes(s);
       if (dow !== 0 && dow !== 6 && !isHol) {

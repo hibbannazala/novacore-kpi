@@ -84,7 +84,7 @@ export default function StaffTeamPage() {
   const changeMonth = (offset: number) =>
     setCurrentDate(new Date(year, month + offset, 1));
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
   const holidayDates = new Set(holidays.map((h) => h.date));
 
   const renderCells = () => {

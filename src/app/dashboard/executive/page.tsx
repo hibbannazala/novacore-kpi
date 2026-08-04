@@ -26,8 +26,8 @@ export default function ExecutiveDashboard() {
   const { user } = useAuth();
   const now = new Date();
   const monthLabel = `${monthName(now.getMonth() + 1)} ${now.getFullYear()}`;
-  const today = todayISODate();
-  const todayDisplay = formatDateDisplay(now.toISOString().split("T")[0]);
+  const today = (() => { const _d = new Date(); return `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, "0")}-${String(_d.getDate()).padStart(2, "0")}`; })();
+  const todayDisplay = formatDateDisplay((() => { const _d = new Date(); return `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, "0")}-${String(_d.getDate()).padStart(2, "0")}`; })());
 
   const [period, setPeriod] = useState<Period>({ type: "month" });
   const { departments, isLoading: deptLoading } = useDepartments();
