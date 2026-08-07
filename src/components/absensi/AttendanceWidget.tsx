@@ -69,6 +69,7 @@ export function AttendanceWidget() {
   const [showEarlyPrompt, setShowEarlyPrompt] = useState(false);
   const [showRadiusWarning, setShowRadiusWarning] = useState(false);
   const [showLateReasonPrompt, setShowLateReasonPrompt] = useState(false);
+  const [showGpsPrePrompt, setShowGpsPrePrompt] = useState(false);
   const [selectedView, setSelectedView] = useState<SummaryView>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -332,7 +333,8 @@ export function AttendanceWidget() {
   const onAbsenClick = () => {
     if (isProcessing) return;
     if (!attendance) {
-      processCheckIn();
+      // Show pre-permission prompt first before triggering browser GPS
+      setShowGpsPrePrompt(true);
     } else if (!attendance.checkOut) {
       const [eH, eM] = (settings.workEnd || "18:00").split(":").map(Number);
       const endLim = new Date(); endLim.setHours(eH, eM, 0, 0);
@@ -341,6 +343,19 @@ export function AttendanceWidget() {
       } else {
         setShowCheckoutConfirm(true);
       }
+    }
+  };
+
+  const onGpsPrePromptConfirm = (withGps: boolean) => {
+    setShowGpsPrePrompt(false);
+    if (withGps) {
+      processCheckIn();
+    } else {
+      // Check-in without GPS
+      setIsProcessing(true);
+      doCheckIn(null).then((result) => {
+        finalizeCheckIn(result);
+      });
     }
   };
 
@@ -603,6 +618,91 @@ export function AttendanceWidget() {
       </div>
 
       {/* Quota Cards removed from widget to be placed globally */}
+
+      {/* GPS Pre-Permission Modal */}
+      {showGpsPrePrompt &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="ab-confirm-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowGpsPrePrompt(false); }}>
+            <div className="w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
+              <div className="p-8 text-center">
+                <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-blue-50 dark:border-blue-800">
+                  <MapPin size={32} className="text-blue-600 animate-bounce" />
+                </div>
+                <h3 className="text-2xl font-black text-[var(--ab-text-main)] uppercase tracking-tight mb-3">
+                  Izin Lokasi GPS
+                </h3>
+                {locationPerm === "denied" ? (
+                  <>
+                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-3xl p-5 mb-6">
+                      <p className="text-sm font-bold text-amber-700 dark:text-amber-300 leading-relaxed mb-4">
+                        ⚠️ Izin lokasi sudah pernah diblokir di browser Anda. Browser tidak bisa menampilkan pop-up izin lagi secara otomatis.
+                      </p>
+                      <div className="space-y-3 text-left">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-2">
+                          Cara Mengaktifkan Ulang:
+                        </p>
+                        {[
+                          { icon: <Lock size={14} className="text-blue-500" />, text: `Klik ikon ${isIOS ? '"AA"' : 'Gembok 🔒'} di sebelah alamat URL browser.` },
+                          { icon: <Info size={14} className="text-green-500" />, text: `Pilih ${isIOS ? '"Website Settings"' : '"Permissions" atau "Site Settings"'}.` },
+                          { icon: <MapPin size={14} className="text-orange-500" />, text: 'Ubah status "Location" menjadi "Allow / Izinkan".' },
+                        ].map((step, i) => (
+                          <div key={i} className="flex items-start gap-3">
+                            <div className="bg-white dark:bg-slate-800 p-2 rounded-xl border border-[var(--ab-border)] shrink-0">
+                              {step.icon}
+                            </div>
+                            <p className="text-xs font-bold text-[var(--ab-text-main)]">{step.text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => window.location.reload()}
+                        className="flex-1 bg-blue-600 text-white py-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg hover:bg-blue-700 transition-all active:scale-95"
+                      >
+                        🔄 Refresh Setelah Reset
+                      </button>
+                      <button
+                        onClick={() => onGpsPrePromptConfirm(false)}
+                        className="flex-1 bg-[var(--ab-bg-main)] text-[var(--ab-text-main)] py-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] border border-[var(--ab-border)] hover:bg-[var(--ab-bg-surface)] transition-all active:scale-95"
+                      >
+                        Absen Tanpa GPS
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-[var(--ab-text-dim)] font-medium leading-relaxed mb-3">
+                      Sistem membutuhkan akses lokasi GPS untuk memvalidasi area kantor Anda.
+                    </p>
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-3xl p-5 mb-6">
+                      <p className="text-xs font-bold text-blue-700 dark:text-blue-300 leading-relaxed">
+                        💡 Setelah klik tombol di bawah, browser akan menampilkan pop-up izin lokasi. <strong>Pastikan klik &quot;Izinkan&quot; / &quot;Allow&quot;</strong> agar lokasi Anda terdeteksi.
+                      </p>
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => onGpsPrePromptConfirm(true)}
+                        className="flex-1 text-white py-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg transition-all active:scale-95"
+                        style={{ background: "var(--ab-primary)" }}
+                      >
+                        ✅ Izinkan & Check-In
+                      </button>
+                      <button
+                        onClick={() => onGpsPrePromptConfirm(false)}
+                        className="flex-1 bg-[var(--ab-bg-main)] text-[var(--ab-text-main)] py-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] border border-[var(--ab-border)] hover:bg-[var(--ab-bg-surface)] transition-all active:scale-95"
+                      >
+                        Tanpa GPS
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
       {/* Location Guide Modal */}
       {showLocationGuide &&
