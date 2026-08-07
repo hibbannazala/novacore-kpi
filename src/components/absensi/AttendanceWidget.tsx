@@ -336,11 +336,20 @@ export function AttendanceWidget() {
   };
 
   const onAbsenClick = () => {
+    console.log("onAbsenClick triggered! isProcessing:", isProcessing, "attendance:", attendance, "isHoliday:", isHoliday);
     if (isProcessing) return;
+    
+    // Safety timeout in case it gets stuck
+    setTimeout(() => {
+      setIsProcessing(false);
+    }, 15000);
+
     if (!attendance) {
+      console.log("Showing GPS pre-prompt modal");
       // Show pre-permission prompt first before triggering browser GPS
       setShowGpsPrePrompt(true);
     } else if (!attendance.checkOut) {
+      console.log("Showing checkout confirm modal");
       const [eH, eM] = (settings.workEnd || "18:00").split(":").map(Number);
       const endLim = new Date(); endLim.setHours(eH, eM, 0, 0);
       if (new Date() < endLim) {
@@ -968,6 +977,9 @@ export function AttendanceWidget() {
           setIsProcessing(false);
         }}
       />
+      <div className="text-center mt-2 opacity-30 text-[8px] font-mono">
+        v.2.0.1
+      </div>
     </div>
   );
 }
