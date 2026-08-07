@@ -561,7 +561,7 @@ export function AttendanceWidget() {
         <div className="relative flex justify-center py-6 px-2">
           <button
             onClick={onAbsenClick}
-            disabled={isProcessing || (attendance ? !!attendance.checkOut : isHoliday)}
+            disabled={isProcessing || (attendance ? !!attendance.checkOut : false)}
             className="group relative w-full h-16 md:h-20 rounded-[24px] shadow-2xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:grayscale overflow-hidden flex items-center justify-center gap-4 text-white"
             style={{ 
               background: btnBg, 
@@ -634,10 +634,8 @@ export function AttendanceWidget() {
       {/* Quota Cards removed from widget to be placed globally */}
 
       {/* GPS Pre-Permission Modal */}
-      {showGpsPrePrompt &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div className="ab-confirm-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowGpsPrePrompt(false); }}>
+      {showGpsPrePrompt && (
+          <div className="ab-confirm-overlay" style={{ zIndex: 99999 }} onClick={(e) => { if (e.target === e.currentTarget) setShowGpsPrePrompt(false); }}>
             <div className="w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
               <div className="p-8 text-center">
                 <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-blue-50 dark:border-blue-800">
@@ -714,15 +712,12 @@ export function AttendanceWidget() {
                 )}
               </div>
             </div>
-          </div>,
-          document.body
+          </div>
         )}
 
       {/* Location Guide Modal */}
-      {showLocationGuide &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div className="ab-confirm-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowLocationGuide(false); }}>
+      {showLocationGuide && (
+          <div className="ab-confirm-overlay" style={{ zIndex: 99999 }} onClick={(e) => { if (e.target === e.currentTarget) setShowLocationGuide(false); }}>
             <div className="w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
               <div className="p-8 text-center">
                 <div className="w-20 h-20 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-orange-50 dark:border-orange-800 animate-bounce">
@@ -777,15 +772,12 @@ export function AttendanceWidget() {
                 </div>
               </div>
             </div>
-          </div>,
-          document.body
+          </div>
         )}
 
       {/* Summary Detail Modal */}
-      {selectedView &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div className="ab-confirm-overlay" onClick={(e) => { if (e.target === e.currentTarget) setSelectedView(null); }}>
+      {selectedView && (
+          <div className="ab-confirm-overlay" style={{ zIndex: 99999 }} onClick={(e) => { if (e.target === e.currentTarget) setSelectedView(null); }}>
             <div className="w-full max-w-sm rounded-[40px] shadow-2xl overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
               <div className="p-6 border-b border-[var(--ab-border)] flex justify-between items-center">
                 <div className="flex items-center gap-3">
@@ -839,8 +831,7 @@ export function AttendanceWidget() {
                 </p>
               </div>
             </div>
-          </div>,
-          document.body
+          </div>
         )}
 
       {/* Dialogs */}
@@ -860,10 +851,8 @@ export function AttendanceWidget() {
         onCancel={() => setShowEarlyPrompt(false)}
       />
       {/* Radius Warning Modal with Sync */}
-      {showRadiusWarning &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div className="ab-confirm-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowRadiusWarning(false); setPendingLocation(null); setSyncRetryCount(0); } }}>
+      {showRadiusWarning && (
+          <div className="ab-confirm-overlay" style={{ zIndex: 99999 }} onClick={(e) => { if (e.target === e.currentTarget) { setShowRadiusWarning(false); setPendingLocation(null); setSyncRetryCount(0); } }}>
             <div className="w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
               <div className="p-8 text-center">
                 <div className="w-20 h-20 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-orange-50 dark:border-orange-800">
@@ -962,8 +951,7 @@ export function AttendanceWidget() {
                 </div>
               </div>
             </div>
-          </div>,
-          document.body
+          </div>
         )}
       <PromptDialog
         isOpen={showLateReasonPrompt}
