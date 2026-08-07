@@ -1,6 +1,5 @@
 "use client";
 
-import { createPortal } from "react-dom";
 import { TriangleAlert } from "lucide-react";
 
 interface Props {
@@ -26,8 +25,8 @@ export default function ConfirmDialog({
 }: Props) {
   if (!isOpen) return null;
 
-  return createPortal(
-    <div className="ab-confirm-overlay ab-animate-fadeIn">
+  return (
+    <div className="ab-confirm-overlay ab-animate-fadeIn" style={{ zIndex: 99999 }}>
       <div className="rounded-[32px] p-8 max-w-sm w-full mx-4 shadow-2xl ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
         <div className="flex flex-col items-center text-center">
           <div className={`${colors[type]} w-16 h-16 rounded-3xl flex items-center justify-center text-white mb-6 shadow-lg`}>
@@ -55,7 +54,6 @@ export default function ConfirmDialog({
           </div>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
   );
 }
