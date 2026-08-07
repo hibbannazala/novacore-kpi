@@ -635,7 +635,7 @@ export function AttendanceWidget() {
 
       {/* GPS Pre-Permission Modal */}
       {showGpsPrePrompt && (
-          <div className="ab-confirm-overlay" style={{ zIndex: 99999 }} onClick={(e) => { if (e.target === e.currentTarget) setShowGpsPrePrompt(false); }}>
+          <div className="ab-confirm-overlay fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 99999, background: "rgba(2, 8, 23, 0.65)", backdropFilter: "blur(8px)" }} onClick={(e) => { if (e.target === e.currentTarget) setShowGpsPrePrompt(false); }}>
             <div className="w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
               <div className="p-8 text-center">
                 <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-blue-50 dark:border-blue-800">
@@ -717,7 +717,7 @@ export function AttendanceWidget() {
 
       {/* Location Guide Modal */}
       {showLocationGuide && (
-          <div className="ab-confirm-overlay" style={{ zIndex: 99999 }} onClick={(e) => { if (e.target === e.currentTarget) setShowLocationGuide(false); }}>
+          <div className="ab-confirm-overlay fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 99999, background: "rgba(2, 8, 23, 0.65)", backdropFilter: "blur(8px)" }} onClick={(e) => { if (e.target === e.currentTarget) setShowLocationGuide(false); }}>
             <div className="w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
               <div className="p-8 text-center">
                 <div className="w-20 h-20 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-orange-50 dark:border-orange-800 animate-bounce">
@@ -777,7 +777,7 @@ export function AttendanceWidget() {
 
       {/* Summary Detail Modal */}
       {selectedView && (
-          <div className="ab-confirm-overlay" style={{ zIndex: 99999 }} onClick={(e) => { if (e.target === e.currentTarget) setSelectedView(null); }}>
+          <div className="ab-confirm-overlay fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 99999, background: "rgba(2, 8, 23, 0.65)", backdropFilter: "blur(8px)" }} onClick={(e) => { if (e.target === e.currentTarget) setSelectedView(null); }}>
             <div className="w-full max-w-sm rounded-[40px] shadow-2xl overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
               <div className="p-6 border-b border-[var(--ab-border)] flex justify-between items-center">
                 <div className="flex items-center gap-3">
@@ -852,7 +852,7 @@ export function AttendanceWidget() {
       />
       {/* Radius Warning Modal with Sync */}
       {showRadiusWarning && (
-          <div className="ab-confirm-overlay" style={{ zIndex: 99999 }} onClick={(e) => { if (e.target === e.currentTarget) { setShowRadiusWarning(false); setPendingLocation(null); setSyncRetryCount(0); } }}>
+          <div className="ab-confirm-overlay fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 99999, background: "rgba(2, 8, 23, 0.65)", backdropFilter: "blur(8px)" }} onClick={(e) => { if (e.target === e.currentTarget) { setShowRadiusWarning(false); setPendingLocation(null); setSyncRetryCount(0); } }}>
             <div className="w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
               <div className="p-8 text-center">
                 <div className="w-20 h-20 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-orange-50 dark:border-orange-800">
