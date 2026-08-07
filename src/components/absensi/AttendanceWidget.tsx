@@ -70,6 +70,9 @@ export function AttendanceWidget() {
   const [showRadiusWarning, setShowRadiusWarning] = useState(false);
   const [showLateReasonPrompt, setShowLateReasonPrompt] = useState(false);
   const [showGpsPrePrompt, setShowGpsPrePrompt] = useState(false);
+  const [syncRetryCount, setSyncRetryCount] = useState(0);
+  const [pendingDistance, setPendingDistance] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [selectedView, setSelectedView] = useState<SummaryView>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -287,8 +290,10 @@ export function AttendanceWidget() {
         toast.dismiss(toastId);
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         const dist = calcDist(loc.lat, loc.lng, settings.officeLat, settings.officeLng);
-        if (dist > 500) {
+        if (dist > (settings.officeRadius || 100)) {
           setPendingLocation(loc);
+          setPendingDistance(Math.round(dist));
+          setSyncRetryCount(0);
           setShowRadiusWarning(true);
           setIsProcessing(false);
           return;
@@ -845,20 +850,112 @@ export function AttendanceWidget() {
         onConfirm={(reason) => processCheckOut(reason)}
         onCancel={() => setShowEarlyPrompt(false)}
       />
-      <ConfirmDialog
-        isOpen={showRadiusWarning}
-        title="Peringatan Kedisiplinan"
-        message="Anda melebihi radius 500 meter dari kantor. Apakah Anda sudah mengajukan WFA? Jika belum, silakan ajukan agar datanya rapih. Tetap lanjutkan atau ingin ajukan WFA terlebih dahulu?"
-        type="warning"
-        confirmLabel="Tetap Lanjutkan"
-        cancelLabel="Ajukan WFA"
-        onConfirm={() => processCheckIn(pendingLocation)}
-        onCancel={() => {
-          setShowRadiusWarning(false);
-          setPendingLocation(null);
-          router.push("/absensi/requests");
-        }}
-      />
+      {/* Radius Warning Modal with Sync */}
+      {showRadiusWarning &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="ab-confirm-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowRadiusWarning(false); setPendingLocation(null); setSyncRetryCount(0); } }}>
+            <div className="w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
+              <div className="p-8 text-center">
+                <div className="w-20 h-20 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-orange-50 dark:border-orange-800">
+                  <MapPin size={32} className="text-orange-600" />
+                </div>
+                <h3 className="text-2xl font-black text-[var(--ab-text-main)] uppercase tracking-tight mb-3">
+                  Di Luar Area Kantor
+                </h3>
+                <p className="text-sm text-[var(--ab-text-dim)] font-medium leading-relaxed mb-2">
+                  Lokasi Anda terdeteksi <strong className="text-orange-600">{pendingDistance} meter</strong> dari kantor.
+                </p>
+                <p className="text-xs text-[var(--ab-text-dim)] mb-6">
+                  Radius kantor: {settings.officeRadius || 100} meter
+                </p>
+
+                {/* Sync button - max 2 retries */}
+                {syncRetryCount < 2 ? (
+                  <>
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-3xl p-4 mb-5">
+                      <p className="text-xs font-bold text-blue-700 dark:text-blue-300 leading-relaxed">
+                        💡 Jika Anda yakin sudah di area kantor, coba sinkronkan ulang lokasi GPS. Sinyal GPS kadang meleset.
+                      </p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        setIsSyncing(true);
+                        const toastId = toast.loading("Sinkronisasi GPS...");
+                        navigator.geolocation.getCurrentPosition(
+                          (pos) => {
+                            toast.dismiss(toastId);
+                            const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                            const dist = calcDist(loc.lat, loc.lng, settings.officeLat, settings.officeLng);
+                            const newCount = syncRetryCount + 1;
+                            setSyncRetryCount(newCount);
+                            setPendingLocation(loc);
+                            setPendingDistance(Math.round(dist));
+                            if (dist <= (settings.officeRadius || 100)) {
+                              toast.success("Lokasi terdeteksi dalam area kantor!");
+                              setShowRadiusWarning(false);
+                              setSyncRetryCount(0);
+                              setIsProcessing(true);
+                              doCheckIn(loc).then(finalizeCheckIn);
+                            } else {
+                              toast.error(`Masih di luar area (${Math.round(dist)}m). Sisa percobaan: ${2 - newCount}x`);
+                            }
+                            setIsSyncing(false);
+                          },
+                          () => {
+                            toast.dismiss(toastId);
+                            toast.error("Gagal mendapatkan lokasi GPS.");
+                            setIsSyncing(false);
+                          },
+                          { enableHighAccuracy: true }
+                        );
+                      }}
+                      disabled={isSyncing}
+                      className="w-full text-white py-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg transition-all active:scale-95 mb-3 flex items-center justify-center gap-3 disabled:opacity-60"
+                      style={{ background: "#3b82f6" }}
+                    >
+                      <MapPin size={16} className={isSyncing ? "animate-spin" : ""} />
+                      {isSyncing ? "Menyinkronkan..." : `🔄 Sinkron Lokasi (${2 - syncRetryCount}x tersisa)`}
+                    </button>
+                  </>
+                ) : (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-3xl p-4 mb-5">
+                    <p className="text-xs font-bold text-amber-700 dark:text-amber-300 leading-relaxed">
+                      ⚠️ Sudah 2x sinkronisasi tetapi masih di luar area. Anda tetap bisa absen dengan status <strong>&quot;Di Luar Area&quot;</strong>.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-3 mt-2">
+                  <button
+                    onClick={() => {
+                      setShowRadiusWarning(false);
+                      setSyncRetryCount(0);
+                      setIsProcessing(true);
+                      processCheckIn(pendingLocation);
+                    }}
+                    className="flex-1 text-white py-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg transition-all active:scale-95"
+                    style={{ background: syncRetryCount >= 2 ? "var(--ab-primary)" : "#f97316" }}
+                  >
+                    {syncRetryCount >= 2 ? "✅ Absen Sekarang" : "⚡ Tetap Absen"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowRadiusWarning(false);
+                      setPendingLocation(null);
+                      setSyncRetryCount(0);
+                      router.push("/absensi/requests");
+                    }}
+                    className="flex-1 bg-[var(--ab-bg-main)] text-[var(--ab-text-main)] py-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] border border-[var(--ab-border)] hover:bg-[var(--ab-bg-surface)] transition-all active:scale-95"
+                  >
+                    📝 Ajukan WFA
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
       <PromptDialog
         isOpen={showLateReasonPrompt}
         title="Konfirmasi Telat"
