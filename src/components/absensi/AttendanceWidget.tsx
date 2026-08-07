@@ -364,9 +364,8 @@ export function AttendanceWidget() {
   }
 
   // ─ Render ─────────────────────────────────────────────────────────────────────
-  const isLocationDenied = !attendance && locationPerm === "denied";
-  const btnBg = isLocationDenied ? "#FFAB00" : "var(--ab-primary)";
-  const btnShadow = isLocationDenied ? "0 20px 40px -12px rgba(255,171,0,0.4)" : "0 20px 40px -12px var(--ab-primary-glow)";
+  const btnBg = "var(--ab-primary)";
+  const btnShadow = "0 20px 40px -12px var(--ab-primary-glow)";
 
   return (
     <div className="space-y-6 pb-4 ab-animate-fadeIn">
@@ -537,30 +536,24 @@ export function AttendanceWidget() {
             className="group relative w-full h-16 md:h-20 rounded-[24px] shadow-2xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:grayscale overflow-hidden flex items-center justify-center gap-4 text-white"
             style={{ 
               background: btnBg, 
-              boxShadow: isLocationDenied ? "0 15px 40px -10px rgba(255,171,0,0.6)" : "0 15px 40px -10px var(--ab-primary-glow)",
+              boxShadow: "0 15px 40px -10px var(--ab-primary-glow)",
               border: "2px solid rgba(255,255,255,0.1)"
             }}
           >
-            {isLocationDenied ? (
-              <AlertCircle size={28} className="animate-pulse" />
-            ) : (
-              <Fingerprint
-                size={32}
-                className="group-hover:scale-110 group-active:scale-90 transition-transform duration-300"
-              />
-            )}
+            <Fingerprint
+              size={32}
+              className="group-hover:scale-110 group-active:scale-90 transition-transform duration-300"
+            />
             <div className="text-left flex flex-col justify-center">
               <p className="text-[10px] opacity-80 font-black tracking-[0.2em] mb-1 leading-none uppercase">
-                {isLocationDenied ? "Izin Diblokir" : "Presensi Digital"}
+                Presensi Digital
               </p>
               <p className="text-sm md:text-base font-black uppercase tracking-tight leading-none">
-                {isLocationDenied
-                  ? "Buka Kunci"
-                  : !attendance
-                    ? "Mulai Shift Sekarang"
-                    : attendance.checkOut
-                      ? "Shift Selesai"
-                      : "Akhiri Shift (Tap Pulang)"}
+                {!attendance
+                  ? "Mulai Shift Sekarang"
+                  : attendance.checkOut
+                    ? "Shift Selesai"
+                    : "Akhiri Shift (Tap Pulang)"}
               </p>
             </div>
           </button>
