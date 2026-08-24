@@ -430,8 +430,8 @@ export function AttendanceWidget() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-[var(--ab-bg-surface)] rounded-xl flex items-center justify-center p-1.5 ab-nm-button">
-            <img src="/logo-icon.png" alt="NovaCore" className="w-full h-full object-contain" />
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden ab-nm-button shrink-0">
+            <img src="/logos/logo-nova-core-app-512px.webp" alt="NovaCore" className="w-full h-full object-cover" />
           </div>
           <div>
             <h1 className="text-xl font-black text-[var(--ab-text-main)] tracking-tight leading-none">
