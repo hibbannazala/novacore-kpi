@@ -31,6 +31,12 @@ function LoginContent() {
     <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
+          <img
+            src="/logos/logo-nova-core-app-512px.webp"
+            alt="NovaCore Logo"
+            className="w-16 h-16 rounded-2xl mx-auto mb-4"
+            style={{ boxShadow: "0 10px 25px -5px var(--ab-primary-glow)" }}
+          />
           <h1 className="text-2xl font-bold tracking-tight">NovaCore KPI</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Operational KPI Management System

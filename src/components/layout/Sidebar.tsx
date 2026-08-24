@@ -136,9 +136,12 @@ export function Sidebar() {
     <aside className="hidden md:flex h-screen w-64 flex-col border-r border-[var(--ab-border)] bg-[var(--ab-bg-surface)] z-50 shadow-xl transition-all duration-300">
       {/* Brand */}
       <div className="flex h-24 items-center gap-3 px-8 mt-2 border-b border-[var(--ab-border)] pb-2 mb-2">
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 text-white" style={{ background: "var(--ab-primary)", boxShadow: "0 10px 25px -5px var(--ab-primary-glow)" }}>
-          <Target className="h-6 w-6" />
-        </div>
+        <img
+          src="/logos/logo-nova-core-app-512px.webp"
+          alt="NovaCore Logo"
+          className="w-12 h-12 rounded-2xl shrink-0"
+          style={{ boxShadow: "0 10px 25px -5px var(--ab-primary-glow)" }}
+        />
         <div>
           <h1 className="text-lg font-black text-[var(--ab-text-main)] tracking-tight leading-none">NovaCore</h1>
           <p className="text-[10px] font-black uppercase tracking-[0.15em] mt-1" style={{ color: "var(--ab-primary)" }}>KPI Management</p>

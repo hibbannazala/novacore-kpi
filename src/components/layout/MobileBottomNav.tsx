@@ -48,12 +48,12 @@ export function MobileBottomNav() {
         <div className="md:hidden fixed inset-0 z-[90] bg-[var(--ab-bg-main)] flex flex-col animate-in fade-in zoom-in-95 duration-200">
           <div className="flex items-center justify-between p-6 border-b border-[var(--ab-border)] bg-[var(--ab-bg-surface)]">
             <div className="flex items-center gap-3">
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white"
-                style={{ background: "var(--ab-primary)", boxShadow: "0 5px 15px -3px var(--ab-primary-glow)" }}
-              >
-                <Target className="h-5 w-5" />
-              </div>
+              <img
+                src="/logos/logo-nova-core-app-512px.webp"
+                alt="NovaCore Logo"
+                className="w-10 h-10 rounded-xl shrink-0"
+                style={{ boxShadow: "0 5px 15px -3px var(--ab-primary-glow)" }}
+              />
               <h1 className="text-lg font-black text-[var(--ab-text-main)] tracking-tight leading-none">NovaCore</h1>
             </div>
             <button
