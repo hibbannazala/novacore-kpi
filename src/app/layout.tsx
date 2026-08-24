@@ -9,6 +9,14 @@ const font = Plus_Jakarta_Sans({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "NovaCore KPI",
   description: "Operational KPI Management System",
+  icons: {
+    icon: [
+      { url: "/logos/logo-nova-core-app-512px.webp", sizes: "512x512", type: "image/webp" },
+    ],
+    apple: [
+      { url: "/logos/logo-nova-core-app-1024px.webp", sizes: "1024x1024", type: "image/webp" },
+    ],
+  },
 };
 
 export default function RootLayout({
