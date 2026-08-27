@@ -310,6 +310,7 @@ export interface Database {
           created_by: string | null;
           department_id: string | null;
           deleted_at: string | null;
+          hide_actual: boolean | null;
           created_at: string;
           updated_at: string;
         };
@@ -329,6 +330,7 @@ export interface Database {
           created_by?: string | null;
           department_id?: string | null;
           deleted_at?: string | null;
+          hide_actual?: boolean | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -348,6 +350,7 @@ export interface Database {
           created_by?: string | null;
           department_id?: string | null;
           deleted_at?: string | null;
+          hide_actual?: boolean | null;
           created_at?: string;
           updated_at?: string;
         };
