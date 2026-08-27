@@ -129,6 +129,19 @@ export default function HrKpiPage() {
     }
   }
 
+  async function toggleHideActual(kpiId: string, hideActual: boolean) {
+    setStatusLoading(kpiId);
+    try {
+      const supabase = createClient();
+      await supabase.from("kpis").update({ hide_actual: hideActual }).eq("id", kpiId);
+      toast.success(hideActual ? "Angka aktual disembunyikan" : "Angka aktual ditampilkan");
+    } catch (e: any) {
+      toast.error("Gagal update: " + e.message);
+    } finally {
+      setStatusLoading(null);
+    }
+  }
+
   async function handleSoftDelete(kpisToDelete: KPI[]) {
     setDeleteError("");
     let totalAssignments = 0;
@@ -501,7 +514,19 @@ export default function HrKpiPage() {
                       </p>
                     </div>
                     {/* Action buttons */}
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
+                      {!isReadOnly(k) && (
+                        <label className="relative inline-flex items-center cursor-pointer mr-2" title="Sembunyikan Angka Aktual dari Staf">
+                          <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={!!k.hideActual}
+                            onChange={(e) => toggleHideActual(k.id, e.target.checked)}
+                            disabled={statusLoading === k.id}
+                          />
+                          <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[var(--ab-primary)]"></div>
+                        </label>
+                      )}
                       {!isReadOnly(k) && (
                         <button
                           onClick={() => router.push(`/dashboard/hr/kpi/edit?id=${k.id}`)}
