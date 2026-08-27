@@ -33,6 +33,7 @@ function rowToKpi(kpi: Record<string, unknown>): KPI {
     monthlyTarget: (kpi.monthly_target as number) ?? 0,
     year: (kpi.year as number) ?? 0,
     month: (kpi.month as number) ?? 0,
+    hideActual: !!kpi.hide_actual,
     deletedAt: kpi.deleted_at as string | undefined,
     createdAt: kpi.created_at as KPI["createdAt"],
     updatedAt: kpi.updated_at as KPI["updatedAt"],
