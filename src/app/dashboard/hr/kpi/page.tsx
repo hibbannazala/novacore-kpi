@@ -91,7 +91,7 @@ export default function HrKpiPage() {
   const [copying, setCopying] = useState(false);
   const year = parseInt(selectedMonth.split("-")[0]);
   const month = parseInt(selectedMonth.split("-")[1]);
-  const { kpis, isLoading } = useKpis(year, month);
+  const { kpis, isLoading, refresh } = useKpis(year, month);
 
   const [tab, setTab] = useState<"list" | "trash">("list");
   const [selectedKpis, setSelectedKpis] = useState<Set<string>>(new Set());
@@ -124,6 +124,7 @@ export default function HrKpiPage() {
     try {
       const supabase = createClient();
       await supabase.from("kpis").update({ status }).eq("id", kpiId);
+      refresh();
     } finally {
       setStatusLoading(null);
     }
@@ -135,6 +136,7 @@ export default function HrKpiPage() {
       const supabase = createClient();
       await supabase.from("kpis").update({ hide_actual: hideActual }).eq("id", kpiId);
       toast.success(hideActual ? "Angka aktual disembunyikan" : "Angka aktual ditampilkan");
+      refresh();
     } catch (e: any) {
       toast.error("Gagal update: " + e.message);
     } finally {
@@ -516,7 +518,7 @@ export default function HrKpiPage() {
                     {/* Action buttons */}
                     <div className="flex items-center gap-2 shrink-0">
                       {!isReadOnly(k) && (
-                        <label className="relative inline-flex items-center cursor-pointer mr-2" title="Sembunyikan Angka Aktual dari Staf">
+                        <label className="relative inline-flex items-center cursor-pointer mr-3" title="Sembunyikan Angka Aktual dari Staf">
                           <input
                             type="checkbox"
                             className="sr-only peer"
@@ -525,6 +527,7 @@ export default function HrKpiPage() {
                             disabled={statusLoading === k.id}
                           />
                           <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[var(--ab-primary)]"></div>
+                          <span className="ml-2 text-[10px] font-semibold text-muted-foreground whitespace-nowrap">Hide Aktual</span>
                         </label>
                       )}
                       {!isReadOnly(k) && (

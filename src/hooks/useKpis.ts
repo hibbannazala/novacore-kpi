@@ -29,6 +29,9 @@ function rowToKpi(row: Record<string, unknown>): KPI {
 export function useKpis(year: number, month: number) {
   const [kpis, setKpis] = useState<KPI[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [trigger, setTrigger] = useState(0);
+
+  const refresh = () => setTrigger(t => t + 1);
 
   useEffect(() => {
     const supabase = createClient();
@@ -45,9 +48,9 @@ export function useKpis(year: number, month: number) {
     }
 
     fetch();
-  }, [year, month]);
+  }, [year, month, trigger]);
 
-  return { kpis, isLoading };
+  return { kpis, isLoading, refresh };
 }
 
 export function useDepartmentKpis(
@@ -57,6 +60,9 @@ export function useDepartmentKpis(
 ) {
   const [kpis, setKpis] = useState<KPI[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [trigger, setTrigger] = useState(0);
+
+  const refresh = () => setTrigger(t => t + 1);
 
   useEffect(() => {
     if (!department) {
@@ -93,9 +99,9 @@ export function useDepartmentKpis(
     }
 
     fetch();
-  }, [department, year, month]);
+  }, [department, year, month, trigger]);
 
-  return { kpis, isLoading };
+  return { kpis, isLoading, refresh };
 }
 
 export { rowToKpi };
