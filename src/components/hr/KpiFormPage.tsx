@@ -71,7 +71,7 @@ export function KpiFormPage({ kpiId, allowedDepartments, backHref }: KpiFormPage
   useEffect(() => {
     if (!kpiId) return;
     const supabase = createClient();
-    supabase.from("kpis").select("*").eq("id", kpiId).single().then(({ data }) => {
+    supabase.from("kpis").select("*, departments(name)").eq("id", kpiId).single().then(({ data }) => {
       if (data) {
         setTitle(data.title);
         setBrand(data.brand || "");
@@ -79,7 +79,7 @@ export function KpiFormPage({ kpiId, allowedDepartments, backHref }: KpiFormPage
         setType(data.type);
         setUnit(data.unit);
         setPeriod(data.period);
-        setDepartment((data as any).department || "");
+        setDepartment((data as any).departments?.name || "");
         setMonthlyTarget(String(data.monthly_target));
         setHideActual(!!data.hide_actual);
         setSelectedMonth(`${data.year}-${String(data.month).padStart(2, "0")}`);
