@@ -18,7 +18,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ChevronLeft, AlertTriangle } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
 
 interface KpiFormPageProps {
   kpiId?: string;
@@ -323,12 +322,19 @@ export function KpiFormPage({ kpiId, allowedDepartments, backHref }: KpiFormPage
         </div>
 
         <div className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-background">
-          <Switch
-            checked={hideActual}
-            onCheckedChange={setHideActual}
-          />
+          <div className="relative inline-flex items-center cursor-pointer mt-0.5">
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              checked={hideActual}
+              onChange={(e) => setHideActual(e.target.checked)}
+            />
+            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--ab-primary)]"></div>
+          </div>
           <div className="space-y-1 leading-none">
-            <Label className="text-sm font-semibold">Sembunyikan Angka Aktual dari Staf</Label>
+            <Label className="text-sm font-semibold cursor-pointer" onClick={() => setHideActual(!hideActual)}>
+              Sembunyikan Angka Aktual dari Staf
+            </Label>
             <p className="text-xs text-muted-foreground">
               Jika diaktifkan, staf hanya akan melihat persentase pencapaian (%), tanpa melihat angka aktual. Berguna untuk KPI subjektif.
             </p>
