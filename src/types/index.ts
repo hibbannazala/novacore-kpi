@@ -99,6 +99,7 @@ export interface KPI {
   monthlyTarget: number;
   year: number;
   month: number;
+  hideActual?: boolean;
   deletedAt?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -299,6 +300,7 @@ export interface KpiCreateInput {
   monthlyTarget: number;
   year: number;
   month: number;
+  hideActual?: boolean;
 }
 
 export interface KpiAssignInput {

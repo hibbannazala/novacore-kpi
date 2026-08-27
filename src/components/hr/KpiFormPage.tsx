@@ -17,8 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { KPI } from "@/types";
 import { ChevronLeft, AlertTriangle } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 interface KpiFormPageProps {
   kpiId?: string;
@@ -48,6 +48,7 @@ export function KpiFormPage({ kpiId, allowedDepartments, backHref }: KpiFormPage
   const [period, setPeriod] = useState<string>("");
   const [department, setDepartment] = useState<string>("");
   const [monthlyTarget, setMonthlyTarget] = useState("");
+  const [hideActual, setHideActual] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -81,6 +82,7 @@ export function KpiFormPage({ kpiId, allowedDepartments, backHref }: KpiFormPage
         setPeriod(data.period);
         setDepartment((data as any).department || "");
         setMonthlyTarget(String(data.monthly_target));
+        setHideActual(!!data.hide_actual);
         setSelectedMonth(`${data.year}-${String(data.month).padStart(2, "0")}`);
       }
       setLoadingKpi(false);
@@ -112,6 +114,7 @@ export function KpiFormPage({ kpiId, allowedDepartments, backHref }: KpiFormPage
           period,
           department_id: departmentId,
           monthly_target: target,
+          hide_actual: hideActual,
         }).eq("id", kpiId);
         if (updateErr) throw updateErr;
 
@@ -128,6 +131,7 @@ export function KpiFormPage({ kpiId, allowedDepartments, backHref }: KpiFormPage
           monthly_target: target,
           year,
           month,
+          hide_actual: hideActual,
           status: "draft",
           created_by: user?.id ?? "",
           deleted_at: null,
@@ -316,6 +320,19 @@ export function KpiFormPage({ kpiId, allowedDepartments, backHref }: KpiFormPage
             onChange={(e) => setMonthlyTarget(e.target.value)}
             required
           />
+        </div>
+
+        <div className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm bg-background">
+          <Switch
+            checked={hideActual}
+            onCheckedChange={setHideActual}
+          />
+          <div className="space-y-1 leading-none">
+            <Label className="text-sm font-semibold">Sembunyikan Angka Aktual dari Staf</Label>
+            <p className="text-xs text-muted-foreground">
+              Jika diaktifkan, staf hanya akan melihat persentase pencapaian (%), tanpa melihat angka aktual. Berguna untuk KPI subjektif.
+            </p>
+          </div>
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}

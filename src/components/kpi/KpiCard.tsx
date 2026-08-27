@@ -16,6 +16,7 @@ import {
 } from "@/lib/utils";
 import { useDailyReportsForAssignment } from "@/hooks/useDailyReports";
 import { MessageSquare, ChevronDown, ChevronUp, CheckCircle2 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import type { KpiAssignmentWithDetails } from "@/types";
 import type { Period } from "@/components/kpi/PeriodPicker";
 
@@ -45,6 +46,7 @@ const typeColor: Record<string, string> = {
 };
 
 export function KpiCard({ assignment, onClick, showNotes = true, period, readonlyMessage }: KpiCardProps) {
+  const { user } = useAuth();
   const { kpi, performanceCategory, actualTotal, monthlyTarget } = assignment;
   const [expandNotes, setExpandNotes] = useState(false);
   const [expandDesc, setExpandDesc] = useState(false);
@@ -66,6 +68,7 @@ export function KpiCard({ assignment, onClick, showNotes = true, period, readonl
   if (!kpi) return null;
 
   const unit = kpi.unit;
+  const shouldHideActual = kpi.hideActual && user?.kpiRole === "tim";
 
   // Range mode: filter reports to selected period and recompute
   const displayReports =
@@ -185,27 +188,31 @@ export function KpiCard({ assignment, onClick, showNotes = true, period, readonl
         </div>
 
         {/* Stats Grid */}
-        <div className="mt-5 grid grid-cols-2 gap-3">
-          <div className="rounded-2xl bg-[var(--ab-bg-main)] p-3 border border-[var(--ab-border)] shadow-inner">
-            <span className="block text-[9px] uppercase font-black text-[var(--ab-text-dim)] mb-1 tracking-widest">
-              {isRange ? "Aktual Periode" : "Total Aktual"}
-            </span>
-            <span className="block text-sm font-black text-[var(--ab-text-main)] truncate" title={formatValue(displayActual, unit)}>
-              {formatValue(displayActual, unit)}
-            </span>
-          </div>
-          <div className="rounded-2xl bg-[var(--ab-bg-main)] p-3 border border-[var(--ab-border)] shadow-inner">
-            <span className="block text-[9px] uppercase font-black text-[var(--ab-text-dim)] mb-1 tracking-widest">Target Bulanan</span>
-            <span className="block text-sm font-black text-[var(--ab-text-main)] truncate" title={formatValue(monthlyTarget, unit)}>
-              {formatValue(monthlyTarget, unit)}
-            </span>
-          </div>
-        </div>
+        {!shouldHideActual && (
+          <>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="rounded-2xl bg-[var(--ab-bg-main)] p-3 border border-[var(--ab-border)] shadow-inner">
+                <span className="block text-[9px] uppercase font-black text-[var(--ab-text-dim)] mb-1 tracking-widest">
+                  {isRange ? "Aktual Periode" : "Total Aktual"}
+                </span>
+                <span className="block text-sm font-black text-[var(--ab-text-main)] truncate" title={formatValue(displayActual, unit)}>
+                  {formatValue(displayActual, unit)}
+                </span>
+              </div>
+              <div className="rounded-2xl bg-[var(--ab-bg-main)] p-3 border border-[var(--ab-border)] shadow-inner">
+                <span className="block text-[9px] uppercase font-black text-[var(--ab-text-dim)] mb-1 tracking-widest">Target Bulanan</span>
+                <span className="block text-sm font-black text-[var(--ab-text-main)] truncate" title={formatValue(monthlyTarget, unit)}>
+                  {formatValue(monthlyTarget, unit)}
+                </span>
+              </div>
+            </div>
 
-        <div className="mt-4 flex items-center justify-between text-[10px] px-1 font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
-            <span>Tgt Harian: <strong className="text-[var(--ab-text-main)] font-black">{formatValue(liveCurrentDailyTarget, unit)}</strong></span>
-            <span>Sisa: <strong className="text-[var(--ab-text-main)] font-black">{liveWorkingDaysRemaining} hr</strong></span>
-        </div>
+            <div className="mt-4 flex items-center justify-between text-[10px] px-1 font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
+                <span>Tgt Harian: <strong className="text-[var(--ab-text-main)] font-black">{formatValue(liveCurrentDailyTarget, unit)}</strong></span>
+                <span>Sisa: <strong className="text-[var(--ab-text-main)] font-black">{liveWorkingDaysRemaining} hr</strong></span>
+            </div>
+          </>
+        )}
 
         {/* Quality Notes — shown for quality KPIs */}
         {kpi?.type === "quality" && assignment.qualityNotes && (
