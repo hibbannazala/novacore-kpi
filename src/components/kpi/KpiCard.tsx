@@ -68,7 +68,7 @@ export function KpiCard({ assignment, onClick, showNotes = true, period, readonl
   if (!kpi) return null;
 
   const unit = kpi.unit;
-  const shouldHideActual = kpi.hideActual && user?.kpiRole === "tim";
+  const shouldHideActual = kpi.hideActual && (user?.kpiRole === "tim" || user?.kpiRole === "head");
 
   // Range mode: filter reports to selected period and recompute
   const displayReports =
