@@ -36,12 +36,10 @@ export function WeightedScoreCard({ score, compact = false }: Props) {
     { key: "hr", avg: score.hrAvg, weight: score.hrWeight, count: score.hrCount },
   ];
 
-  const activeRows = rows.filter((r) => r.count > 0);
-
   if (compact) {
     return (
       <div className="space-y-1">
-        {activeRows.map((r) => (
+        {rows.map((r) => (
           <div key={r.key} className="flex items-center gap-2">
             <span className={`text-xs w-16 shrink-0 ${typeColor[r.key]}`}>
               {typeLabel[r.key]} <span className="text-muted-foreground">({r.weight}%)</span>
@@ -80,11 +78,11 @@ export function WeightedScoreCard({ score, compact = false }: Props) {
                 </span>
               </span>
               <span className="tabular-nums">
-                {r.count > 0 ? formatPercentage(r.avg) : "—"}
+                {formatPercentage(r.avg)}
               </span>
             </div>
             <Progress
-              value={r.count > 0 ? Math.min(r.avg, 100) : 0}
+              value={Math.min(r.avg, 100)}
               category={score.category}
               className="h-1.5"
             />
