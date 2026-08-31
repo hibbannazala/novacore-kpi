@@ -21,7 +21,7 @@ const typeColor: Record<string, string> = {
 };
 
 interface Row {
-  key: "result" | "activity" | "quality";
+  key: "result" | "activity" | "quality" | "lead_tim" | "hr";
   avg: number;
   weight: number;
   count: number;
@@ -32,6 +32,8 @@ export function WeightedScoreCard({ score, compact = false }: Props) {
     { key: "result", avg: score.resultAvg, weight: score.resultWeight, count: score.resultCount },
     { key: "activity", avg: score.activityAvg, weight: score.activityWeight, count: score.activityCount },
     { key: "quality", avg: score.qualityAvg, weight: score.qualityWeight, count: score.qualityCount },
+    { key: "lead_tim", avg: score.leadTimAvg, weight: score.leadTimWeight, count: score.leadTimCount },
+    { key: "hr", avg: score.hrAvg, weight: score.hrWeight, count: score.hrCount },
   ];
 
   const activeRows = rows.filter((r) => r.count > 0);

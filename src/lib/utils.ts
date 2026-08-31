@@ -182,36 +182,18 @@ export function calcWeightedScore(
   const leadTimAvg = avg(buckets.lead_tim);
   const hrAvg = avg(buckets.hr);
 
-  let activePerfWeightSum = 0;
-  if (buckets.result.length > 0) activePerfWeightSum += weights.result;
-  if (buckets.activity.length > 0) activePerfWeightSum += weights.activity;
-  if (buckets.quality.length > 0) activePerfWeightSum += weights.quality;
+  const performanceTotal = 
+    resultAvg * (weights.result / 100) +
+    activityAvg * (weights.activity / 100) +
+    qualityAvg * (weights.quality / 100);
 
-  let activePersWeightSum = 0;
-  if (buckets.lead_tim.length > 0) activePersWeightSum += weights.leadTim;
-  if (buckets.hr.length > 0) activePersWeightSum += weights.hr;
-
-  const performanceTotal = activePerfWeightSum > 0
-    ? (resultAvg * (buckets.result.length > 0 ? weights.result : 0) +
-       activityAvg * (buckets.activity.length > 0 ? weights.activity : 0) +
-       qualityAvg * (buckets.quality.length > 0 ? weights.quality : 0)) / activePerfWeightSum
-    : 0;
-
-  const personalityTotal = activePersWeightSum > 0
-    ? (leadTimAvg * (buckets.lead_tim.length > 0 ? weights.leadTim : 0) +
-       hrAvg * (buckets.hr.length > 0 ? weights.hr : 0)) / activePersWeightSum
-    : 0;
+  const personalityTotal = 
+    leadTimAvg * (weights.leadTim / 100) +
+    hrAvg * (weights.hr / 100);
 
   // Final Total: 70% Performance + 30% Personality
-  // If one of the groups is empty (e.g. no personality KPIs), we scale the other up to 100% to avoid unfair 0 scores.
-  let finalTotal = 0;
-  if (activePerfWeightSum > 0 && activePersWeightSum > 0) {
-    finalTotal = (performanceTotal * 0.7) + (personalityTotal * 0.3);
-  } else if (activePerfWeightSum > 0) {
-    finalTotal = performanceTotal;
-  } else if (activePersWeightSum > 0) {
-    finalTotal = personalityTotal;
-  }
+  // Jika KPI kosong, nilainya 0 (tidak diskala otomatis).
+  const finalTotal = (performanceTotal * 0.7) + (personalityTotal * 0.3);
 
   return {
     resultAvg,
