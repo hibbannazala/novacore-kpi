@@ -340,6 +340,7 @@ export interface LetterType {
   id: string;
   name: string;
   code: string;
+  template_url?: string;
   created_at?: string;
 }
 
@@ -352,6 +353,7 @@ export interface CompanyLetter {
   year: number;
   full_number: string;
   issued_to?: string | null;
+  file_url?: string;
   created_at?: string;
   letter_types?: LetterType;
   users?: Partial<User>;
@@ -387,4 +389,14 @@ export interface Payroll {
   created_at?: string;
   updated_at?: string;
   users?: Partial<User>;
+  snapshot_name?: string | null;
+  snapshot_position?: string | null;
+  snapshot_company?: string | null;
+  deductions_detail?: Array<{name: string, amount: number}> | null;
+}
+
+export interface DeductionType {
+  id: string;
+  name: string;
+  created_at?: string;
 }

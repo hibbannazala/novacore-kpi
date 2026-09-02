@@ -6,11 +6,11 @@ import { format, subMonths, addMonths } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import {
   ChevronLeft, ChevronRight, Save, Send, Loader2,
-  FileText, CheckCircle2, Eye, Trash2, Search, X, Filter, ChevronDown, User as UserIcon
+  FileText, CheckCircle2, Eye, Trash2, Search, X, Filter, ChevronDown, User as UserIcon, Plus
 } from "lucide-react";
 import { toast } from "sonner";
 import { createPortal } from "react-dom";
-import type { Payroll, PayrollStaffSetting } from "@/types";
+import type { Payroll, PayrollStaffSetting, DeductionType } from "@/types";
 
 const MONTH_NAMES = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 const COMPANY_COLORS: Record<string, string> = { TNT: "#00897B", Hype: "#E53935", Nova: "#1E88E5" };
@@ -36,6 +36,8 @@ export default function HrPayrollPage() {
   const [confirmPublish, setConfirmPublish] = useState<StaffRow | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<StaffRow | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [deductionTypes, setDeductionTypes] = useState<DeductionType[]>([]);
+  const [newDeductionName, setNewDeductionName] = useState("");
 
   const month = currentDate.getMonth() + 1;
   const year = currentDate.getFullYear();
@@ -45,15 +47,19 @@ export default function HrPayrollPage() {
 
   async function fetchData() {
     setLoading(true);
-    const [usersRes, settingsRes, payrollsRes] = await Promise.all([
+    const [usersRes, settingsRes, payrollsRes, deductionTypesRes] = await Promise.all([
       supabase.from("users").select("id, name, email, department_id, departments(name)").eq("absensi_status", "active").order("name"),
       supabase.from("payroll_staff_settings").select("*"),
       supabase.from("payrolls").select("*").eq("month", month).eq("year", year),
+      supabase.from("payroll_deduction_types").select("*").order("name"),
     ]);
 
     const users = (usersRes.data ?? []) as any[];
     const settings = (settingsRes.data ?? []) as PayrollStaffSetting[];
     const payrolls = (payrollsRes.data ?? []) as Payroll[];
+    setDeductionTypes((deductionTypesRes.data ?? []) as DeductionType[]);
+    const typesRes = arguments[0]; // hacky, better use the array
+    
 
     const built: StaffRow[] = users.map((u: any) => {
       const setting = settings.find((s) => s.user_id === u.id) || null;
@@ -71,6 +77,7 @@ export default function HrPayrollPage() {
           performance_bonus: existing?.performance_bonus ?? 0,
           overtime_pay: existing?.overtime_pay ?? 0,
           deductions: existing?.deductions ?? 0,
+          deductions_detail: existing?.deductions_detail ?? [],
           deduction_notes: existing?.deduction_notes ?? "",
           notes: existing?.notes ?? "",
           status: existing?.status ?? "draft",
@@ -102,7 +109,8 @@ export default function HrPayrollPage() {
         performance_bonus: row.payroll.performance_bonus || 0,
         overtime_pay: row.payroll.overtime_pay || 0,
         deductions: row.payroll.deductions || 0,
-        deduction_notes: row.payroll.deduction_notes || "",
+        deductions_detail: row.payroll.deductions_detail || [],
+        
         notes: row.payroll.notes || "",
         status: "draft",
       };
@@ -138,6 +146,9 @@ export default function HrPayrollPage() {
         deduction_notes: row.payroll.deduction_notes || "",
         notes: row.payroll.notes || "",
         status: "published",
+        snapshot_name: row.name,
+        snapshot_position: row.setting?.contract_position || null,
+        snapshot_company: row.setting?.company || null,
       };
 
       if (row.payroll.id) {
@@ -299,7 +310,7 @@ export default function HrPayrollPage() {
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-5">
                       {[
                         { label: "Gaji Pokok", field: "base_salary" },
-                        { label: "Tunj. Mobilitas", field: "mobility_allowance" },
+                        { label: "Allowance", field: "mobility_allowance" },
                         { label: "Bonus Performa", field: "performance_bonus" },
                         { label: "Upah Lembur", field: "overtime_pay" },
                       ].map(({ label, field }) => (
@@ -315,27 +326,92 @@ export default function HrPayrollPage() {
                           />
                         </div>
                       ))}
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-black uppercase text-rose-400 tracking-widest">Potongan</label>
-                        <input
-                          type="number"
-                          disabled={isPublished}
-                          value={row.payroll.deductions || ""}
-                          onChange={(e) => updateField(row.id, "deductions", Number(e.target.value))}
-                          className="ab-input text-sm font-mono w-full py-2.5 disabled:opacity-40 border-rose-500/30"
-                          placeholder="0"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-black uppercase text-rose-400 tracking-widest">Ket. Potongan</label>
-                        <input
-                          type="text"
-                          disabled={isPublished}
-                          value={row.payroll.deduction_notes || ""}
-                          onChange={(e) => updateField(row.id, "deduction_notes", e.target.value)}
-                          className="ab-input text-sm w-full py-2.5 disabled:opacity-40"
-                          placeholder="BPJS, dll"
-                        />
+                      {/* Multi-Deduction UI */}
+                      <div className="col-span-2 md:col-span-3 space-y-3 bg-rose-50/50 p-4 rounded-xl border border-rose-100">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[10px] font-black uppercase text-rose-500 tracking-widest flex items-center gap-1.5">
+                            Potongan
+                            <span className="text-[9px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-md">Total: {formatRp(row.payroll.deductions || 0)}</span>
+                          </label>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          {(row.payroll.deductions_detail || []).map((ded, idx) => (
+                            <div key={idx} className="flex gap-2 items-center">
+                              <input
+                                type="text"
+                                disabled={isPublished}
+                                value={ded.name}
+                                onChange={(e) => {
+                                  const newList = [...(row.payroll.deductions_detail || [])];
+                                  newList[idx].name = e.target.value;
+                                  const total = newList.reduce((sum, item) => sum + (item.amount || 0), 0);
+                                  setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, deductions_detail: newList, deductions: total, _dirty: true } } : r));
+                                }}
+                                className="ab-input text-xs w-1/2 py-2 disabled:opacity-40"
+                                placeholder="Nama Potongan"
+                              />
+                              <input
+                                type="number"
+                                disabled={isPublished}
+                                value={ded.amount || ""}
+                                onChange={(e) => {
+                                  const newList = [...(row.payroll.deductions_detail || [])];
+                                  newList[idx].amount = Number(e.target.value);
+                                  const total = newList.reduce((sum, item) => sum + (item.amount || 0), 0);
+                                  setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, deductions_detail: newList, deductions: total, _dirty: true } } : r));
+                                }}
+                                className="ab-input text-xs font-mono w-1/2 py-2 disabled:opacity-40"
+                                placeholder="0"
+                              />
+                              {!isPublished && (
+                                <button
+                                  onClick={() => {
+                                    const newList = [...(row.payroll.deductions_detail || [])];
+                                    newList.splice(idx, 1);
+                                    const total = newList.reduce((sum, item) => sum + (item.amount || 0), 0);
+                                    setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, deductions_detail: newList, deductions: total, _dirty: true } } : r));
+                                  }}
+                                  className="text-rose-400 hover:text-rose-600 p-1 bg-white border border-rose-100 hover:border-rose-300 rounded"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {!isPublished && (
+                          <div className="flex gap-2 items-center mt-2">
+                            <select
+                              className="ab-input text-xs py-1.5 flex-1 bg-white"
+                              value=""
+                              onChange={async (e) => {
+                                const val = e.target.value;
+                                if (!val) return;
+                                
+                                let finalName = val;
+                                if (val === 'NEW') {
+                                  const customName = prompt("Masukkan nama potongan baru:");
+                                  if (!customName) return;
+                                  finalName = customName;
+                                  // Save new type to db
+                                  const { data } = await supabase.from('payroll_deduction_types').insert({ name: customName }).select().single();
+                                  if (data) {
+                                    setDeductionTypes(prev => [...prev, data]);
+                                  }
+                                }
+
+                                const newList = [...(row.payroll.deductions_detail || []), { name: finalName, amount: 0 }];
+                                setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, deductions_detail: newList, _dirty: true } } : r));
+                              }}
+                            >
+                              <option value="">-- Tambah Potongan --</option>
+                              {deductionTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                              <option value="NEW" className="font-bold text-rose-600">+ Tambah Potongan Baru</option>
+                            </select>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -514,14 +590,14 @@ export default function HrPayrollPage() {
                 <table className="w-full text-xs border-collapse mb-6">
                   <thead>
                     <tr className="border-y-2" style={{ borderColor: COMPANY_COLORS[previewRow.setting?.company || "Nova"] }}>
-                      <th className="py-2 text-left font-black uppercase text-slate-500">Uraian</th>
+                      <th className="py-2 text-left font-black uppercase text-slate-500">Rincian</th>
                       <th className="py-2 text-right font-black uppercase text-slate-500">Nominal</th>
                     </tr>
                   </thead>
                   <tbody>
                     {[
                       { label: "Gaji Pokok", val: previewRow.payroll.base_salary || 0 },
-                      { label: "Tunjangan Mobilitas", val: previewRow.payroll.mobility_allowance || 0 },
+                      { label: "Allowance", val: previewRow.payroll.mobility_allowance || 0 },
                       { label: "Bonus Performa", val: previewRow.payroll.performance_bonus || 0 },
                       { label: "Upah Lembur", val: previewRow.payroll.overtime_pay || 0 },
                     ].map((item) => (

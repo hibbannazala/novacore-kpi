@@ -88,7 +88,7 @@ export default function HeadQualityPage() {
 
       (aRows ?? []).forEach((row: any) => {
         const kpiRow = row.kpis;
-        if (!kpiRow || kpiRow.type !== "quality") return;
+        if (!kpiRow || (kpiRow.type !== "quality" && kpiRow.type !== "lead_tim")) return;
 
         const msRows = (row.monthly_scores as any[]) ?? [];
         const monthlyScores: Record<string, any> = {};
@@ -106,7 +106,7 @@ export default function HeadQualityPage() {
           kpiId: row.kpi_id,
           userId: row.user_id,
           department: kpiRow.departments?.name ?? "",
-          kpiType: "quality",
+          kpiType: kpiRow.type as any,
           status: row.status,
           monthlyTarget: row.monthly_target ?? 0,
           actualTotal: row.actual_total ?? 0,
@@ -286,7 +286,7 @@ export default function HeadQualityPage() {
         <div>
           <h2 className="text-base font-semibold">Input KPI Kualitas Tim</h2>
           <p className="text-sm text-muted-foreground">
-            {isLoading ? "Memuat..." : `${qualityItems.length} KPI kualitas · ${monthName(selectedMonthNum)} ${selectedYear} · ${managedDepartments.join(", ")}`}
+            {isLoading ? "Memuat..." : `${qualityItems.length} KPI Kualitas & Lead Tim • ${monthName(selectedMonthNum)} ${selectedYear} • ${managedDepartments.join(", ")}`}
           </p>
         </div>
         <input
@@ -386,7 +386,7 @@ export default function HeadQualityPage() {
                                 <div className="rounded-lg border border-dashed border-border bg-card px-4 py-6 text-center">
                                   <p className="text-sm font-medium text-muted-foreground mb-1">Belum ada KPI Kualitas</p>
                                   <p className="text-xs text-muted-foreground/70">
-                                    Staf ini belum diberikan penugasan KPI yang berjenis "Quality". 
+                                    Staf ini belum diberikan penugasan KPI yang berjenis "Quality" atau "Lead Tim". 
                                     Silakan buat penugasan baru di menu Penugasan.
                                   </p>
                                 </div>

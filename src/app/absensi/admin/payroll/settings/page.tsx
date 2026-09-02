@@ -44,10 +44,10 @@ export default function PayrollSettingsPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch active users (assuming all returned are active or apply a filter if needed)
       const { data: usersData, error: usersError } = await supabase
         .from('users')
-        .select('id, name, email, department_id, departments(name)');
+        .select('id, name, email, department_id, departments(name)')
+        .eq('absensi_status', 'active');
         
       if (usersError) throw usersError;
       

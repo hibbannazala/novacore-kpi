@@ -210,7 +210,7 @@ export default function HeadPenugasanPage() {
               ? calcWeightedScore(activeAssignments, getWeights(userId)).total
               : 0;
 
-            const byType: Record<string, KpiAssignment[]> = { result: [], activity: [], quality: [] };
+            const byType: Record<string, KpiAssignment[]> = { result: [], activity: [], quality: [], lead_tim: [] };
             userAssignments.forEach((a) => {
               const t = a.kpiType ?? "result";
               if (!byType[t]) byType[t] = [];
@@ -234,7 +234,7 @@ export default function HeadPenugasanPage() {
                 </div>
 
                 <div className="divide-y divide-border">
-                  {(["result", "activity", "quality"] as const).map((type) => {
+                  {(["result", "activity", "quality", "lead_tim"] as const).map((type) => {
                     const typeAssignments = byType[type];
                     if (!typeAssignments || typeAssignments.length === 0) return null;
                     return typeAssignments.map((a) => {
