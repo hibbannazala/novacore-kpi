@@ -197,7 +197,7 @@ export const PayslipPrintView = forwardRef<HTMLDivElement, PayslipPrintViewProps
                   <div className="ml-2 mb-1 space-y-0.5">
                     {additionsDetail.map((add, idx) => (
                       <div key={idx} className="mb-2 last:mb-0">
-                        <div className="text-sm">- {add.name}</div>
+                        <div className="text-sm">- {add.name} {add.amount > 0 ? `(${formatCurrency(add.amount)})` : ''}</div>
                         {add.note && <div className="text-[11px] text-gray-500 italic whitespace-pre-wrap ml-3 leading-tight">{add.note}</div>}
                       </div>
                     ))}

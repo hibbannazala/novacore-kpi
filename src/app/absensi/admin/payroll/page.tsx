@@ -853,7 +853,7 @@ export default function HrPayrollPage() {
                           <span className="font-medium block">Upah Tambahan Lainnya</span>
                             {(previewRow.payroll.additions_detail || []).map((add, i) => (
                               <div key={"a-"+i} className="mb-2 last:mb-0">
-                                <div className="text-xs ml-2">- {add.name}</div>
+                                <div className="text-xs ml-2">- {add.name} {add.amount > 0 ? `(${formatRp(add.amount)})` : ''}</div>
                                 {add.note && <div className="text-[10px] text-slate-500 italic ml-4 whitespace-pre-wrap">{add.note}</div>}
                               </div>
                             ))}
