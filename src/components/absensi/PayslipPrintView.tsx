@@ -183,48 +183,47 @@ export const PayslipPrintView = forwardRef<HTMLDivElement, PayslipPrintViewProps
               <td className="border border-gray-400 p-3 text-right">{formatCurrency(performanceBonus)}</td>
             </tr>
             <tr>
-              <td className="border border-gray-400 p-3 font-semibold">
-                Upah Lembur
-                {overtimeNotes && <div className="font-normal text-gray-600 italic mt-1 text-sm whitespace-pre-wrap leading-tight">({overtimeNotes})</div>}
+              <td className="border border-gray-400 p-3">
+                <span className="font-semibold block">Upah Lembur</span>
+                {overtimeNotes && <div className="text-sm text-gray-600 italic mt-1 whitespace-pre-wrap leading-tight">{overtimeNotes}</div>}
               </td>
               <td className="border border-gray-400 p-3 text-right">{formatCurrency(overtimePay)}</td>
             </tr>
             {/* Multi-addition handling */}
-            {additionsDetail && additionsDetail.length > 0 && additionsDetail.map((add, idx) => (
-              <tr key={"add-"+idx}>
-                <td className="border border-gray-400 p-3 font-semibold">
-                  {add.name}
-                </td>
-                <td className="border border-gray-400 p-3 text-right">
-                  {formatCurrency(add.amount)}
-                </td>
-              </tr>
-            ))}
-            {/* Multi-deduction handling */}
-            {deductionsDetail && deductionsDetail.length > 0 ? (
-              deductionsDetail.map((ded, idx) => (
-                <tr key={idx}>
-                  <td className="border border-gray-400 p-3 font-semibold text-rose-700">
-                    Potongan: {ded.name}
-                  </td>
-                  <td className="border border-gray-400 p-3 text-right text-rose-700">
-                    {ded.amount > 0 ? `(${formatCurrency(ded.amount)})` : formatCurrency(0)}
-                  </td>
-                </tr>
-              ))
-            ) : (
+            {additionsDetail && additionsDetail.length > 0 && (
               <tr>
-                <td className="border border-gray-400 p-3 font-semibold">
-                  Potongan
-                  {deductions > 0 && deductionNotes && (
-                    <div className="text-sm text-gray-600 italic mt-1 font-normal">*{deductionNotes}</div>
-                  )}
+                <td className="border border-gray-400 p-3">
+                  <span className="font-semibold block mb-1">Upah Tambahan Lainnya</span>
+                  <div className="ml-2 mb-1 space-y-0.5">
+                    {additionsDetail.map((add, idx) => (
+                      <div key={idx} className="text-sm">- {add.name}</div>
+                    ))}
+                  </div>
                 </td>
                 <td className="border border-gray-400 p-3 text-right">
-                  {deductions > 0 ? `(${formatCurrency(deductions)})` : formatCurrency(0)}
+                  {formatCurrency(additionsTotal)}
                 </td>
               </tr>
             )}
+            {/* Multi-deduction handling */}
+            <tr>
+              <td className="border border-gray-400 p-3 text-rose-700">
+                <span className="font-semibold block mb-1">Potongan</span>
+                {deductionsDetail && deductionsDetail.length > 0 && (
+                  <div className="ml-2 mb-1 space-y-0.5">
+                    {deductionsDetail.map((ded, idx) => (
+                      <div key={idx} className="text-sm">- {ded.name} {ded.amount > 0 ? `(${formatCurrency(ded.amount)})` : ''}</div>
+                    ))}
+                  </div>
+                )}
+                {deductions > 0 && deductionNotes && (
+                  <div className="text-sm text-gray-600 italic mt-1 whitespace-pre-wrap leading-tight">{deductionNotes}</div>
+                )}
+              </td>
+              <td className="border border-gray-400 p-3 text-right text-rose-700">
+                {deductions > 0 ? `(${formatCurrency(deductions)})` : formatCurrency(0)}
+              </td>
+            </tr>
           </tbody>
           <tfoot>
             {notes && (

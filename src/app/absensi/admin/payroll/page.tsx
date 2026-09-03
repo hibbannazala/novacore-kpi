@@ -626,6 +626,17 @@ export default function HrPayrollPage() {
                             )}
                           </div>
                         )}
+                        
+                        <div className="pt-2 border-t border-rose-200">
+                          <label className="text-[9px] font-black uppercase text-rose-500 tracking-widest mb-1 block">Catatan Potongan</label>
+                          <textarea
+                            disabled={isPublished}
+                            value={row.payroll.deduction_notes || ""}
+                            onChange={(e) => updateField(row.id, "deduction_notes", e.target.value)}
+                            className="ab-input text-sm w-full py-2 min-h-[50px] resize-none disabled:opacity-40"
+                            placeholder="Mis: Kasbon bulan agustus (opsional)..."
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -820,18 +831,26 @@ export default function HrPayrollPage() {
                         <td className="py-2 text-right font-mono font-bold">{formatRp(item.val)}</td>
                       </tr>
                     ))}
-                    {(previewRow.payroll.additions_detail || []).map((add, idx) => (
-                      <tr key={"add-"+idx} className="border-b border-slate-100">
-                        <td className="py-2 font-medium">{add.name}</td>
-                        <td className="py-2 text-right font-mono font-bold">{formatRp(add.amount || 0)}</td>
+                    {previewRow.payroll.additions_detail && previewRow.payroll.additions_detail.length > 0 && (
+                      <tr className="border-b border-slate-100">
+                        <td className="py-2 leading-tight">
+                          <span className="font-medium block">Upah Tambahan Lainnya</span>
+                          {(previewRow.payroll.additions_detail || []).map((add, i) => (
+                             <span key={"a-"+i} className="text-xs block ml-2">- {add.name}</span>
+                          ))}
+                        </td>
+                        <td className="py-2 text-right font-mono font-bold">{formatRp((previewRow.payroll.additions_detail || []).reduce((sum, a) => sum + (a.amount || 0), 0))}</td>
                       </tr>
-                    ))}
+                    )}
                     {(previewRow.payroll.deductions || 0) > 0 && (
                       <tr className="border-b border-slate-100 text-rose-600">
-                        <td className="py-2 font-medium">
-                          Potongan
+                        <td className="py-2 leading-tight">
+                          <span className="font-medium block">Potongan</span>
+                          {(previewRow.payroll.deductions_detail || []).map((ded, i) => (
+                             <span key={"d-"+i} className="text-xs block ml-2 text-rose-500">- {ded.name}</span>
+                          ))}
                           {previewRow.payroll.deduction_notes && (
-                            <span className="text-[9px] text-slate-400 ml-2">({previewRow.payroll.deduction_notes})</span>
+                            <span className="text-[10px] text-slate-500 italic block mt-1 whitespace-pre-wrap">{previewRow.payroll.deduction_notes}</span>
                           )}
                         </td>
                         <td className="py-2 text-right font-mono font-bold">({formatRp(previewRow.payroll.deductions || 0)})</td>
