@@ -356,13 +356,12 @@ export default function HrPayrollPage() {
                         </div>
                         <div className="space-y-1">
                           <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest">Ket. Lembur</label>
-                          <input
-                            type="text"
+                          <textarea
                             disabled={isPublished}
                             value={row.payroll.overtime_notes || ""}
                             onChange={(e) => updateField(row.id, "overtime_notes", e.target.value)}
-                            className="ab-input text-sm w-full py-2.5 disabled:opacity-40"
-                            placeholder="Mis: Lembur 2 jam..."
+                            className="ab-input text-sm w-full py-2 min-h-[50px] resize-none disabled:opacity-40 mt-2"
+                            placeholder="Keterangan lembur (bisa multi baris/enter)"
                           />
                         </div>
                       </div>
@@ -814,10 +813,10 @@ export default function HrPayrollPage() {
                       { label: "Gaji Pokok", val: previewRow.payroll.base_salary || 0 },
                       { label: "Allowance", val: previewRow.payroll.mobility_allowance || 0 },
                       { label: "Bonus Performa", val: previewRow.payroll.performance_bonus || 0 },
-                      { label: "Upah Lembur" + (previewRow.payroll.overtime_notes ? ` (${previewRow.payroll.overtime_notes})` : ""), val: previewRow.payroll.overtime_pay || 0 },
+                      { label: "Upah Lembur" + (previewRow.payroll.overtime_notes ? `\n(${previewRow.payroll.overtime_notes})` : ""), val: previewRow.payroll.overtime_pay || 0 },
                     ].map((item) => (
                       <tr key={item.label} className="border-b border-slate-100">
-                        <td className="py-2 font-medium">{item.label}</td>
+                        <td className="py-2 whitespace-pre-wrap leading-tight">{item.label}</td>
                         <td className="py-2 text-right font-mono font-bold">{formatRp(item.val)}</td>
                       </tr>
                     ))}

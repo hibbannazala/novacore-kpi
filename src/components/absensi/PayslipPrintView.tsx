@@ -185,7 +185,7 @@ export const PayslipPrintView = forwardRef<HTMLDivElement, PayslipPrintViewProps
             <tr>
               <td className="border border-gray-400 p-3 font-semibold">
                 Upah Lembur
-                {overtimeNotes && <span className="font-normal text-gray-600 italic ml-2">({overtimeNotes})</span>}
+                {overtimeNotes && <div className="font-normal text-gray-600 italic mt-1 text-sm whitespace-pre-wrap leading-tight">({overtimeNotes})</div>}
               </td>
               <td className="border border-gray-400 p-3 text-right">{formatCurrency(overtimePay)}</td>
             </tr>
