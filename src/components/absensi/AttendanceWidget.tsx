@@ -27,6 +27,14 @@ function calcDist(la1: number, lo1: number, la2: number, lo2: number) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+interface AllowedLocation {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  radius: number;
+}
+
 function getToday() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -64,6 +72,41 @@ export function AttendanceWidget() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [locationPerm, setLocationPerm] = useState<LocationPerm>("prompt");
   const [showLocationGuide, setShowLocationGuide] = useState(false);
+  const [allowedLocations, setAllowedLocations] = useState<AllowedLocation[]>([]);
+
+  useEffect(() => {
+    if (!user?.departmentId) return;
+    const fetchLocs = async () => {
+      const supabase = createClient();
+      const { data } = await supabase.from('department_locations' as any).select('office_locations(id, name, lat, lng, radius)').eq('department_id', user.departmentId as string);
+      if (data && data.length > 0) {
+        setAllowedLocations(data.map((d: any) => d.office_locations));
+      } else {
+        setAllowedLocations([]);
+      }
+    };
+    fetchLocs();
+  }, [user?.departmentId]);
+
+  const getNearestLocation = useCallback((loc: { lat: number; lng: number }) => {
+    if (allowedLocations.length > 0) {
+      let minDist = Infinity;
+      let minRadius = 100;
+      for (const al of allowedLocations) {
+        if (!al) continue;
+        const dist = calcDist(loc.lat, loc.lng, al.lat, al.lng);
+        if (dist < minDist) {
+          minDist = dist;
+          minRadius = al.radius;
+        }
+      }
+      return { dist: minDist, radius: minRadius };
+    } else {
+      const dist = calcDist(loc.lat, loc.lng, settings.officeLat, settings.officeLng);
+      return { dist, radius: settings.officeRadius || 100 };
+    }
+  }, [allowedLocations, settings]);
+
   const [pendingLocation, setPendingLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [showCheckoutConfirm, setShowCheckoutConfirm] = useState(false);
   const [showEarlyPrompt, setShowEarlyPrompt] = useState(false);
@@ -195,12 +238,12 @@ export function AttendanceWidget() {
     let locationStatus = "Lokasi Keblokir";
     let radiusPenalty = 0;
     if (location) {
-      const dist = calcDist(location.lat, location.lng, settings.officeLat, settings.officeLng);
-      if (dist <= (settings.officeRadius || 100)) {
+      const nearest = getNearestLocation(location);
+      if (nearest.dist <= nearest.radius) {
         locationStatus = "Dalam Area";
       } else {
         locationStatus = "Di Luar Area";
-        if (dist > 500) radiusPenalty = 2;
+        if (nearest.dist > 500) radiusPenalty = 2;
       }
     }
 
@@ -289,10 +332,10 @@ export function AttendanceWidget() {
       async (pos) => {
         toast.dismiss(toastId);
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        const dist = calcDist(loc.lat, loc.lng, settings.officeLat, settings.officeLng);
-        if (dist > (settings.officeRadius || 100)) {
+        const nearest = getNearestLocation(loc);
+        if (nearest.dist > nearest.radius) {
           setPendingLocation(loc);
-          setPendingDistance(Math.round(dist));
+          setPendingDistance(Math.round(nearest.dist));
           setSyncRetryCount(0);
           setShowRadiusWarning(true);
           setIsProcessing(false);
@@ -884,19 +927,19 @@ export function AttendanceWidget() {
                           (pos) => {
                             toast.dismiss(toastId);
                             const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                            const dist = calcDist(loc.lat, loc.lng, settings.officeLat, settings.officeLng);
+                            const nearest = getNearestLocation(loc);
                             const newCount = syncRetryCount + 1;
                             setSyncRetryCount(newCount);
                             setPendingLocation(loc);
-                            setPendingDistance(Math.round(dist));
-                            if (dist <= (settings.officeRadius || 100)) {
+                            setPendingDistance(Math.round(nearest.dist));
+                            if (nearest.dist <= nearest.radius) {
                               toast.success("Lokasi terdeteksi dalam area kantor!");
                               setShowRadiusWarning(false);
                               setSyncRetryCount(0);
                               setIsProcessing(true);
                               doCheckIn(loc).then(finalizeCheckIn);
                             } else {
-                              toast.error(`Masih di luar area (${Math.round(dist)}m). Sisa percobaan: ${2 - newCount}x`);
+                              toast.error(`Masih di luar area (${Math.round(nearest.dist)}m). Sisa percobaan: ${2 - newCount}x`);
                             }
                             setIsSyncing(false);
                           },

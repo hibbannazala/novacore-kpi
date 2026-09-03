@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import ConfirmDialog from "@/components/absensi/ConfirmDialog";
-import { Clock, MapPin, CalendarDays, Settings, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { Clock, Settings, MapPin, CalendarDays, Plus, Trash2, Map } from "lucide-react";
+import ConfirmDialog from "@/components/absensi/ConfirmDialog";
 
 interface WorkSettings {
   workStart: string; workEnd: string; maxLate: string;
@@ -13,9 +13,7 @@ interface WorkSettings {
 }
 
 interface Holiday { id: string; date: string; description: string }
-interface Department { id: string; name: string }
-
-interface ConfirmCfg { title: string; message: string; type?: "danger" | "warning" | "info"; onConfirm: () => void }
+interface OfficeLocation { id: string; name: string; lat: number; lng: number; radius: number; deptIds: string[] }
 
 const DEFAULT_SETTINGS: WorkSettings = {
   workStart: "08:00", workEnd: "18:00", maxLate: "08:15",
@@ -24,32 +22,38 @@ const DEFAULT_SETTINGS: WorkSettings = {
 };
 
 export default function AdminSettingsPage() {
-  const [settings, setSettings]     = useState<WorkSettings>(DEFAULT_SETTINGS);
-  const [holidays, setHolidays]     = useState<Holiday[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [newHol, setNewHol]         = useState({ date: "", description: "" });
-  const [newDept, setNewDept]       = useState("");
-  const [isLoading, setIsLoading]   = useState(true);
-  const [confirmCfg, setConfirmCfg] = useState<ConfirmCfg | null>(null);
+  const [settings, setSettings] = useState<WorkSettings>(DEFAULT_SETTINGS);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [officeLocations, setOfficeLocations] = useState<OfficeLocation[]>([]);
+  
+  const [isLoading, setIsLoading] = useState(true);
+  const [newHol, setNewHol] = useState({ date: "", description: "" });
+  const [newDept, setNewDept] = useState("");
+  const [confirmCfg, setConfirmCfg] = useState<{ title: string; message: string; type: "danger" | "warning"; onConfirm: () => void } | null>(null);
+
+  // For adding new office location
+  const [newOffice, setNewOffice] = useState({ name: "", lat: "", lng: "", radius: "100" });
 
   useEffect(() => {
-    const supabase = createClient();
-
     const fetchAll = async () => {
-      const [sRes, hRes, dRes] = await Promise.all([
+      const supabase = createClient();
+      const [sRes, hRes, dRes, oRes, dlRes] = await Promise.all([
         supabase.from("absensi_settings").select("*").eq("id", 1).single(),
-        supabase.from("holidays").select("id, date, description").order("date", { ascending: true }),
-        supabase.from("departments").select("id, name").order("name"),
+        supabase.from("holidays").select("*").order("date"),
+        supabase.from("departments").select("*").order("name"),
+        supabase.from("office_locations" as any).select("*").order("name"),
+        supabase.from("department_locations" as any).select("*")
       ]);
 
       if (sRes.data) {
-        const r = sRes.data as Record<string, unknown>;
+        const r = sRes.data;
         setSettings({
-          workStart:    (r.work_start as string)  ?? DEFAULT_SETTINGS.workStart,
-          workEnd:      (r.work_end as string)    ?? DEFAULT_SETTINGS.workEnd,
-          maxLate:      (r.max_late as string)    ?? DEFAULT_SETTINGS.maxLate,
+          workStart:    (r.work_start as string)    ?? DEFAULT_SETTINGS.workStart,
+          workEnd:      (r.work_end as string)      ?? DEFAULT_SETTINGS.workEnd,
+          maxLate:      (r.max_late as string)      ?? DEFAULT_SETTINGS.maxLate,
           maxTimeSick:  (r.max_time_sick as string) ?? DEFAULT_SETTINGS.maxTimeSick,
-          maxTimeLeave: (r.max_time_leave as string) ?? DEFAULT_SETTINGS.maxTimeLeave,
+          maxTimeLeave: (r.max_time_leave as string)?? DEFAULT_SETTINGS.maxTimeLeave,
           maxTimeWfa:   (r.max_time_wfa as string)  ?? DEFAULT_SETTINGS.maxTimeWfa,
           officeLat:    (r.office_lat as number)  ?? DEFAULT_SETTINGS.officeLat,
           officeLng:    (r.office_lng as number)  ?? DEFAULT_SETTINGS.officeLng,
@@ -58,9 +62,15 @@ export default function AdminSettingsPage() {
       }
       setHolidays((hRes.data ?? []).map((h) => ({ id: h.id as string, date: h.date as string, description: h.description as string })));
       setDepartments((dRes.data ?? []).map((d) => ({ id: d.id as string, name: d.name as string })));
+      
+      const deptLocs = dlRes.data ?? [];
+      setOfficeLocations((oRes.data ?? []).map((o: any) => ({
+        id: o.id as string, name: o.name as string, lat: o.lat as number, lng: o.lng as number, radius: o.radius as number,
+        deptIds: deptLocs.filter((dl: any) => dl.office_location_id === o.id).map((dl: any) => dl.department_id as string)
+      })));
+
       setIsLoading(false);
     };
-
     fetchAll();
   }, []);
 
@@ -69,36 +79,25 @@ export default function AdminSettingsPage() {
     const tid = toast.loading("Menyimpan pengaturan...");
     try {
       const { error } = await supabase.from("absensi_settings").update({
-        work_start:    settings.workStart,
-        work_end:      settings.workEnd,
-        max_late:      settings.maxLate,
-        max_time_sick: settings.maxTimeSick,
-        max_time_leave: settings.maxTimeLeave,
-        max_time_wfa:  settings.maxTimeWfa,
+        work_start: settings.workStart, work_end: settings.workEnd, max_late: settings.maxLate,
+        max_time_sick: settings.maxTimeSick, max_time_leave: settings.maxTimeLeave, max_time_wfa: settings.maxTimeWfa,
       }).eq("id", 1);
       if (error) throw error;
-      toast.success("Pengaturan kerja berhasil disimpan.", { id: tid });
+      toast.success("Pengaturan berhasil disimpan.", { id: tid });
     } catch (err: unknown) {
       toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
     }
   };
 
   const saveOffice = async () => {
-    if (isNaN(settings.officeLat) || settings.officeLat < -90 || settings.officeLat > 90)
-      return toast.error("Latitude harus antara -90 dan 90.");
-    if (isNaN(settings.officeLng) || settings.officeLng < -180 || settings.officeLng > 180)
-      return toast.error("Longitude harus antara -180 dan 180.");
-    if (settings.officeRadius < 50)
-      return toast.error("Radius minimal 50 meter.");
+    if (isNaN(settings.officeLat) || settings.officeLat < -90 || settings.officeLat > 90) return toast.error("Latitude harus antara -90 dan 90.");
+    if (isNaN(settings.officeLng) || settings.officeLng < -180 || settings.officeLng > 180) return toast.error("Longitude harus antara -180 dan 180.");
+    if (settings.officeRadius < 50) return toast.error("Radius minimal 50 meter.");
 
     const supabase = createClient();
     const tid = toast.loading("Memperbarui lokasi...");
     try {
-      const { error } = await supabase.from("absensi_settings").update({
-        office_lat: settings.officeLat,
-        office_lng: settings.officeLng,
-        office_radius: settings.officeRadius,
-      }).eq("id", 1);
+      const { error } = await supabase.from("absensi_settings").update({ office_lat: settings.officeLat, office_lng: settings.officeLng, office_radius: settings.officeRadius }).eq("id", 1);
       if (error) throw error;
       toast.success("Konfigurasi lokasi berhasil diperbarui.", { id: tid });
     } catch (err: unknown) {
@@ -109,7 +108,6 @@ export default function AdminSettingsPage() {
   const addHoliday = async () => {
     if (!newHol.date || !newHol.description.trim()) return toast.error("Isi tanggal dan keterangan.");
     if (holidays.some((h) => h.date === newHol.date)) return toast.error("Tanggal libur ini sudah ada!");
-
     const supabase = createClient();
     const tid = toast.loading("Menambah hari libur...");
     try {
@@ -118,27 +116,21 @@ export default function AdminSettingsPage() {
       setHolidays((prev) => [...prev, { id: (data as Record<string, unknown>).id as string, date: newHol.date, description: newHol.description.trim() }].sort((a, b) => a.date.localeCompare(b.date)));
       setNewHol({ date: "", description: "" });
       toast.success("Hari libur ditambahkan.", { id: tid });
-    } catch (err: unknown) {
-      toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
-    }
+    } catch (err: unknown) { toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid }); }
   };
 
   const deleteHoliday = (id: string, date: string) => {
     setConfirmCfg({
-      title: "Hapus Hari Libur",
-      message: `Yakin hapus tanggal libur ${date}?`,
-      type: "danger",
+      title: "Hapus Hari Libur", message: `Yakin hapus tanggal libur ${date}?`, type: "danger",
       onConfirm: async () => {
-        const supabase = createClient();
-        const tid = toast.loading("Menghapus...");
+        const supabase = createClient(); const tid = toast.loading("Menghapus...");
         try {
           const { error } = await supabase.from("holidays").delete().eq("id", id);
           if (error) throw error;
           setHolidays((prev) => prev.filter((h) => h.id !== id));
           toast.success("Berhasil dihapus.", { id: tid });
-        } catch (err: unknown) {
-          toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
-        } finally { setConfirmCfg(null); }
+        } catch (err: unknown) { toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid }); }
+        finally { setConfirmCfg(null); }
       },
     });
   };
@@ -153,41 +145,71 @@ export default function AdminSettingsPage() {
       setDepartments((prev) => [...prev, { id: (data as Record<string, unknown>).id as string, name: newDept.trim() }]);
       setNewDept("");
       toast.success("Departemen ditambahkan.", { id: tid });
-    } catch (err: unknown) {
-      toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
-    }
+    } catch (err: unknown) { toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid }); }
   };
 
   const deleteDepartment = (id: string, name: string) => {
     setConfirmCfg({
-      title: "Hapus Departemen",
-      message: `Yakin hapus departemen "${name}"? Staf yang terdaftar di departemen ini akan kehilangan department-nya.`,
-      type: "danger",
+      title: "Hapus Departemen", message: `Yakin hapus departemen "${name}"?`, type: "danger",
       onConfirm: async () => {
-        const supabase = createClient();
-        const tid = toast.loading("Menghapus...");
+        const supabase = createClient(); const tid = toast.loading("Menghapus...");
         try {
           const { error } = await supabase.from("departments").delete().eq("id", id);
           if (error) throw error;
           setDepartments((prev) => prev.filter((d) => d.id !== id));
+          setOfficeLocations(prev => prev.map(o => ({ ...o, deptIds: o.deptIds.filter(did => did !== id) })));
           toast.success("Berhasil dihapus.", { id: tid });
-        } catch (err: unknown) {
-          toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
-        } finally { setConfirmCfg(null); }
+        } catch (err: unknown) { toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid }); }
+        finally { setConfirmCfg(null); }
       },
     });
   };
 
-  if (isLoading) {
-    return (
-      <div className="space-y-8 pb-24 animate-pulse">
-        <div className="h-8 w-64 bg-[var(--ab-bg-surface)] rounded-xl" />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {[1, 2, 3, 4].map((i) => <div key={i} className="h-64 bg-[var(--ab-bg-surface)] rounded-[30px]" />)}
-        </div>
-      </div>
-    );
-  }
+  const addOfficeLocation = async () => {
+    if (!newOffice.name.trim() || !newOffice.lat || !newOffice.lng || !newOffice.radius) return toast.error("Isi semua data kantor.");
+    const supabase = createClient();
+    const tid = toast.loading("Menambah lokasi kantor...");
+    try {
+      const { data, error } = await supabase.from("office_locations" as any).insert({
+        name: newOffice.name.trim(), lat: parseFloat(newOffice.lat), lng: parseFloat(newOffice.lng), radius: parseInt(newOffice.radius)
+      }).select().single();
+      if (error) throw error;
+      setOfficeLocations(prev => [...prev, { id: (data as any).id, name: (data as any).name, lat: (data as any).lat, lng: (data as any).lng, radius: (data as any).radius, deptIds: [] }]);
+      setNewOffice({ name: "", lat: "", lng: "", radius: "100" });
+      toast.success("Lokasi ditambahkan.", { id: tid });
+    } catch (err: unknown) { toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid }); }
+  };
+
+  const deleteOfficeLocation = (id: string, name: string) => {
+    setConfirmCfg({
+      title: "Hapus Kantor Cabang", message: `Yakin hapus lokasi "${name}"?`, type: "danger",
+      onConfirm: async () => {
+        const supabase = createClient(); const tid = toast.loading("Menghapus...");
+        try {
+          const { error } = await supabase.from("office_locations" as any).delete().eq("id", id);
+          if (error) throw error;
+          setOfficeLocations(prev => prev.filter((o) => o.id !== id));
+          toast.success("Berhasil dihapus.", { id: tid });
+        } catch (err: unknown) { toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid }); }
+        finally { setConfirmCfg(null); }
+      },
+    });
+  };
+
+  const toggleDeptOffice = async (officeId: string, deptId: string, checked: boolean) => {
+    const supabase = createClient();
+    try {
+      if (checked) {
+        setOfficeLocations(prev => prev.map(o => o.id === officeId ? { ...o, deptIds: [...o.deptIds, deptId] } : o));
+        await supabase.from("department_locations" as any).insert({ department_id: deptId, office_location_id: officeId });
+      } else {
+        setOfficeLocations(prev => prev.map(o => o.id === officeId ? { ...o, deptIds: o.deptIds.filter(id => id !== deptId) } : o));
+        await supabase.from("department_locations" as any).delete().match({ department_id: deptId, office_location_id: officeId });
+      }
+    } catch (e) { toast.error("Gagal mengupdate relasi."); }
+  };
+
+  if (isLoading) return <div className="space-y-8 pb-24 animate-pulse"><div className="h-8 w-64 bg-[var(--ab-bg-surface)] rounded-xl" /><div className="grid grid-cols-1 lg:grid-cols-2 gap-8">{[1, 2, 3, 4].map((i) => <div key={i} className="h-64 bg-[var(--ab-bg-surface)] rounded-[30px]" />)}</div></div>;
 
   const inputCls = "w-full ab-input text-sm font-bold";
   const sectionCls = "ab-card-tactile space-y-6";
@@ -207,169 +229,134 @@ export default function AdminSettingsPage() {
             <h3 className="font-black text-[var(--ab-text-main)] uppercase tracking-wider text-sm">Jam Operasional</h3>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelCls}>Mulai Kerja</label>
-              <input type="time" value={settings.workStart} onChange={(e) => setSettings({ ...settings, workStart: e.target.value })} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Akhir Kerja</label>
-              <input type="time" value={settings.workEnd} onChange={(e) => setSettings({ ...settings, workEnd: e.target.value })} className={inputCls} />
-            </div>
-            <div className="col-span-2">
-              <label className={labelCls}>Batas Toleransi Telat</label>
-              <input type="time" value={settings.maxLate} onChange={(e) => setSettings({ ...settings, maxLate: e.target.value })} className={`${inputCls} text-red-500`} />
-            </div>
+            <div><label className={labelCls}>Mulai Kerja</label><input type="time" value={settings.workStart} onChange={(e) => setSettings({ ...settings, workStart: e.target.value })} className={inputCls} /></div>
+            <div><label className={labelCls}>Akhir Kerja</label><input type="time" value={settings.workEnd} onChange={(e) => setSettings({ ...settings, workEnd: e.target.value })} className={inputCls} /></div>
+            <div className="col-span-2"><label className={labelCls}>Batas Toleransi Telat</label><input type="time" value={settings.maxLate} onChange={(e) => setSettings({ ...settings, maxLate: e.target.value })} className={`${inputCls} text-red-500`} /></div>
           </div>
-          <button onClick={saveSettings} className="ab-nm-button ab-btn-primary w-full py-3 text-xs font-black uppercase tracking-widest">
-            Simpan Pengaturan
-          </button>
+          <button onClick={saveSettings} className="ab-nm-button ab-btn-primary w-full py-3 text-xs font-black uppercase tracking-widest">Simpan Pengaturan</button>
         </div>
 
         {/* Batas Waktu Pengajuan */}
         <div className={sectionCls}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#ede9fe20", color: "#7c3aed", border: "1px solid #c4b5fd" }}>
-              <Settings size={16} />
-            </div>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#ede9fe20", color: "#7c3aed", border: "1px solid #c4b5fd" }}><Settings size={16} /></div>
             <h3 className="font-black text-[var(--ab-text-main)] uppercase tracking-wider text-sm">Batas Jam Pengajuan</h3>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: "Cuti", key: "maxTimeLeave" as const },
-              { label: "Sakit", key: "maxTimeSick" as const },
-              { label: "WFA",   key: "maxTimeWfa"   as const },
-            ].map(({ label, key }) => (
-              <div key={key}>
-                <label className={`${labelCls} text-center`}>{label}</label>
-                <input type="time" value={settings[key]} onChange={(e) => setSettings({ ...settings, [key]: e.target.value })} className={`${inputCls} text-center`} />
+            {[ { label: "Cuti", key: "maxTimeLeave" as const }, { label: "Sakit", key: "maxTimeSick" as const }, { label: "WFA", key: "maxTimeWfa" as const } ].map(({ label, key }) => (
+              <div key={key}><label className={`${labelCls} text-center`}>{label}</label><input type="time" value={settings[key]} onChange={(e) => setSettings({ ...settings, [key]: e.target.value })} className={`${inputCls} text-center`} /></div>
+            ))}
+          </div>
+          <p className="text-[10px] text-[var(--ab-text-dim)] italic text-center">Staf tidak bisa mengajukan di hari H jika melewati jam di atas.</p>
+          <button onClick={saveSettings} className="ab-nm-button w-full py-3 text-xs font-black uppercase tracking-widest border border-[var(--ab-border)] text-[var(--ab-text-main)]">Update Aturan Waktu</button>
+        </div>
+
+        {/* GPS DEFAULT */}
+        <div className={sectionCls}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#fee2e220", color: "#dc2626", border: "1px solid #fca5a5" }}><MapPin size={16} /></div>
+            <h3 className="font-black text-[var(--ab-text-main)] uppercase tracking-wider text-sm">Lokasi Default</h3>
+          </div>
+          <p className="text-xs text-[var(--ab-text-dim)]">Digunakan untuk departemen yang tidak dikaitkan ke cabang manapun.</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className={labelCls}>Latitude</label><input type="number" step="any" value={settings.officeLat} onChange={(e) => setSettings({ ...settings, officeLat: parseFloat(e.target.value) })} className={inputCls} /></div>
+            <div><label className={labelCls}>Longitude</label><input type="number" step="any" value={settings.officeLng} onChange={(e) => setSettings({ ...settings, officeLng: parseFloat(e.target.value) })} className={inputCls} /></div>
+            <div className="col-span-2"><label className={labelCls}>Radius Presensi (Meter)</label><input type="number" value={settings.officeRadius} onChange={(e) => setSettings({ ...settings, officeRadius: parseInt(e.target.value) })} className={`${inputCls} text-[var(--ab-primary)] font-black`} /></div>
+          </div>
+          <button onClick={saveOffice} className="ab-nm-button w-full py-3 text-xs font-black uppercase tracking-widest bg-[var(--ab-text-main)] text-[var(--ab-bg-main)]">Update Lokasi Default</button>
+        </div>
+
+        {/* KANTOR CABANG */}
+        <div className={sectionCls}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#e0f2fe20", color: "#0ea5e9", border: "1px solid #bae6fd" }}><Map size={16} /></div>
+            <h3 className="font-black text-[var(--ab-text-main)] uppercase tracking-wider text-sm">Lokasi Cabang</h3>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-2 bg-[var(--ab-bg-surface)] p-3 rounded-xl border border-[var(--ab-border)]">
+            <div className="col-span-2"><input type="text" placeholder="Nama Kantor (misal: Cabang A)" value={newOffice.name} onChange={e => setNewOffice({...newOffice, name: e.target.value})} className="ab-input w-full text-xs" /></div>
+            <div><input type="number" step="any" placeholder="Lat" value={newOffice.lat} onChange={e => setNewOffice({...newOffice, lat: e.target.value})} className="ab-input w-full text-xs" /></div>
+            <div><input type="number" step="any" placeholder="Lng" value={newOffice.lng} onChange={e => setNewOffice({...newOffice, lng: e.target.value})} className="ab-input w-full text-xs" /></div>
+            <div className="col-span-2 flex gap-2">
+              <input type="number" placeholder="Radius (m)" value={newOffice.radius} onChange={e => setNewOffice({...newOffice, radius: e.target.value})} className="ab-input w-24 text-xs" />
+              <button onClick={addOfficeLocation} className="ab-nm-button ab-btn-primary flex-1 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2"><Plus size={14} /> Tambah Cabang</button>
+            </div>
+          </div>
+
+          <div className="space-y-4 max-h-[300px] overflow-y-auto ab-scrollbar pr-1">
+            {officeLocations.map((o) => (
+              <div key={o.id} className="bg-[var(--ab-bg-main)] border border-[var(--ab-border)] p-3 rounded-xl flex flex-col gap-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="font-black text-xs text-[var(--ab-text-main)] uppercase">{o.name}</div>
+                    <div className="text-[10px] text-[var(--ab-text-dim)]">{o.lat}, {o.lng} &bull; R: {o.radius}m</div>
+                  </div>
+                  <button onClick={() => deleteOfficeLocation(o.id, o.name)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={14}/></button>
+                </div>
+                
+                {/* Departemen List untuk dicentang */}
+                <div className="pt-2 border-t border-[var(--ab-border)]">
+                  <div className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase mb-2">Departemen di Cabang Ini:</div>
+                  <div className="flex flex-wrap gap-2">
+                    {departments.length === 0 ? <span className="text-[10px] italic text-[var(--ab-text-dim)]">Belum ada departemen.</span> : departments.map(d => {
+                      const isChecked = o.deptIds.includes(d.id);
+                      return (
+                        <label key={d.id} className="flex items-center gap-1.5 cursor-pointer bg-[var(--ab-bg-surface)] px-2 py-1 rounded-md text-[10px] font-bold border border-transparent hover:border-[var(--ab-border)] transition">
+                          <input type="checkbox" checked={isChecked} onChange={e => toggleDeptOffice(o.id, d.id, e.target.checked)} className="accent-[var(--ab-primary)] rounded" />
+                          <span className={isChecked ? "text-[var(--ab-text-main)]" : "text-[var(--ab-text-dim)]"}>{d.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
-          <p className="text-[10px] text-[var(--ab-text-dim)] italic text-center">
-            Staf tidak bisa mengajukan di hari H jika melewati jam di atas.
-          </p>
-          <button onClick={saveSettings} className="ab-nm-button w-full py-3 text-xs font-black uppercase tracking-widest border border-[var(--ab-border)] text-[var(--ab-text-main)]">
-            Update Aturan Waktu
-          </button>
         </div>
-
-        {/* GPS */}
-        <div className={sectionCls}>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#fee2e220", color: "#dc2626", border: "1px solid #fca5a5" }}>
-              <MapPin size={16} />
-            </div>
-            <h3 className="font-black text-[var(--ab-text-main)] uppercase tracking-wider text-sm">Lokasi & Radius</h3>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelCls}>Latitude</label>
-              <input type="number" step="any" value={settings.officeLat} onChange={(e) => setSettings({ ...settings, officeLat: parseFloat(e.target.value) })} className={inputCls} />
-            </div>
-            <div>
-              <label className={labelCls}>Longitude</label>
-              <input type="number" step="any" value={settings.officeLng} onChange={(e) => setSettings({ ...settings, officeLng: parseFloat(e.target.value) })} className={inputCls} />
-            </div>
-            <div className="col-span-2">
-              <label className={labelCls}>Radius Presensi (Meter)</label>
-              <input type="number" value={settings.officeRadius} onChange={(e) => setSettings({ ...settings, officeRadius: parseInt(e.target.value) })} className={`${inputCls} text-[var(--ab-primary)] font-black`} />
-            </div>
-          </div>
-          <button onClick={saveOffice} className="ab-nm-button w-full py-3 text-xs font-black uppercase tracking-widest bg-[var(--ab-text-main)] text-[var(--ab-bg-main)]">
-            Update Konfigurasi GPS
-          </button>
-        </div>
-
 
         {/* Hari Libur */}
         <div className={sectionCls}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#ffedd520", color: "#ea580c", border: "1px solid #fed7aa" }}>
-              <CalendarDays size={16} />
-            </div>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#ffedd520", color: "#ea580c", border: "1px solid #fed7aa" }}><CalendarDays size={16} /></div>
             <h3 className="font-black text-[var(--ab-text-main)] uppercase tracking-wider text-sm">Hari Libur Nasional</h3>
           </div>
           <div className="flex gap-2">
             <input type="date" value={newHol.date} onChange={(e) => setNewHol({ ...newHol, date: e.target.value })} className="ab-input text-xs" />
-            <input
-              type="text"
-              placeholder="Keterangan..."
-              value={newHol.description}
-              onChange={(e) => setNewHol({ ...newHol, description: e.target.value })}
-              onKeyDown={(e) => { if (e.key === "Enter") addHoliday(); }}
-              className="ab-input flex-1 text-xs"
-            />
-            <button onClick={addHoliday} className="ab-nm-button w-10 h-10 rounded-xl flex items-center justify-center text-orange-500 border border-orange-200 dark:border-orange-800 hover:bg-orange-500 hover:text-white transition shrink-0">
-              <Plus size={14} />
-            </button>
+            <input type="text" placeholder="Keterangan..." value={newHol.description} onChange={(e) => setNewHol({ ...newHol, description: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") addHoliday(); }} className="ab-input flex-1 text-xs" />
+            <button onClick={addHoliday} className="ab-nm-button w-10 h-10 rounded-xl flex items-center justify-center text-orange-500 border border-orange-200 dark:border-orange-800 hover:bg-orange-500 hover:text-white transition shrink-0"><Plus size={14} /></button>
           </div>
           <div className="overflow-y-auto max-h-[160px] space-y-2 ab-scrollbar pr-1">
-            {holidays.length === 0 ? (
-              <p className="text-center py-4 text-[10px] text-[var(--ab-text-dim)] uppercase font-black">Belum ada hari libur</p>
-            ) : (
-              holidays.map((h) => (
-                <div key={h.id} className="flex justify-between items-center bg-[var(--ab-bg-main)] p-2.5 rounded-xl border border-[var(--ab-border)]">
-                  <div className="text-[10px]">
-                    <span className="font-black text-orange-600 mr-2">{h.date}</span>
-                    <span className="text-[var(--ab-text-dim)]">{h.description}</span>
-                  </div>
-                  <button onClick={() => deleteHoliday(h.id, h.date)} className="text-red-400 hover:text-red-600 transition p-1">
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              ))
-            )}
+            {holidays.length === 0 ? <p className="text-center py-4 text-[10px] text-[var(--ab-text-dim)] uppercase font-black">Belum ada hari libur</p> : holidays.map((h) => (
+              <div key={h.id} className="flex justify-between items-center bg-[var(--ab-bg-main)] p-2.5 rounded-xl border border-[var(--ab-border)]">
+                <div className="text-[10px]"><span className="font-black text-orange-600 mr-2">{h.date}</span><span className="text-[var(--ab-text-dim)]">{h.description}</span></div>
+                <button onClick={() => deleteHoliday(h.id, h.date)} className="text-red-400 hover:text-red-600 transition p-1"><Trash2 size={12} /></button>
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Departemen */}
         <div className={`${sectionCls} lg:col-span-2`}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#ccfbf120", color: "#0d9488", border: "1px solid #99f6e4" }}>
-              <Settings size={16} />
-            </div>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#ccfbf120", color: "#0d9488", border: "1px solid #99f6e4" }}><Settings size={16} /></div>
             <h3 className="font-black text-[var(--ab-text-main)] uppercase tracking-wider text-sm">Manajemen Departemen</h3>
           </div>
           <div className="flex gap-2">
-            <input
-              type="text"
-              value={newDept}
-              onChange={(e) => setNewDept(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") addDepartment(); }}
-              placeholder="Nama departemen baru..."
-              className="ab-input flex-1 font-bold"
-            />
-            <button onClick={addDepartment} className="ab-nm-button ab-btn-primary px-6 py-3 text-xs font-black uppercase tracking-widest flex items-center gap-2">
-              <Plus size={14} /> Tambah
-            </button>
+            <input type="text" value={newDept} onChange={(e) => setNewDept(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addDepartment(); }} placeholder="Nama departemen baru..." className="ab-input flex-1 font-bold" />
+            <button onClick={addDepartment} className="ab-nm-button ab-btn-primary px-6 py-3 text-xs font-black uppercase tracking-widest flex items-center gap-2"><Plus size={14} /> Tambah</button>
           </div>
           <div className="flex flex-wrap gap-2">
-            {departments.length === 0 ? (
-              <p className="text-[10px] text-[var(--ab-text-dim)] uppercase font-black italic">Belum ada departemen</p>
-            ) : (
-              departments.map((d) => (
-                <div key={d.id} className="bg-[var(--ab-bg-main)] border border-[var(--ab-border)] pl-4 pr-3 py-2 rounded-xl flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-[var(--ab-text-main)]">
-                  {d.name}
-                  <button onClick={() => deleteDepartment(d.id, d.name)} className="text-red-400 hover:text-red-600 transition">
-                    <Trash2 size={10} />
-                  </button>
-                </div>
-              ))
-            )}
+            {departments.length === 0 ? <p className="text-[10px] text-[var(--ab-text-dim)] uppercase font-black italic">Belum ada departemen</p> : departments.map((d) => (
+              <div key={d.id} className="bg-[var(--ab-bg-main)] border border-[var(--ab-border)] pl-4 pr-3 py-2 rounded-xl flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-[var(--ab-text-main)]">
+                {d.name}
+                <button onClick={() => deleteDepartment(d.id, d.name)} className="text-red-400 hover:text-red-600 transition"><Trash2 size={10} /></button>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {confirmCfg && (
-        <ConfirmDialog
-          isOpen
-          title={confirmCfg.title}
-          message={confirmCfg.message}
-          type={confirmCfg.type}
-          onConfirm={confirmCfg.onConfirm}
-          onCancel={() => setConfirmCfg(null)}
-        />
-      )}
+      {confirmCfg && <ConfirmDialog isOpen title={confirmCfg.title} message={confirmCfg.message} type={confirmCfg.type} onConfirm={confirmCfg.onConfirm} onCancel={() => setConfirmCfg(null)} />}
     </div>
   );
 }
