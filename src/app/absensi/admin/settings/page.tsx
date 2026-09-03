@@ -251,21 +251,6 @@ export default function AdminSettingsPage() {
           <button onClick={saveSettings} className="ab-nm-button w-full py-3 text-xs font-black uppercase tracking-widest border border-[var(--ab-border)] text-[var(--ab-text-main)]">Update Aturan Waktu</button>
         </div>
 
-        {/* GPS DEFAULT */}
-        <div className={sectionCls}>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "#fee2e220", color: "#dc2626", border: "1px solid #fca5a5" }}><MapPin size={16} /></div>
-            <h3 className="font-black text-[var(--ab-text-main)] uppercase tracking-wider text-sm">Lokasi Default</h3>
-          </div>
-          <p className="text-xs text-[var(--ab-text-dim)]">Digunakan untuk departemen yang tidak dikaitkan ke cabang manapun.</p>
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className={labelCls}>Latitude</label><input type="number" step="any" value={settings.officeLat} onChange={(e) => setSettings({ ...settings, officeLat: parseFloat(e.target.value) })} className={inputCls} /></div>
-            <div><label className={labelCls}>Longitude</label><input type="number" step="any" value={settings.officeLng} onChange={(e) => setSettings({ ...settings, officeLng: parseFloat(e.target.value) })} className={inputCls} /></div>
-            <div className="col-span-2"><label className={labelCls}>Radius Presensi (Meter)</label><input type="number" value={settings.officeRadius} onChange={(e) => setSettings({ ...settings, officeRadius: parseInt(e.target.value) })} className={`${inputCls} text-[var(--ab-primary)] font-black`} /></div>
-          </div>
-          <button onClick={saveOffice} className="ab-nm-button w-full py-3 text-xs font-black uppercase tracking-widest bg-[var(--ab-text-main)] text-[var(--ab-bg-main)]">Update Lokasi Default</button>
-        </div>
-
         {/* KANTOR CABANG */}
         <div className={sectionCls}>
           <div className="flex items-center gap-3">

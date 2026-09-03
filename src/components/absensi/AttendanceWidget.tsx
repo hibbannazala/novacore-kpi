@@ -100,12 +100,11 @@ export function AttendanceWidget() {
           minRadius = al.radius;
         }
       }
-      return { dist: minDist, radius: minRadius };
+      return { dist: minDist, radius: minRadius, noLocationError: false };
     } else {
-      const dist = calcDist(loc.lat, loc.lng, settings.officeLat, settings.officeLng);
-      return { dist, radius: settings.officeRadius || 100 };
+      return { dist: Infinity, radius: 0, noLocationError: true };
     }
-  }, [allowedLocations, settings]);
+  }, [allowedLocations]);
 
   const [pendingLocation, setPendingLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [showCheckoutConfirm, setShowCheckoutConfirm] = useState(false);
@@ -333,6 +332,11 @@ export function AttendanceWidget() {
         toast.dismiss(toastId);
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         const nearest = getNearestLocation(loc);
+        if (nearest.noLocationError) {
+          toast.error("Lokasi absen divisi Anda belum diatur oleh Admin. Hubungi HR.");
+          setIsProcessing(false);
+          return;
+        }
         if (nearest.dist > nearest.radius) {
           setPendingLocation(loc);
           setPendingDistance(Math.round(nearest.dist));
@@ -928,6 +932,11 @@ export function AttendanceWidget() {
                             toast.dismiss(toastId);
                             const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
                             const nearest = getNearestLocation(loc);
+                            if (nearest.noLocationError) {
+                              toast.error("Lokasi absen divisi Anda belum diatur oleh Admin.");
+                              setIsSyncing(false);
+                              return;
+                            }
                             const newCount = syncRetryCount + 1;
                             setSyncRetryCount(newCount);
                             setPendingLocation(loc);
