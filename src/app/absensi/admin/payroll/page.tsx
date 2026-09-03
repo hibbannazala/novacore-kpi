@@ -48,6 +48,64 @@ export default function HrPayrollPage() {
   const year = currentDate.getFullYear();
   const periodLabel = format(currentDate, "MMMM yyyy", { locale: localeId });
 
+  // Autosave to localStorage on every change
+  useEffect(() => {
+    if (rows.length === 0) return;
+    const dirtyRows = rows.filter(r => r.payroll._dirty);
+    const draftKey = `payroll_draft_${month}_${year}`;
+    if (dirtyRows.length > 0) {
+      localStorage.setItem(draftKey, JSON.stringify(dirtyRows));
+    }
+  }, [rows, month, year]);
+
+  // Autosave to DB after 60s of inactivity
+  useEffect(() => {
+    const dirtyRows = rows.filter(r => r.payroll._dirty);
+    if (dirtyRows.length === 0) return;
+
+    const timeout = setTimeout(async () => {
+      const promises = dirtyRows.map(async (row) => {
+        const payload = {
+          user_id: row.id,
+          month,
+          year,
+          base_salary: row.payroll.base_salary || 0,
+          mobility_allowance: row.payroll.mobility_allowance || 0,
+          performance_bonus: row.payroll.performance_bonus || 0,
+          overtime_pay: row.payroll.overtime_pay || 0,
+          overtime_notes: row.payroll.overtime_notes || "",
+          additions_detail: row.payroll.additions_detail || [],
+          deductions: row.payroll.deductions || 0,
+          deductions_detail: row.payroll.deductions_detail || [],
+          notes: row.payroll.notes || "",
+          status: "draft",
+        };
+        
+        if (row.payroll.id) {
+          return supabase.from("payrolls").update(payload).eq("id", row.payroll.id);
+        } else {
+          return supabase.from("payrolls").insert(payload);
+        }
+      });
+      
+      try {
+        await Promise.all(promises);
+        toast.success("Draf gaji berhasil disinkronkan otomatis (Autosave).");
+        setRows(prev => prev.map(r => {
+          if (dirtyRows.find(d => d.id === r.id)) {
+            return { ...r, payroll: { ...r.payroll, _dirty: false } };
+          }
+          return r;
+        }));
+        localStorage.removeItem(`payroll_draft_${month}_${year}`);
+      } catch (e) {
+        console.error("Autosave DB failed", e);
+      }
+    }, 60000);
+
+    return () => clearTimeout(timeout);
+  }, [rows, month, year, supabase]);
+
   useEffect(() => { fetchData(); }, [month, year]);
 
   async function fetchData() {
@@ -66,30 +124,43 @@ export default function HrPayrollPage() {
     setDeductionTypes((deductionTypesRes.data ?? []) as DeductionType[]);
     setAdditionTypes((additionTypesRes.data ?? []) as AdditionType[]);
     
+    const draftKey = `payroll_draft_${month}_${year}`;
+    let drafts: StaffRow[] = [];
+    try {
+      const draftStr = typeof window !== 'undefined' ? localStorage.getItem(draftKey) : null;
+      if (draftStr) drafts = JSON.parse(draftStr);
+    } catch (e) {}
 
     const built: StaffRow[] = users.map((u: any) => {
       const setting = settings.find((s) => s.user_id === u.id) || null;
       const existing = payrolls.find((p) => p.user_id === u.id);
+      
+      const payrollBase = {
+        id: existing?.id,
+        base_salary: existing?.base_salary ?? setting?.default_base_salary ?? 0,
+        mobility_allowance: existing?.mobility_allowance ?? setting?.default_mobility_allowance ?? 0,
+        performance_bonus: existing?.performance_bonus ?? 0,
+        overtime_pay: existing?.overtime_pay ?? 0,
+        overtime_notes: existing?.overtime_notes ?? "",
+        additions_detail: existing?.additions_detail ?? [],
+        deductions: existing?.deductions ?? 0,
+        deductions_detail: existing?.deductions_detail ?? [],
+        notes: existing?.notes ?? "",
+        status: existing?.status ?? "draft",
+      };
+
+      const draftRow = drafts.find(d => d.id === u.id);
+      const payroll = draftRow && draftRow.payroll._dirty 
+        ? { ...payrollBase, ...draftRow.payroll } 
+        : payrollBase;
+
       return {
         id: u.id,
         name: u.name,
         email: u.email,
         departmentName: u.departments?.name ?? null,
         setting,
-        payroll: {
-          id: existing?.id,
-          base_salary: existing?.base_salary ?? setting?.default_base_salary ?? 0,
-          mobility_allowance: existing?.mobility_allowance ?? setting?.default_mobility_allowance ?? 0,
-          performance_bonus: existing?.performance_bonus ?? 0,
-          overtime_pay: existing?.overtime_pay ?? 0,
-          overtime_notes: existing?.overtime_notes ?? "",
-          additions_detail: existing?.additions_detail ?? [],
-          deductions: existing?.deductions ?? 0,
-          deductions_detail: existing?.deductions_detail ?? [],
-          deduction_notes: existing?.deduction_notes ?? "",
-          notes: existing?.notes ?? "",
-          status: existing?.status ?? "draft",
-        },
+        payroll,
       };
     });
 
@@ -133,6 +204,7 @@ export default function HrPayrollPage() {
         if (error) throw error;
       }
 
+      setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, _dirty: false } } : r));
       toast.success(`Draf gaji ${row.name} berhasil disimpan.`, { id: tid });
       fetchData();
     } catch (err: unknown) {
