@@ -75,18 +75,17 @@ export function AttendanceWidget() {
   const [allowedLocations, setAllowedLocations] = useState<AllowedLocation[]>([]);
 
   useEffect(() => {
-    if (!user?.departmentId) return;
     const fetchLocs = async () => {
       const supabase = createClient();
-      const { data } = await supabase.from('department_locations' as any).select('office_locations(id, name, lat, lng, radius)').eq('department_id', user.departmentId as string);
+      const { data } = await supabase.from('office_locations').select('id, name, lat, lng, radius');
       if (data && data.length > 0) {
-        setAllowedLocations(data.map((d: any) => d.office_locations));
+        setAllowedLocations(data as any);
       } else {
         setAllowedLocations([]);
       }
     };
     fetchLocs();
-  }, [user?.departmentId]);
+  }, []);
 
   const getNearestLocation = useCallback((loc: { lat: number; lng: number }) => {
     if (allowedLocations.length > 0) {
