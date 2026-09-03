@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Target, Clock, FilePen, Menu, X } from "lucide-react";
+import { LayoutDashboard, Target, Clock, FilePen, Menu, X, LogOut } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { navByRole } from "./Sidebar";
 import Link from "next/link";
@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 export function MobileBottomNav() {
   const router = useRouter();
   const pathname = usePathname();
-  const { kpiRole, user, devMode } = useAuth();
+  const { kpiRole, user, devMode, signOut } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   if (!user || !kpiRole) return null;
@@ -97,6 +97,18 @@ export function MobileBottomNav() {
                 );
               })}
             </ul>
+            <div className="mt-8 border-t border-[var(--ab-border)] pt-4 px-2">
+              <button
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  signOut();
+                }}
+                className="flex w-full items-center gap-4 rounded-2xl px-3 py-3.5 text-[13px] font-black text-red-500 transition-all hover:bg-red-50 hover:text-red-600"
+              >
+                <LogOut className="h-[18px] w-[18px] shrink-0" />
+                <span className="tracking-tight whitespace-nowrap">Keluar</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
