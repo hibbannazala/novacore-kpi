@@ -278,6 +278,24 @@ export default function AdminSettingsPage() {
                   </div>
                   <button onClick={() => deleteOfficeLocation(o.id, o.name)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={14}/></button>
                 </div>
+
+                {/* Departemen yang bisa absen di kantor ini */}
+                <div className="pt-2 border-t border-[var(--ab-border)]">
+                  <p className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] mb-1.5 tracking-widest">Divisi yang Absen di Sini:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {departments.length === 0 ? (
+                      <span className="text-[10px] italic text-[var(--ab-text-dim)]">Belum ada divisi.</span>
+                    ) : departments.map(d => {
+                      const isChecked = o.deptIds.includes(d.id);
+                      return (
+                        <label key={d.id} className="flex items-center gap-1.5 cursor-pointer bg-[var(--ab-bg-surface)] px-2 py-1 rounded-md text-[10px] font-bold border border-transparent hover:border-[var(--ab-border)] transition">
+                          <input type="checkbox" checked={isChecked} onChange={e => toggleDeptOffice(o.id, d.id, e.target.checked)} className="accent-[var(--ab-primary)] rounded" />
+                          <span className={isChecked ? "text-[var(--ab-text-main)]" : "text-[var(--ab-text-dim)]"}>{d.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             ))}
           </div>

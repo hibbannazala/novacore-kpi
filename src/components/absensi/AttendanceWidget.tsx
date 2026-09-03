@@ -75,17 +75,23 @@ export function AttendanceWidget() {
   const [allowedLocations, setAllowedLocations] = useState<AllowedLocation[]>([]);
 
   useEffect(() => {
+    if (!user?.departmentId) return;
     const fetchLocs = async () => {
       const supabase = createClient();
-      const { data } = await supabase.from('office_locations').select('id, name, lat, lng, radius');
+      // Fetch locations assigned to this user's department
+      const { data } = await supabase
+        .from('department_locations' as any)
+        .select('office_locations(id, name, lat, lng, radius)')
+        .eq('department_id', user.departmentId as string);
       if (data && data.length > 0) {
-        setAllowedLocations(data as any);
+        const locs = data.map((d: any) => d.office_locations).filter(Boolean);
+        setAllowedLocations(locs);
       } else {
         setAllowedLocations([]);
       }
     };
     fetchLocs();
-  }, []);
+  }, [user?.departmentId]);
 
   const getNearestLocation = useCallback((loc: { lat: number; lng: number }) => {
     if (allowedLocations.length > 0) {
@@ -351,17 +357,26 @@ export function AttendanceWidget() {
       async (err) => {
         toast.dismiss(toastId);
         if (err.code === 1) {
+          // Permission denied
           setLocationPerm("denied");
           const result = await doCheckIn(null);
           if ("requireLateReason" in result) setPendingLocation(null);
           finalizeCheckIn(result);
           if (!("requireLateReason" in result)) setShowLocationGuide(true);
+        } else if (err.code === 2) {
+          // Position unavailable
+          toast.error("GPS tidak tersedia. Pastikan GPS aktif lalu coba lagi.", { duration: 5000 });
+          setIsProcessing(false);
+        } else if (err.code === 3) {
+          // Timeout
+          toast.error("GPS timeout. Koneksi lambat atau sinyal GPS lemah. Coba lagi.", { duration: 5000 });
+          setIsProcessing(false);
         } else {
           toast.error("Gagal mendapatkan lokasi GPS. Pastikan izin lokasi aktif.");
           setIsProcessing(false);
         }
       },
-      { enableHighAccuracy: true }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
     );
   };
 
