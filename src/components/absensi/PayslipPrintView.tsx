@@ -19,8 +19,8 @@ interface PayslipPrintViewProps {
   snapshotName?: string | null;
   snapshotPosition?: string | null;
   snapshotCompany?: string | null;
-  deductionsDetail?: Array<{name: string, amount: number}> | null;
-  additionsDetail?: Array<{name: string, amount: number}> | null;
+  deductionsDetail?: Array<{name: string, amount: number, note?: string}> | null;
+  additionsDetail?: Array<{name: string, amount: number, note?: string}> | null;
   overtimeNotes?: string | null;
 }
 
@@ -196,7 +196,10 @@ export const PayslipPrintView = forwardRef<HTMLDivElement, PayslipPrintViewProps
                   <span className="font-semibold block mb-1">Upah Tambahan Lainnya</span>
                   <div className="ml-2 mb-1 space-y-0.5">
                     {additionsDetail.map((add, idx) => (
-                      <div key={idx} className="text-sm">- {add.name}</div>
+                      <div key={idx} className="mb-2 last:mb-0">
+                        <div className="text-sm">- {add.name}</div>
+                        {add.note && <div className="text-[11px] text-gray-500 italic whitespace-pre-wrap ml-3 leading-tight">{add.note}</div>}
+                      </div>
                     ))}
                   </div>
                 </td>
@@ -212,7 +215,10 @@ export const PayslipPrintView = forwardRef<HTMLDivElement, PayslipPrintViewProps
                 {deductionsDetail && deductionsDetail.length > 0 && (
                   <div className="ml-2 mb-1 space-y-0.5">
                     {deductionsDetail.map((ded, idx) => (
-                      <div key={idx} className="text-sm">- {ded.name} {ded.amount > 0 ? `(${formatCurrency(ded.amount)})` : ''}</div>
+                      <div key={idx} className="mb-2 last:mb-0">
+                        <div className="text-sm">- {ded.name} {ded.amount > 0 ? `(${formatCurrency(ded.amount)})` : ''}</div>
+                        {ded.note && <div className="text-[11px] text-gray-500 italic whitespace-pre-wrap ml-3 leading-tight">{ded.note}</div>}
+                      </div>
                     ))}
                   </div>
                 )}

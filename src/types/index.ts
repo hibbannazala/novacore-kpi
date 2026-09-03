@@ -392,8 +392,8 @@ export interface Payroll {
   snapshot_name?: string | null;
   snapshot_position?: string | null;
   snapshot_company?: string | null;
-  deductions_detail?: Array<{name: string, amount: number}> | null;
-  additions_detail?: Array<{name: string, amount: number}> | null;
+  deductions_detail?: Array<{name: string, amount: number, note?: string}> | null;
+  additions_detail?: Array<{name: string, amount: number, note?: string}> | null;
   overtime_notes?: string | null;
 }
 

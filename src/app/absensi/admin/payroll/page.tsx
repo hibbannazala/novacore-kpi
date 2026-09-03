@@ -377,43 +377,56 @@ export default function HrPayrollPage() {
                         
                         <div className="space-y-2">
                           {(row.payroll.additions_detail || []).map((add, idx) => (
-                            <div key={idx} className="flex gap-2 items-center">
-                              <input
-                                type="text"
-                                disabled={isPublished}
-                                value={add.name}
-                                onChange={(e) => {
-                                  const newList = [...(row.payroll.additions_detail || [])];
-                                  newList[idx].name = e.target.value;
-                                  setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, additions_detail: newList, _dirty: true } } : r));
-                                }}
-                                className="ab-input text-xs w-1/2 py-2 disabled:opacity-40"
-                                placeholder="Nama Tambahan"
-                              />
-                              <input
-                                type="number"
-                                disabled={isPublished}
-                                value={add.amount || ""}
-                                onChange={(e) => {
-                                  const newList = [...(row.payroll.additions_detail || [])];
-                                  newList[idx].amount = Number(e.target.value);
-                                  setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, additions_detail: newList, _dirty: true } } : r));
-                                }}
-                                className="ab-input text-xs font-mono w-1/2 py-2 disabled:opacity-40"
-                                placeholder="0"
-                              />
-                              {!isPublished && (
-                                <button
-                                  onClick={() => {
+                            <div key={idx} className="flex flex-col gap-1 border-b border-emerald-50 pb-2 mb-2 last:border-0 last:pb-0 last:mb-0">
+                              <div className="flex gap-2 items-center">
+                                <input
+                                  type="text"
+                                  disabled={isPublished}
+                                  value={add.name}
+                                  onChange={(e) => {
                                     const newList = [...(row.payroll.additions_detail || [])];
-                                    newList.splice(idx, 1);
+                                    newList[idx].name = e.target.value;
                                     setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, additions_detail: newList, _dirty: true } } : r));
                                   }}
-                                  className="text-emerald-400 hover:text-emerald-600 p-1 bg-white border border-emerald-100 hover:border-emerald-300 rounded"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
-                              )}
+                                  className="ab-input text-xs w-1/2 py-2 disabled:opacity-40"
+                                  placeholder="Nama Tambahan"
+                                />
+                                <input
+                                  type="number"
+                                  disabled={isPublished}
+                                  value={add.amount || ""}
+                                  onChange={(e) => {
+                                    const newList = [...(row.payroll.additions_detail || [])];
+                                    newList[idx].amount = Number(e.target.value);
+                                    setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, additions_detail: newList, _dirty: true } } : r));
+                                  }}
+                                  className="ab-input text-xs font-mono w-1/2 py-2 disabled:opacity-40"
+                                  placeholder="0"
+                                />
+                                {!isPublished && (
+                                  <button
+                                    onClick={() => {
+                                      const newList = [...(row.payroll.additions_detail || [])];
+                                      newList.splice(idx, 1);
+                                      setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, additions_detail: newList, _dirty: true } } : r));
+                                    }}
+                                    className="text-emerald-400 hover:text-emerald-600 p-1 bg-white border border-emerald-100 hover:border-emerald-300 rounded"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                )}
+                              </div>
+                              <textarea
+                                disabled={isPublished}
+                                value={add.note || ""}
+                                onChange={(e) => {
+                                  const newList = [...(row.payroll.additions_detail || [])];
+                                  newList[idx].note = e.target.value;
+                                  setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, additions_detail: newList, _dirty: true } } : r));
+                                }}
+                                className="ab-input text-[11px] w-full py-1.5 min-h-[36px] resize-none disabled:opacity-40 text-emerald-700 bg-emerald-50/30"
+                                placeholder="Keterangan tambahan (opsional)..."
+                              />
                             </div>
                           ))}
                         </div>
@@ -506,46 +519,59 @@ export default function HrPayrollPage() {
                         
                         <div className="space-y-2">
                           {(row.payroll.deductions_detail || []).map((ded, idx) => (
-                            <div key={idx} className="flex gap-2 items-center">
-                              <input
-                                type="text"
-                                disabled={isPublished}
-                                value={ded.name}
-                                onChange={(e) => {
-                                  const newList = [...(row.payroll.deductions_detail || [])];
-                                  newList[idx].name = e.target.value;
-                                  const total = newList.reduce((sum, item) => sum + (item.amount || 0), 0);
-                                  setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, deductions_detail: newList, deductions: total, _dirty: true } } : r));
-                                }}
-                                className="ab-input text-xs w-1/2 py-2 disabled:opacity-40"
-                                placeholder="Nama Potongan"
-                              />
-                              <input
-                                type="number"
-                                disabled={isPublished}
-                                value={ded.amount || ""}
-                                onChange={(e) => {
-                                  const newList = [...(row.payroll.deductions_detail || [])];
-                                  newList[idx].amount = Number(e.target.value);
-                                  const total = newList.reduce((sum, item) => sum + (item.amount || 0), 0);
-                                  setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, deductions_detail: newList, deductions: total, _dirty: true } } : r));
-                                }}
-                                className="ab-input text-xs font-mono w-1/2 py-2 disabled:opacity-40"
-                                placeholder="0"
-                              />
-                              {!isPublished && (
-                                <button
-                                  onClick={() => {
+                            <div key={idx} className="flex flex-col gap-1 border-b border-rose-50 pb-2 mb-2 last:border-0 last:pb-0 last:mb-0">
+                              <div className="flex gap-2 items-center">
+                                <input
+                                  type="text"
+                                  disabled={isPublished}
+                                  value={ded.name}
+                                  onChange={(e) => {
                                     const newList = [...(row.payroll.deductions_detail || [])];
-                                    newList.splice(idx, 1);
+                                    newList[idx].name = e.target.value;
                                     const total = newList.reduce((sum, item) => sum + (item.amount || 0), 0);
                                     setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, deductions_detail: newList, deductions: total, _dirty: true } } : r));
                                   }}
-                                  className="text-rose-400 hover:text-rose-600 p-1 bg-white border border-rose-100 hover:border-rose-300 rounded"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
-                              )}
+                                  className="ab-input text-xs w-1/2 py-2 disabled:opacity-40"
+                                  placeholder="Nama Potongan"
+                                />
+                                <input
+                                  type="number"
+                                  disabled={isPublished}
+                                  value={ded.amount || ""}
+                                  onChange={(e) => {
+                                    const newList = [...(row.payroll.deductions_detail || [])];
+                                    newList[idx].amount = Number(e.target.value);
+                                    const total = newList.reduce((sum, item) => sum + (item.amount || 0), 0);
+                                    setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, deductions_detail: newList, deductions: total, _dirty: true } } : r));
+                                  }}
+                                  className="ab-input text-xs font-mono w-1/2 py-2 disabled:opacity-40"
+                                  placeholder="0"
+                                />
+                                {!isPublished && (
+                                  <button
+                                    onClick={() => {
+                                      const newList = [...(row.payroll.deductions_detail || [])];
+                                      newList.splice(idx, 1);
+                                      const total = newList.reduce((sum, item) => sum + (item.amount || 0), 0);
+                                      setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, deductions_detail: newList, deductions: total, _dirty: true } } : r));
+                                    }}
+                                    className="text-rose-400 hover:text-rose-600 p-1 bg-white border border-rose-100 hover:border-rose-300 rounded"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                )}
+                              </div>
+                              <textarea
+                                disabled={isPublished}
+                                value={ded.note || ""}
+                                onChange={(e) => {
+                                  const newList = [...(row.payroll.deductions_detail || [])];
+                                  newList[idx].note = e.target.value;
+                                  setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, deductions_detail: newList, _dirty: true } } : r));
+                                }}
+                                className="ab-input text-[11px] w-full py-1.5 min-h-[36px] resize-none disabled:opacity-40 text-rose-700 bg-rose-50/30"
+                                placeholder="Keterangan potongan (opsional)..."
+                              />
                             </div>
                           ))}
                         </div>
@@ -627,17 +653,7 @@ export default function HrPayrollPage() {
                           </div>
                         )}
                         
-                        <div className="pt-2 border-t border-rose-200">
-                          <label className="text-[9px] font-black uppercase text-rose-500 tracking-widest mb-1 block">Catatan Potongan</label>
-                          <textarea
-                            disabled={isPublished}
-                            value={row.payroll.deduction_notes || ""}
-                            onChange={(e) => updateField(row.id, "deduction_notes", e.target.value)}
-                            className="ab-input text-sm w-full py-2 min-h-[50px] resize-none disabled:opacity-40"
-                            placeholder="Mis: Kasbon bulan agustus (opsional)..."
-                          />
                         </div>
-                      </div>
                     </div>
 
                     <div className="space-y-1 mb-4">
@@ -835,9 +851,12 @@ export default function HrPayrollPage() {
                       <tr className="border-b border-slate-100">
                         <td className="py-2 leading-tight">
                           <span className="font-medium block">Upah Tambahan Lainnya</span>
-                          {(previewRow.payroll.additions_detail || []).map((add, i) => (
-                             <span key={"a-"+i} className="text-xs block ml-2">- {add.name}</span>
-                          ))}
+                            {(previewRow.payroll.additions_detail || []).map((add, i) => (
+                              <div key={"a-"+i} className="mb-2 last:mb-0">
+                                <div className="text-xs ml-2">- {add.name}</div>
+                                {add.note && <div className="text-[10px] text-slate-500 italic ml-4 whitespace-pre-wrap">{add.note}</div>}
+                              </div>
+                            ))}
                         </td>
                         <td className="py-2 text-right font-mono font-bold">{formatRp((previewRow.payroll.additions_detail || []).reduce((sum, a) => sum + (a.amount || 0), 0))}</td>
                       </tr>
@@ -847,11 +866,11 @@ export default function HrPayrollPage() {
                         <td className="py-2 leading-tight">
                           <span className="font-medium block">Potongan</span>
                           {(previewRow.payroll.deductions_detail || []).map((ded, i) => (
-                             <span key={"d-"+i} className="text-xs block ml-2 text-rose-500">- {ded.name}</span>
-                          ))}
-                          {previewRow.payroll.deduction_notes && (
-                            <span className="text-[10px] text-slate-500 italic block mt-1 whitespace-pre-wrap">{previewRow.payroll.deduction_notes}</span>
-                          )}
+                              <div key={"d-"+i} className="mb-2 last:mb-0">
+                                <div className="text-xs ml-2 text-rose-500">- {ded.name}</div>
+                                {ded.note && <div className="text-[10px] text-slate-500 italic ml-4 whitespace-pre-wrap">{ded.note}</div>}
+                              </div>
+                            ))}
                         </td>
                         <td className="py-2 text-right font-mono font-bold">({formatRp(previewRow.payroll.deductions || 0)})</td>
                       </tr>
