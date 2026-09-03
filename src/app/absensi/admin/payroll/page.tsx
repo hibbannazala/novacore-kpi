@@ -55,6 +55,8 @@ export default function HrPayrollPage() {
     const draftKey = `payroll_draft_${month}_${year}`;
     if (dirtyRows.length > 0) {
       localStorage.setItem(draftKey, JSON.stringify(dirtyRows));
+    } else {
+      localStorage.removeItem(draftKey);
     }
   }, [rows, month, year]);
 
