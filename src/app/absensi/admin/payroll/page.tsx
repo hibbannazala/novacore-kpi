@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { createPortal } from "react-dom";
-import type { Payroll, PayrollStaffSetting, DeductionType } from "@/types";
+import type { Payroll, PayrollStaffSetting, DeductionType, AdditionType } from "@/types";
 
 const MONTH_NAMES = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 const COMPANY_COLORS: Record<string, string> = { TNT: "#00897B", Hype: "#E53935", Nova: "#1E88E5" };
@@ -40,6 +40,9 @@ export default function HrPayrollPage() {
   const [newDeductionName, setNewDeductionName] = useState("");
   const [addingDeductionFor, setAddingDeductionFor] = useState<string | null>(null);
   const [newCustomDeduction, setNewCustomDeduction] = useState("");
+  const [additionTypes, setAdditionTypes] = useState<AdditionType[]>([]);
+  const [addingAdditionFor, setAddingAdditionFor] = useState<string | null>(null);
+  const [newCustomAddition, setNewCustomAddition] = useState("");
 
   const month = currentDate.getMonth() + 1;
   const year = currentDate.getFullYear();
@@ -49,17 +52,19 @@ export default function HrPayrollPage() {
 
   async function fetchData() {
     setLoading(true);
-    const [usersRes, settingsRes, payrollsRes, deductionTypesRes] = await Promise.all([
+    const [usersRes, settingsRes, payrollsRes, deductionTypesRes, additionTypesRes] = await Promise.all([
       supabase.from("users").select("id, name, email, department_id, departments(name)").eq("absensi_status", "active").order("name"),
       supabase.from("payroll_staff_settings").select("*"),
       supabase.from("payrolls").select("*").eq("month", month).eq("year", year),
       supabase.from("payroll_deduction_types").select("*").order("name"),
+      supabase.from("payroll_addition_types").select("*").order("name"),
     ]);
 
     const users = (usersRes.data ?? []) as any[];
     const settings = (settingsRes.data ?? []) as PayrollStaffSetting[];
     const payrolls = (payrollsRes.data ?? []) as Payroll[];
     setDeductionTypes((deductionTypesRes.data ?? []) as DeductionType[]);
+    setAdditionTypes((additionTypesRes.data ?? []) as AdditionType[]);
     
 
     const built: StaffRow[] = users.map((u: any) => {
@@ -77,6 +82,8 @@ export default function HrPayrollPage() {
           mobility_allowance: existing?.mobility_allowance ?? setting?.default_mobility_allowance ?? 0,
           performance_bonus: existing?.performance_bonus ?? 0,
           overtime_pay: existing?.overtime_pay ?? 0,
+          overtime_notes: existing?.overtime_notes ?? "",
+          additions_detail: existing?.additions_detail ?? [],
           deductions: existing?.deductions ?? 0,
           deductions_detail: existing?.deductions_detail ?? [],
           deduction_notes: existing?.deduction_notes ?? "",
@@ -109,6 +116,8 @@ export default function HrPayrollPage() {
         mobility_allowance: row.payroll.mobility_allowance || 0,
         performance_bonus: row.payroll.performance_bonus || 0,
         overtime_pay: row.payroll.overtime_pay || 0,
+        overtime_notes: row.payroll.overtime_notes || "",
+        additions_detail: row.payroll.additions_detail || [],
         deductions: row.payroll.deductions || 0,
         deductions_detail: row.payroll.deductions_detail || [],
         
@@ -143,7 +152,10 @@ export default function HrPayrollPage() {
         mobility_allowance: row.payroll.mobility_allowance || 0,
         performance_bonus: row.payroll.performance_bonus || 0,
         overtime_pay: row.payroll.overtime_pay || 0,
+        overtime_notes: row.payroll.overtime_notes || "",
+        additions_detail: row.payroll.additions_detail || [],
         deductions: row.payroll.deductions || 0,
+        deductions_detail: row.payroll.deductions_detail || [],
         deduction_notes: row.payroll.deduction_notes || "",
         notes: row.payroll.notes || "",
         status: "published",
@@ -182,8 +194,10 @@ export default function HrPayrollPage() {
   }
 
   const formatRp = (num: number) => "Rp " + (num || 0).toLocaleString("id-ID");
-  const calcTHP = (p: Partial<Payroll>) =>
-    (p.base_salary || 0) + (p.mobility_allowance || 0) + (p.performance_bonus || 0) + (p.overtime_pay || 0) - (p.deductions || 0);
+  const calcTHP = (p: Partial<Payroll>) => {
+    const adds = (p.additions_detail || []).reduce((sum, item) => sum + (item.amount || 0), 0);
+    return (p.base_salary || 0) + (p.mobility_allowance || 0) + (p.performance_bonus || 0) + (p.overtime_pay || 0) + adds - (p.deductions || 0);
+  };
 
   const filtered = rows.filter((r) => {
     const matchSearch = r.name.toLowerCase().includes(search.toLowerCase());
@@ -313,7 +327,6 @@ export default function HrPayrollPage() {
                         { label: "Gaji Pokok", field: "base_salary" },
                         { label: "Allowance", field: "mobility_allowance" },
                         { label: "Bonus Performa", field: "performance_bonus" },
-                        { label: "Upah Lembur", field: "overtime_pay" },
                       ].map(({ label, field }) => (
                         <div key={field} className="space-y-1">
                           <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest">{label}</label>
@@ -327,6 +340,162 @@ export default function HrPayrollPage() {
                           />
                         </div>
                       ))}
+                      
+                      {/* Overtime with Note */}
+                      <div className="col-span-2 md:col-span-3 grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest">Upah Lembur</label>
+                          <input
+                            type="number"
+                            disabled={isPublished}
+                            value={row.payroll.overtime_pay || ""}
+                            onChange={(e) => updateField(row.id, "overtime_pay", Number(e.target.value))}
+                            className="ab-input text-sm font-mono w-full py-2.5 disabled:opacity-40"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest">Ket. Lembur</label>
+                          <input
+                            type="text"
+                            disabled={isPublished}
+                            value={row.payroll.overtime_notes || ""}
+                            onChange={(e) => updateField(row.id, "overtime_notes", e.target.value)}
+                            className="ab-input text-sm w-full py-2.5 disabled:opacity-40"
+                            placeholder="Mis: Lembur 2 jam..."
+                          />
+                        </div>
+                      </div>
+
+                      {/* Multi-Addition UI */}
+                      <div className="col-span-2 md:col-span-3 space-y-3 bg-emerald-50/50 p-4 rounded-xl border border-emerald-100">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[10px] font-black uppercase text-emerald-600 tracking-widest flex items-center gap-1.5">
+                            Upah Tambahan Lainnya
+                            <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md">Total: {formatRp((row.payroll.additions_detail || []).reduce((sum, item) => sum + (item.amount || 0), 0))}</span>
+                          </label>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          {(row.payroll.additions_detail || []).map((add, idx) => (
+                            <div key={idx} className="flex gap-2 items-center">
+                              <input
+                                type="text"
+                                disabled={isPublished}
+                                value={add.name}
+                                onChange={(e) => {
+                                  const newList = [...(row.payroll.additions_detail || [])];
+                                  newList[idx].name = e.target.value;
+                                  setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, additions_detail: newList, _dirty: true } } : r));
+                                }}
+                                className="ab-input text-xs w-1/2 py-2 disabled:opacity-40"
+                                placeholder="Nama Tambahan"
+                              />
+                              <input
+                                type="number"
+                                disabled={isPublished}
+                                value={add.amount || ""}
+                                onChange={(e) => {
+                                  const newList = [...(row.payroll.additions_detail || [])];
+                                  newList[idx].amount = Number(e.target.value);
+                                  setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, additions_detail: newList, _dirty: true } } : r));
+                                }}
+                                className="ab-input text-xs font-mono w-1/2 py-2 disabled:opacity-40"
+                                placeholder="0"
+                              />
+                              {!isPublished && (
+                                <button
+                                  onClick={() => {
+                                    const newList = [...(row.payroll.additions_detail || [])];
+                                    newList.splice(idx, 1);
+                                    setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, additions_detail: newList, _dirty: true } } : r));
+                                  }}
+                                  className="text-emerald-400 hover:text-emerald-600 p-1 bg-white border border-emerald-100 hover:border-emerald-300 rounded"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {!isPublished && (
+                          <div className="flex flex-col gap-2 mt-2">
+                            {addingAdditionFor === row.id ? (
+                              <div className="flex gap-2 items-center">
+                                <input 
+                                  autoFocus
+                                  type="text" 
+                                  className="ab-input text-xs py-1.5 flex-1 bg-white"
+                                  placeholder="Ketik nama tambahan..."
+                                  value={newCustomAddition}
+                                  onChange={e => setNewCustomAddition(e.target.value)}
+                                  onKeyDown={async (e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      if (!newCustomAddition.trim()) return;
+                                      const finalName = newCustomAddition.trim();
+                                      const { data } = await supabase.from('payroll_addition_types').insert({ name: finalName }).select().single();
+                                      if (data) setAdditionTypes(prev => [...prev, data]);
+                                      
+                                      const newList = [...(row.payroll.additions_detail || []), { name: finalName, amount: 0 }];
+                                      setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, additions_detail: newList, _dirty: true } } : r));
+                                      setAddingAdditionFor(null);
+                                      setNewCustomAddition("");
+                                    } else if (e.key === 'Escape') {
+                                      setAddingAdditionFor(null);
+                                      setNewCustomAddition("");
+                                    }
+                                  }}
+                                />
+                                <button 
+                                  className="px-3 py-1.5 bg-emerald-500 text-white text-xs rounded-md font-bold hover:bg-emerald-600"
+                                  onClick={async () => {
+                                    if (!newCustomAddition.trim()) return;
+                                    const finalName = newCustomAddition.trim();
+                                    const { data } = await supabase.from('payroll_addition_types').insert({ name: finalName }).select().single();
+                                    if (data) setAdditionTypes(prev => [...prev, data]);
+                                    const newList = [...(row.payroll.additions_detail || []), { name: finalName, amount: 0 }];
+                                    setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, additions_detail: newList, _dirty: true } } : r));
+                                    setAddingAdditionFor(null);
+                                    setNewCustomAddition("");
+                                  }}
+                                >OK</button>
+                                <button 
+                                  className="px-2 py-1.5 bg-gray-100 text-gray-500 text-xs rounded-md hover:bg-gray-200"
+                                  onClick={() => {
+                                    setAddingAdditionFor(null);
+                                    setNewCustomAddition("");
+                                  }}
+                                >Batal</button>
+                              </div>
+                            ) : (
+                              <select
+                                className="ab-input text-xs py-1.5 flex-1 bg-white"
+                                value=""
+                                onChange={async (e) => {
+                                  const val = e.target.value;
+                                  if (!val) return;
+                                  
+                                  if (val === 'NEW') {
+                                    setAddingAdditionFor(row.id);
+                                    setNewCustomAddition("");
+                                    return;
+                                  }
+  
+                                  const newList = [...(row.payroll.additions_detail || []), { name: val, amount: 0 }];
+                                  setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, additions_detail: newList, _dirty: true } } : r));
+                                }}
+                              >
+                                <option value="">-- Tambah Upah Lainnya --</option>
+                                {additionTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                                <option value="NEW" className="font-bold text-emerald-600">+ Tambah Upah Baru</option>
+                              </select>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
                       {/* Multi-Deduction UI */}
                       <div className="col-span-2 md:col-span-3 space-y-3 bg-rose-50/50 p-4 rounded-xl border border-rose-100">
                         <div className="flex justify-between items-center">
@@ -645,11 +814,17 @@ export default function HrPayrollPage() {
                       { label: "Gaji Pokok", val: previewRow.payroll.base_salary || 0 },
                       { label: "Allowance", val: previewRow.payroll.mobility_allowance || 0 },
                       { label: "Bonus Performa", val: previewRow.payroll.performance_bonus || 0 },
-                      { label: "Upah Lembur", val: previewRow.payroll.overtime_pay || 0 },
+                      { label: "Upah Lembur" + (previewRow.payroll.overtime_notes ? ` (${previewRow.payroll.overtime_notes})` : ""), val: previewRow.payroll.overtime_pay || 0 },
                     ].map((item) => (
                       <tr key={item.label} className="border-b border-slate-100">
                         <td className="py-2 font-medium">{item.label}</td>
                         <td className="py-2 text-right font-mono font-bold">{formatRp(item.val)}</td>
+                      </tr>
+                    ))}
+                    {(previewRow.payroll.additions_detail || []).map((add, idx) => (
+                      <tr key={"add-"+idx} className="border-b border-slate-100">
+                        <td className="py-2 font-medium">{add.name}</td>
+                        <td className="py-2 text-right font-mono font-bold">{formatRp(add.amount || 0)}</td>
                       </tr>
                     ))}
                     {(previewRow.payroll.deductions || 0) > 0 && (

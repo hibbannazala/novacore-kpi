@@ -393,6 +393,8 @@ export interface Payroll {
   snapshot_position?: string | null;
   snapshot_company?: string | null;
   deductions_detail?: Array<{name: string, amount: number}> | null;
+  additions_detail?: Array<{name: string, amount: number}> | null;
+  overtime_notes?: string | null;
 }
 
 export interface DeductionType {
@@ -400,3 +402,10 @@ export interface DeductionType {
   name: string;
   created_at?: string;
 }
+
+export interface AdditionType {
+  id: string;
+  name: string;
+  created_at?: string;
+}
+

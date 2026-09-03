@@ -89,8 +89,10 @@ export default function MyPayrollPage() {
   }
 
   const formatRp = (num: number) => "Rp " + (num || 0).toLocaleString("id-ID");
-  const calcTHP = (p: Partial<Payroll>) =>
-    (p.base_salary || 0) + (p.mobility_allowance || 0) + (p.performance_bonus || 0) + (p.overtime_pay || 0) - (p.deductions || 0);
+  const calcTHP = (p: Partial<Payroll>) => {
+    const adds = (p.additions_detail || []).reduce((sum, item) => sum + (item.amount || 0), 0);
+    return (p.base_salary || 0) + (p.mobility_allowance || 0) + (p.performance_bonus || 0) + (p.overtime_pay || 0) + adds - (p.deductions || 0);
+  };
 
   return (
     <div className="space-y-6 ab-animate-fadeIn pb-24">
@@ -190,8 +192,11 @@ export default function MyPayrollPage() {
                   mobilityAllowance={previewPayroll.mobility_allowance}
                   performanceBonus={previewPayroll.performance_bonus}
                   overtimePay={previewPayroll.overtime_pay}
+                  overtimeNotes={previewPayroll.overtime_notes}
+                  additionsDetail={previewPayroll.additions_detail}
                   deductions={previewPayroll.deductions}
                   deductionNotes={previewPayroll.deduction_notes}
+                  deductionsDetail={previewPayroll.deductions_detail}
                   notes={previewPayroll.notes}
                 />
               </div>

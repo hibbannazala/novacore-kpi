@@ -20,6 +20,8 @@ interface PayslipPrintViewProps {
   snapshotPosition?: string | null;
   snapshotCompany?: string | null;
   deductionsDetail?: Array<{name: string, amount: number}> | null;
+  additionsDetail?: Array<{name: string, amount: number}> | null;
+  overtimeNotes?: string | null;
 }
 
 const MONTHS = [
@@ -55,13 +57,16 @@ export const PayslipPrintView = forwardRef<HTMLDivElement, PayslipPrintViewProps
   snapshotName,
   snapshotPosition,
   snapshotCompany,
-  deductionsDetail
+  deductionsDetail,
+  additionsDetail,
+  overtimeNotes
 }, ref) => {
   const formatCurrency = (amount: number) => {
     return 'Rp ' + amount.toLocaleString('id-ID');
   };
 
-  const thp = baseSalary + mobilityAllowance + performanceBonus + overtimePay - deductions;
+  const additionsTotal = (additionsDetail || []).reduce((sum, item) => sum + item.amount, 0);
+  const thp = baseSalary + mobilityAllowance + performanceBonus + overtimePay + additionsTotal - deductions;
   const finalName = snapshotName || employeeName;
   const finalPosition = snapshotPosition || contractPosition;
   const finalCompany = (snapshotCompany as 'TNT'|'Hype'|'Nova') || company;
@@ -178,9 +183,23 @@ export const PayslipPrintView = forwardRef<HTMLDivElement, PayslipPrintViewProps
               <td className="border border-gray-400 p-3 text-right">{formatCurrency(performanceBonus)}</td>
             </tr>
             <tr>
-              <td className="border border-gray-400 p-3 font-semibold">Upah Lembur</td>
+              <td className="border border-gray-400 p-3 font-semibold">
+                Upah Lembur
+                {overtimeNotes && <span className="font-normal text-gray-600 italic ml-2">({overtimeNotes})</span>}
+              </td>
               <td className="border border-gray-400 p-3 text-right">{formatCurrency(overtimePay)}</td>
             </tr>
+            {/* Multi-addition handling */}
+            {additionsDetail && additionsDetail.length > 0 && additionsDetail.map((add, idx) => (
+              <tr key={"add-"+idx}>
+                <td className="border border-gray-400 p-3 font-semibold">
+                  {add.name}
+                </td>
+                <td className="border border-gray-400 p-3 text-right">
+                  {formatCurrency(add.amount)}
+                </td>
+              </tr>
+            ))}
             {/* Multi-deduction handling */}
             {deductionsDetail && deductionsDetail.length > 0 ? (
               deductionsDetail.map((ded, idx) => (
