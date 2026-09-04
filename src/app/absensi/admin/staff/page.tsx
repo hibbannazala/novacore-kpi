@@ -22,6 +22,16 @@ interface StaffUser {
   isHidden: boolean;
   departmentId: string | null;
   departmentName: string | null;
+  nik: string | null;
+  ttl: string | null;
+  addressKtp: string | null;
+  phoneWa: string | null;
+  emergencyContact: string | null;
+  position: string | null;
+  joinDate: string | null;
+  employmentStatus: string | null;
+  contractEndDate: string | null;
+  npwp: string | null;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -38,7 +48,9 @@ type ConfirmCfg = { title: string; msg: string; type: "warning" | "danger"; onCo
 export default function AdminStaffPage() {
   const [statusFilter, setStatusFilter] = useState<AbsensiStatus>("active");
   const [users, setUsers] = useState<StaffUser[]>([]);
-  const [localEdits, setLocalEdits] = useState<Record<string, Partial<StaffUser>>>({});
+  const [editingProfile, setEditingProfile] = useState<StaffUser | null>(null);
+  const [profileEdits, setProfileEdits] = useState<Partial<StaffUser>>({});
+  const [profileTab, setProfileTab] = useState<"personal" | "roles" | "quotas">("personal");
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -56,11 +68,11 @@ export default function AdminStaffPage() {
 
     const fetchAll = async () => {
       const [usersRes, deptsRes] = await Promise.all([
-        supabase.from("users").select("id, name, email, absensi_role, kpi_role, absensi_status, leave_quota, sick_quota, is_hidden, department_id, departments(name)"),
+        supabase.from("users").select("id, name, email, absensi_role, kpi_role, absensi_status, leave_quota, sick_quota, is_hidden, department_id, departments(name), nik, ttl, address_ktp, phone_wa, emergency_contact, position, join_date, employment_status, contract_end_date, npwp"),
         supabase.from("departments").select("id, name").order("name"),
       ]);
 
-      const allUsers = (usersRes.data ?? []).map((r) => ({
+      const allUsers = ((usersRes.data as any[]) ?? []).map((r: any) => ({
         id: r.id as string,
         name: r.name as string,
         email: r.email as string,
@@ -72,6 +84,16 @@ export default function AdminStaffPage() {
         isHidden: (r.is_hidden as boolean) ?? false,
         departmentId: r.department_id as string | null,
         departmentName: ((r.departments as unknown) as { name: string } | null)?.name ?? null,
+        nik: (r.nik as string) ?? null,
+        ttl: (r.ttl as string) ?? null,
+        addressKtp: (r.address_ktp as string) ?? null,
+        phoneWa: (r.phone_wa as string) ?? null,
+        emergencyContact: (r.emergency_contact as string) ?? null,
+        position: (r.position as string) ?? null,
+        joinDate: (r.join_date as string) ?? null,
+        employmentStatus: (r.employment_status as string) ?? null,
+        contractEndDate: (r.contract_end_date as string) ?? null,
+        npwp: (r.npwp as string) ?? null,
       }));
 
       const newCounts: Record<string, number> = {};
@@ -92,38 +114,46 @@ export default function AdminStaffPage() {
     return () => { ch.unsubscribe(); };
   }, [statusFilter]);
 
-  const getEdit = (id: string): Partial<StaffUser> => localEdits[id] ?? {};
-  const patchEdit = (id: string, patch: Partial<StaffUser>) =>
-    setLocalEdits((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  const getEdit = <K extends keyof StaffUser>(key: K): StaffUser[K] =>
+    (profileEdits[key] !== undefined ? profileEdits[key] : editingProfile?.[key]) as StaffUser[K];
 
-  const getUserVal = <K extends keyof StaffUser>(u: StaffUser, key: K): StaffUser[K] =>
-    (getEdit(u.id)[key] ?? u[key]) as StaffUser[K];
+  const patchEdit = (patch: Partial<StaffUser>) =>
+    setProfileEdits((prev) => ({ ...prev, ...patch }));
 
-  const saveUser = async (user: StaffUser) => {
-    const edits = getEdit(user.id);
-    if (!Object.keys(edits).length) return;
+  const saveProfile = async () => {
+    if (!editingProfile) return;
+    if (!Object.keys(profileEdits).length) {
+      setEditingProfile(null);
+      return;
+    }
     const supabase = createClient();
-    const tid = toast.loading("Memperbarui data...");
+    const tid = toast.loading("Memperbarui profil...");
     try {
-      const updatePayload: {
-        absensi_role?: "staff" | "admin";
-        kpi_role?: string;
-        leave_quota?: number;
-        sick_quota?: number;
-        is_hidden?: boolean;
-        department_id?: string | null;
-      } = {};
-      if (edits.absensiRole    !== undefined) updatePayload.absensi_role    = edits.absensiRole;
-      if (edits.kpiRole        !== undefined) updatePayload.kpi_role        = edits.kpiRole;
-      if (edits.leaveQuota     !== undefined) updatePayload.leave_quota     = edits.leaveQuota;
-      if (edits.sickQuota      !== undefined) updatePayload.sick_quota      = edits.sickQuota;
-      if (edits.isHidden       !== undefined) updatePayload.is_hidden       = edits.isHidden;
-      if (edits.departmentId   !== undefined) updatePayload.department_id   = edits.departmentId ?? null;
+      const updatePayload: any = {};
+      if (profileEdits.name !== undefined) updatePayload.name = profileEdits.name;
+      if (profileEdits.email !== undefined) updatePayload.email = profileEdits.email;
+      if (profileEdits.absensiRole !== undefined) updatePayload.absensi_role = profileEdits.absensiRole;
+      if (profileEdits.kpiRole !== undefined) updatePayload.kpi_role = profileEdits.kpiRole;
+      if (profileEdits.leaveQuota !== undefined) updatePayload.leave_quota = profileEdits.leaveQuota;
+      if (profileEdits.sickQuota !== undefined) updatePayload.sick_quota = profileEdits.sickQuota;
+      if (profileEdits.isHidden !== undefined) updatePayload.is_hidden = profileEdits.isHidden;
+      if (profileEdits.departmentId !== undefined) updatePayload.department_id = profileEdits.departmentId;
+      if (profileEdits.nik !== undefined) updatePayload.nik = profileEdits.nik;
+      if (profileEdits.ttl !== undefined) updatePayload.ttl = profileEdits.ttl;
+      if (profileEdits.addressKtp !== undefined) updatePayload.address_ktp = profileEdits.addressKtp;
+      if (profileEdits.phoneWa !== undefined) updatePayload.phone_wa = profileEdits.phoneWa;
+      if (profileEdits.emergencyContact !== undefined) updatePayload.emergency_contact = profileEdits.emergencyContact;
+      if (profileEdits.position !== undefined) updatePayload.position = profileEdits.position;
+      if (profileEdits.joinDate !== undefined) updatePayload.join_date = profileEdits.joinDate;
+      if (profileEdits.employmentStatus !== undefined) updatePayload.employment_status = profileEdits.employmentStatus;
+      if (profileEdits.contractEndDate !== undefined) updatePayload.contract_end_date = profileEdits.contractEndDate;
+      if (profileEdits.npwp !== undefined) updatePayload.npwp = profileEdits.npwp;
 
-      const { error } = await supabase.from("users").update(updatePayload as any).eq("id", user.id);
+      const { error } = await supabase.from("users").update(updatePayload).eq("id", editingProfile.id);
       if (error) throw error;
-      toast.success("Data staf berhasil diperbarui.", { id: tid });
-      setLocalEdits((prev) => { const n = { ...prev }; delete n[user.id]; return n; });
+      toast.success("Profil berhasil diperbarui.", { id: tid });
+      setEditingProfile(null);
+      setProfileEdits({});
     } catch (err: unknown) {
       toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
     }
@@ -402,94 +432,41 @@ export default function AdminStaffPage() {
               </div>
 
               <div className="space-y-3 mb-6">
-                {/* Department & Role */}
-                <div className="flex gap-3">
-                  <div className="flex-1 space-y-1">
-                    <label className="text-[8px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Divisi</label>
-                    <select
-                      value={getUserVal(u, "departmentId") ?? ""}
-                      onChange={(e) => patchEdit(u.id, { departmentId: e.target.value || null })}
-                      className="ab-input text-[10px] font-bold py-2 px-3"
-                    >
-                      <option value="">Pilih Divisi</option>
-                      {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
+                <div className="grid grid-cols-2 gap-3 text-[10px] text-[var(--ab-text-dim)]">
+                  <div>
+                    <span className="block font-black uppercase tracking-widest text-[8px] mb-1">Divisi</span>
+                    <span className="font-bold text-[var(--ab-text-main)]">{u.departmentName ?? "-"}</span>
                   </div>
-                  <div className="w-24 space-y-1">
-                    <label className="text-[8px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Role KPI</label>
-                    <select
-                      value={getUserVal(u, "kpiRole")}
-                      onChange={(e) => patchEdit(u.id, { kpiRole: e.target.value as KpiRole })}
-                      className="ab-input text-[10px] font-bold py-2 px-3 text-center"
-                    >
-                      <option value="tim">Tim</option>
-                      <option value="head">Head</option>
-                      <option value="hr">HR</option>
-                      <option value="executive">Exec</option>
-                      <option value="developer">Dev</option>
-                    </select>
+                  <div>
+                    <span className="block font-black uppercase tracking-widest text-[8px] mb-1">Posisi</span>
+                    <span className="font-bold text-[var(--ab-text-main)]">{u.position ?? "-"}</span>
                   </div>
-                  <div className="w-24 space-y-1">
-                    <label className="text-[8px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Absensi</label>
-                    <select
-                      value={getUserVal(u, "absensiRole")}
-                      onChange={(e) => patchEdit(u.id, { absensiRole: e.target.value as "staff" | "admin" })}
-                      className="ab-input text-[10px] font-bold py-2 px-3 text-center"
-                    >
-                      <option value="staff">Staff</option>
-                      <option value="admin">Admin</option>
-                    </select>
+                  <div>
+                    <span className="block font-black uppercase tracking-widest text-[8px] mb-1">Role Absensi</span>
+                    <span className="font-bold text-[var(--ab-text-main)] capitalize">{u.absensiRole}</span>
+                  </div>
+                  <div>
+                    <span className="block font-black uppercase tracking-widest text-[8px] mb-1">Role KPI</span>
+                    <span className="font-bold text-[var(--ab-text-main)] capitalize">{u.kpiRole}</span>
+                  </div>
+                  <div>
+                    <span className="block font-black uppercase tracking-widest text-[8px] mb-1">No. WA</span>
+                    <span className="font-bold text-[var(--ab-text-main)]">{u.phoneWa ?? "-"}</span>
+                  </div>
+                  <div>
+                    <span className="block font-black uppercase tracking-widest text-[8px] mb-1">Status Karyawan</span>
+                    <span className="font-bold text-[var(--ab-text-main)]">{u.employmentStatus ?? "-"}</span>
                   </div>
                 </div>
-
-                {/* Quotas & Ghost */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[8px] font-black uppercase tracking-widest ml-1 text-center block" style={{ color: "var(--ab-primary)" }}>Cuti</label>
-                    <input
-                      type="number"
-                      value={getUserVal(u, "leaveQuota")}
-                      onChange={(e) => patchEdit(u.id, { leaveQuota: parseInt(e.target.value) || 0 })}
-                      className="ab-input text-[11px] font-black text-center py-2 px-2"
-                      style={{ color: "var(--ab-primary)" }}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[8px] font-black uppercase text-rose-500 tracking-widest ml-1 text-center block">Sakit</label>
-                    <input
-                      type="number"
-                      value={getUserVal(u, "sickQuota")}
-                      onChange={(e) => patchEdit(u.id, { sickQuota: parseInt(e.target.value) || 0 })}
-                      className="ab-input text-[11px] font-black text-center py-2 px-2 text-rose-500"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[8px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1 text-center block">Ghost</label>
-                    <button
-                      onClick={() => patchEdit(u.id, { isHidden: !getUserVal(u, "isHidden") })}
-                      className="w-full h-9 rounded-xl flex items-center justify-center cursor-pointer transition-all border"
-                      style={getUserVal(u, "isHidden") ? {
-                        background: "#a855f715", borderColor: "#a855f740", color: "#a855f7",
-                      } : {
-                        background: "var(--ab-bg-main)", borderColor: "var(--ab-border)", color: "var(--ab-text-dim)",
-                      }}
-                    >
-                      <UserMinus size={14} className={getUserVal(u, "isHidden") ? "animate-pulse" : ""} />
-                    </button>
-                  </div>
-                </div>
-
-
               </div>
 
               <div className="flex flex-wrap gap-2 mt-4">
                 <button
-                  onClick={() => saveUser(u)}
-                  disabled={!Object.keys(getEdit(u.id)).length}
-                  className="flex-1 py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-40 text-white"
+                  onClick={() => { setEditingProfile(u); setProfileEdits({}); setProfileTab("personal"); }}
+                  className="flex-1 py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all text-white"
                   style={{ background: "var(--ab-text-main)" }}
                 >
-                  Simpan Data
+                  Edit Profil
                 </button>
                 <button
                   className="flex-1 py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all text-white flex items-center justify-center gap-2 shadow-lg"
@@ -638,6 +615,185 @@ export default function AdminStaffPage() {
                   Simpan
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Profile Edit Modal */}
+      {editingProfile && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-[var(--ab-bg-surface)] w-full max-w-2xl max-h-[90vh] rounded-[30px] border border-[var(--ab-border)] shadow-2xl flex flex-col relative overflow-hidden">
+            
+            {/* Header */}
+            <div className="p-6 border-b border-[var(--ab-border)] flex justify-between items-center bg-[var(--ab-bg-main)]">
+              <div>
+                <h3 className="text-xl font-black text-[var(--ab-text-main)] uppercase tracking-tight">Edit Profil Karyawan</h3>
+                <p className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest mt-1">ID: {editingProfile.id.substring(0, 8)}</p>
+              </div>
+              <button onClick={() => { setEditingProfile(null); setProfileEdits({}); }} className="text-[var(--ab-text-dim)] hover:text-rose-500 bg-[var(--ab-bg-surface)] p-2 rounded-full border border-[var(--ab-border)]">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-2 p-4 border-b border-[var(--ab-border)] overflow-x-auto bg-[var(--ab-bg-surface)]">
+              {[
+                { id: "personal", label: "Informasi Pribadi" },
+                { id: "roles", label: "Pekerjaan & Divisi" },
+                { id: "quotas", label: "Kuota & Pengaturan" }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setProfileTab(tab.id as any)}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border ${profileTab === tab.id ? 'bg-[var(--ab-primary)] text-white border-[var(--ab-primary)] shadow-[0_4px_12px_-3px_var(--ab-primary-glow)]' : 'bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] border-[var(--ab-border)] hover:bg-[var(--ab-border)]'}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Content Body */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-6">
+              
+              {profileTab === "personal" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Nama Lengkap</label>
+                    <input type="text" value={getEdit("name")} onChange={e => patchEdit({ name: e.target.value })} className="ab-input text-xs w-full" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Email</label>
+                    <input type="email" value={getEdit("email")} onChange={e => patchEdit({ email: e.target.value })} className="ab-input text-xs w-full" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">NIK Karyawan</label>
+                    <input type="text" value={getEdit("nik") ?? ""} onChange={e => patchEdit({ nik: e.target.value })} className="ab-input text-xs w-full" placeholder="Cth: 3201..." />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">NPWP</label>
+                    <input type="text" value={getEdit("npwp") ?? ""} onChange={e => patchEdit({ npwp: e.target.value })} className="ab-input text-xs w-full" placeholder="Cth: 12.345.678.9-123.000" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Tempat, Tanggal Lahir (TTL)</label>
+                    <input type="text" value={getEdit("ttl") ?? ""} onChange={e => patchEdit({ ttl: e.target.value })} className="ab-input text-xs w-full" placeholder="Jakarta, 01 Jan 1990" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">No. WhatsApp</label>
+                    <input type="text" value={getEdit("phoneWa") ?? ""} onChange={e => patchEdit({ phoneWa: e.target.value })} className="ab-input text-xs w-full" placeholder="08123456789" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Kontak Darurat</label>
+                    <input type="text" value={getEdit("emergencyContact") ?? ""} onChange={e => patchEdit({ emergencyContact: e.target.value })} className="ab-input text-xs w-full" placeholder="Nama & No HP" />
+                  </div>
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Alamat KTP</label>
+                    <textarea value={getEdit("addressKtp") ?? ""} onChange={e => patchEdit({ addressKtp: e.target.value })} className="ab-input text-xs w-full h-20 resize-none py-3" placeholder="Alamat lengkap sesuai KTP" />
+                  </div>
+                </div>
+              )}
+
+              {profileTab === "roles" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Divisi / Penempatan</label>
+                    <select value={getEdit("departmentId") ?? ""} onChange={e => patchEdit({ departmentId: e.target.value || null })} className="ab-input text-xs w-full">
+                      <option value="">-- Belum ada Divisi --</option>
+                      {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Posisi / Jabatan</label>
+                    <input type="text" value={getEdit("position") ?? ""} onChange={e => patchEdit({ position: e.target.value })} className="ab-input text-xs w-full" placeholder="Cth: Frontend Dev" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Role Aplikasi (Absensi)</label>
+                    <select value={getEdit("absensiRole")} onChange={e => patchEdit({ absensiRole: e.target.value as "staff" | "admin" })} className="ab-input text-xs w-full">
+                      <option value="staff">Staff Biasa</option>
+                      <option value="admin">Administrator</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Role Penilaian (KPI)</label>
+                    <select value={getEdit("kpiRole")} onChange={e => patchEdit({ kpiRole: e.target.value as KpiRole })} className="ab-input text-xs w-full">
+                      <option value="tim">Anggota Tim</option>
+                      <option value="head">Head Divisi</option>
+                      <option value="hr">HRD</option>
+                      <option value="executive">Executive (CEO/Direktur)</option>
+                      <option value="developer">Developer</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Status Kepegawaian</label>
+                    <select value={getEdit("employmentStatus") ?? ""} onChange={e => patchEdit({ employmentStatus: e.target.value })} className="ab-input text-xs w-full">
+                      <option value="">-- Pilih Status --</option>
+                      <option value="Tetap">Karyawan Tetap (PKWTT)</option>
+                      <option value="Kontrak">Kontrak (PKWT)</option>
+                      <option value="Probation">Probation</option>
+                      <option value="Freelance">Freelance / Magang</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Tgl. Mulai Bekerja (Join Date)</label>
+                    <input type="date" value={getEdit("joinDate") ?? ""} onChange={e => patchEdit({ joinDate: e.target.value })} className="ab-input text-xs w-full" />
+                  </div>
+                  {getEdit("employmentStatus") === "Kontrak" && (
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Tgl. Berakhir Kontrak</label>
+                      <input type="date" value={getEdit("contractEndDate") ?? ""} onChange={e => patchEdit({ contractEndDate: e.target.value })} className="ab-input text-xs w-full text-orange-500" />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {profileTab === "quotas" && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1 text-[var(--ab-primary)]">Kuota Cuti Tahunan</label>
+                      <input type="number" value={getEdit("leaveQuota")} onChange={e => patchEdit({ leaveQuota: parseInt(e.target.value) || 0 })} className="ab-input text-lg font-black text-center py-4 w-full text-[var(--ab-primary)]" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1 text-rose-500">Kuota Sakit Tahunan</label>
+                      <input type="number" value={getEdit("sickQuota")} onChange={e => patchEdit({ sickQuota: parseInt(e.target.value) || 0 })} className="ab-input text-lg font-black text-center py-4 w-full text-rose-500" />
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-[var(--ab-bg-main)] border border-[var(--ab-border)] flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-black text-[var(--ab-text-main)] mb-1">Sembunyikan Akun (Ghost Mode)</h4>
+                      <p className="text-[10px] text-[var(--ab-text-dim)]">Akun ini tidak akan muncul di laporan dan dashboard, tapi datanya tetap ada.</p>
+                    </div>
+                    <button
+                      onClick={() => patchEdit({ isHidden: !getEdit("isHidden") })}
+                      className="w-12 h-12 rounded-xl flex items-center justify-center cursor-pointer transition-all border shrink-0"
+                      style={getEdit("isHidden") ? {
+                        background: "#a855f715", borderColor: "#a855f740", color: "#a855f7",
+                      } : {
+                        background: "var(--ab-bg-surface)", borderColor: "var(--ab-border)", color: "var(--ab-text-dim)",
+                      }}
+                    >
+                      <UserMinus size={20} className={getEdit("isHidden") ? "animate-pulse" : ""} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* Footer Action */}
+            <div className="p-4 border-t border-[var(--ab-border)] flex justify-end gap-3 bg-[var(--ab-bg-surface)]">
+              <button 
+                onClick={() => { setEditingProfile(null); setProfileEdits({}); }}
+                className="px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-[var(--ab-text-dim)] hover:bg-[var(--ab-bg-main)] transition"
+              >
+                Batal
+              </button>
+              <button
+                onClick={saveProfile}
+                disabled={!Object.keys(profileEdits).length}
+                className="px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-40 text-white shadow-[0_4px_12px_-3px_var(--ab-primary-glow)] disabled:shadow-none bg-[var(--ab-primary)] hover:scale-105 disabled:hover:scale-100"
+              >
+                Simpan Perubahan
+              </button>
             </div>
           </div>
         </div>
