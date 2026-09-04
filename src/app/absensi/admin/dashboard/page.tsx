@@ -141,6 +141,7 @@ export default function AdminDashboardPage() {
   const [selectedRow, setSelectedRow]   = useState<DisplayRow | null>(null);
   const [editingLog,  setEditingLog]    = useState<EditingLog | null>(null);
   const [selectedDist, setSelectedDist] = useState<number | null>(null);
+  const [officeLocations, setOfficeLocations] = useState<{ id: string; name: string; lat: number; lng: number; radius: number }[]>([]);
 
   // Export modal
   const [showExport, setShowExport]       = useState(false);
@@ -215,6 +216,10 @@ export default function AdminDashboardPage() {
     setIsLoading(true);
     fetchData();
     const supabase = createClient();
+    // Fetch all office locations for distance calculation
+    supabase.from('office_locations').select('id, name, lat, lng, radius').then(({ data }) => {
+      if (data) setOfficeLocations(data as { id: string; name: string; lat: number; lng: number; radius: number }[]);
+    });
     const ch = supabase.channel("admin_dash_" + filterDate)
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance" }, fetchData)
       .on("postgres_changes", { event: "*", schema: "public", table: "leave_requests" }, fetchData)
@@ -824,9 +829,17 @@ export default function AdminDashboardPage() {
                       key={row.id}
                       onClick={() => {
                         if (row.log) {
-                          const dist = row.log.locationIn && settings?.officeLat && settings?.officeLng
-                            ? calcDist(row.log.locationIn.lat, row.log.locationIn.lng, settings.officeLat, settings.officeLng)
-                            : null;
+                          let dist: number | null = null;
+                          if (row.log.locationIn && officeLocations.length > 0) {
+                            let minDist = Infinity;
+                            for (const ol of officeLocations) {
+                              const d = calcDist(row.log.locationIn.lat, row.log.locationIn.lng, ol.lat, ol.lng);
+                              if (d < minDist) minDist = d;
+                            }
+                            dist = minDist;
+                          } else if (row.log.locationIn && settings?.officeLat && settings?.officeLng) {
+                            dist = calcDist(row.log.locationIn.lat, row.log.locationIn.lng, settings.officeLat, settings.officeLng);
+                          }
                           setSelectedDist(dist);
                         } else {
                           setSelectedDist(null);
@@ -1045,7 +1058,7 @@ export default function AdminDashboardPage() {
                         {selectedDist !== null && (
                           <div className="flex justify-between items-center">
                             <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">Jarak ke Kantor</span>
-                            <span className={`text-[10px] font-black uppercase ${selectedDist <= (settings?.officeRadius ?? 100) ? "text-green-500" : "text-red-500"}`}>{selectedDist} meter</span>
+                            <span className={`text-[10px] font-black uppercase ${selectedDist <= (officeLocations.length > 0 ? Math.max(...officeLocations.map(o => o.radius)) : (settings?.officeRadius ?? 100)) ? "text-green-500" : "text-red-500"}`}>{selectedDist} meter</span>
                           </div>
                         )}
                         {selectedRow.log.locationIn && (
