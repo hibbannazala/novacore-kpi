@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Target, Clock, FilePen, Menu, X, LogOut } from "lucide-react";
+import { LayoutDashboard, Target, Clock, FilePen, Menu, X, LogOut, Settings } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { navByRole } from "./Sidebar";
 import Link from "next/link";
@@ -97,13 +97,21 @@ export function MobileBottomNav() {
                 );
               })}
             </ul>
-            <div className="mt-8 border-t border-[var(--ab-border)] pt-4 px-2">
+            <div className="mt-8 border-t border-[var(--ab-border)] pt-4 px-2 space-y-1">
+              <Link
+                href="/absensi/profile"
+                onClick={() => setIsMenuOpen(false)}
+                className="flex w-full items-center gap-4 rounded-2xl px-3 py-3.5 text-[13px] font-black text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)] transition-all bg-[var(--ab-bg-surface)] mt-1"
+              >
+                <Settings className="h-[18px] w-[18px] shrink-0" />
+                <span className="tracking-tight whitespace-nowrap">Pengaturan Profil</span>
+              </Link>
               <button
                 onClick={() => {
                   setIsMenuOpen(false);
                   signOut();
                 }}
-                className="flex w-full items-center gap-4 rounded-2xl px-3 py-3.5 text-[13px] font-black text-red-500 transition-all hover:bg-red-50 hover:text-red-600"
+                className="flex w-full items-center gap-4 rounded-2xl px-3 py-3.5 text-[13px] font-black text-red-500 transition-all hover:bg-red-50 hover:text-red-600 mt-1"
               >
                 <LogOut className="h-[18px] w-[18px] shrink-0" />
                 <span className="tracking-tight whitespace-nowrap">Keluar</span>

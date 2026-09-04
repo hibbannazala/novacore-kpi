@@ -32,6 +32,7 @@ interface StaffUser {
   employmentStatus: string | null;
   contractEndDate: string | null;
   npwp: string | null;
+  photoUrl: string | null;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -68,7 +69,7 @@ export default function AdminStaffPage() {
 
     const fetchAll = async () => {
       const [usersRes, deptsRes] = await Promise.all([
-        supabase.from("users").select("id, name, email, absensi_role, kpi_role, absensi_status, leave_quota, sick_quota, is_hidden, department_id, departments(name), nik, ttl, address_ktp, phone_wa, emergency_contact, position, join_date, employment_status, contract_end_date, npwp"),
+        supabase.from("users").select("id, name, email, absensi_role, kpi_role, absensi_status, leave_quota, sick_quota, is_hidden, department_id, departments(name), nik, ttl, address_ktp, phone_wa, emergency_contact, position, join_date, employment_status, contract_end_date, npwp, photo_url"),
         supabase.from("departments").select("id, name").order("name"),
       ]);
 
@@ -90,10 +91,11 @@ export default function AdminStaffPage() {
         phoneWa: (r.phone_wa as string) ?? null,
         emergencyContact: (r.emergency_contact as string) ?? null,
         position: (r.position as string) ?? null,
-        joinDate: (r.join_date as string) ?? null,
-        employmentStatus: (r.employment_status as string) ?? null,
-        contractEndDate: (r.contract_end_date as string) ?? null,
+        joinDate: r.join_date as string | null,
+        employmentStatus: r.employment_status as string | null,
+        contractEndDate: r.contract_end_date as string | null,
         npwp: (r.npwp as string) ?? null,
+        photoUrl: r.photo_url as string | null,
       }));
 
       const newCounts: Record<string, number> = {};
@@ -416,13 +418,30 @@ export default function AdminStaffPage() {
               <div className="flex justify-between items-start mb-6">
                 <div className="flex items-center gap-4">
                   <div
-                    className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl text-white shadow-inner"
+                    className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl text-white shadow-inner overflow-hidden shrink-0"
                     style={{ background: "var(--ab-primary)" }}
                   >
-                    {u.name.substring(0, 1).toUpperCase()}
+                    {u.photoUrl ? (
+                      <img src={u.photoUrl} alt={u.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      u.name.substring(0, 1).toUpperCase()
+                    )}
                   </div>
                   <div className="min-w-0">
-                    <h4 className="font-black text-[var(--ab-text-main)] text-lg tracking-tight truncate">{u.name}</h4>
+                    <h4 className="font-black text-[var(--ab-text-main)] text-lg tracking-tight truncate flex items-center gap-2">
+                      {u.name}
+                      {(() => {
+                        if (!u.contractEndDate || u.employmentStatus !== "Kontrak") return null;
+                        const daysLeft = Math.ceil((new Date(u.contractEndDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24));
+                        if (daysLeft <= 30 && daysLeft >= 0) {
+                          return <span className="px-2 py-0.5 bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 rounded text-[8px] uppercase tracking-widest font-black animate-pulse">Kontrak H-{daysLeft}</span>;
+                        }
+                        if (daysLeft < 0) {
+                          return <span className="px-2 py-0.5 bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded text-[8px] uppercase tracking-widest font-black">Kontrak Habis</span>;
+                        }
+                        return null;
+                      })()}
+                    </h4>
                     <p className="text-[9px] text-[var(--ab-text-dim)] font-bold truncate">{u.email}</p>
                   </div>
                 </div>
