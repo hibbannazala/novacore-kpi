@@ -23,6 +23,7 @@ interface PendingRequest {
   deductedSick?: number;
   deductedLeave?: number;
   status?: string;
+  departmentName?: string;
 }
 
 type ConfirmCfg = {
@@ -47,20 +48,24 @@ export default function AdminApprovalsPage() {
     const fetchPending = async () => {
       const { data } = await supabase
         .from("leave_requests")
-        .select("*, users(id, name, email)")
+        .select("*, users(id, name, email, departments(name))")
         .eq("status", "pending")
         .order("created_at", { ascending: true });
 
       setPendingReqs(
-        (data ?? []).map((r) => ({
-          id: r.id as string,
-          userId: r.user_id as string,
-          userName: ((r.users as unknown) as { name: string } | null)?.name ?? "Unknown",
+        (data ?? []).map((r) => {
+          const u = r.users as any;
+          return {
+            id: r.id as string,
+            userId: r.user_id as string,
+            userName: u?.name ?? "Unknown",
+            departmentName: u?.departments?.name ?? "Umum",
           type: r.type as string,
           dates: (r.dates as string[]) ?? [],
           reason: (r.reason as string) ?? "",
           createdAt: r.created_at as string,
-        }))
+        };
+      })
       );
       setIsLoading(false);
     };
@@ -68,15 +73,18 @@ export default function AdminApprovalsPage() {
     const fetchCancel = async () => {
       const { data } = await supabase
         .from("leave_requests")
-        .select("*, users(id, name, email)")
+        .select("*, users(id, name, email, departments(name))")
         .eq("status", "approved")
         .eq("cancellation_requested", true);
 
       setCancelReqs(
-        (data ?? []).map((r) => ({
-          id: r.id as string,
-          userId: r.user_id as string,
-          userName: ((r.users as unknown) as { name: string } | null)?.name ?? "Unknown",
+        (data ?? []).map((r) => {
+          const u = r.users as any;
+          return {
+            id: r.id as string,
+            userId: r.user_id as string,
+            userName: u?.name ?? "Unknown",
+            departmentName: u?.departments?.name ?? "Umum",
           type: r.type as string,
           dates: (r.dates as string[]) ?? [],
           reason: (r.reason as string) ?? "",
@@ -84,7 +92,8 @@ export default function AdminApprovalsPage() {
           cancellationReason: r.cancellation_reason as string | null,
           deductedSick: (r.deducted_sick as number) ?? 0,
           deductedLeave: (r.deducted_leave as number) ?? 0,
-        }))
+        };
+      })
       );
     };
 
@@ -173,6 +182,20 @@ export default function AdminApprovalsPage() {
   const typeLabel = (t: string) =>
     t === "leave" ? "Cuti" : t === "sick" ? "Sakit" : "WFA";
 
+  const groupedPending = pendingReqs.reduce((acc, req) => {
+    const dept = req.departmentName || "Umum";
+    if (!acc[dept]) acc[dept] = [];
+    acc[dept].push(req);
+    return acc;
+  }, {} as Record<string, PendingRequest[]>);
+
+  const groupedCancel = cancelReqs.reduce((acc, req) => {
+    const dept = req.departmentName || "Umum";
+    if (!acc[dept]) acc[dept] = [];
+    acc[dept].push(req);
+    return acc;
+  }, {} as Record<string, PendingRequest[]>);
+
   return (
     <div className="space-y-6 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -214,13 +237,15 @@ export default function AdminApprovalsPage() {
       )}
 
       {/* Pending Requests */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pb-4">
+      <div className="space-y-8 pb-4">
         {isLoading ? (
-          [...Array(4)].map((_, i) => (
-            <div key={i} className="animate-pulse bg-[var(--ab-bg-surface)] p-6 rounded-[32px] border border-[var(--ab-border)] h-48" />
-          ))
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="animate-pulse bg-[var(--ab-bg-surface)] p-6 rounded-[32px] border border-[var(--ab-border)] h-48" />
+            ))}
+          </div>
         ) : pendingReqs.length === 0 ? (
-          <div className="col-span-full p-20 text-center ab-animate-scaleIn">
+          <div className="p-20 text-center ab-animate-scaleIn">
             <div className="w-16 h-16 bg-[var(--ab-bg-surface)] rounded-[20px] flex items-center justify-center mx-auto mb-4 text-[var(--ab-text-dim)]">
               <Smile size={32} />
             </div>
@@ -229,55 +254,68 @@ export default function AdminApprovalsPage() {
             </h4>
           </div>
         ) : (
-          pendingReqs.map((req) => (
-            <div
-              key={req.id}
-              className="bg-[var(--ab-bg-surface)] p-5 rounded-[32px] border border-[var(--ab-border)] shadow-sm flex flex-col justify-between gap-5 relative overflow-hidden"
-            >
-              <div className="space-y-4">
-                <div className="flex justify-between items-start">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${typeStyle(req.type)}`}>
-                        {typeLabel(req.type)}
-                      </span>
-                      <span className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest">
-                        {new Date(req.createdAt).toLocaleDateString("id-ID")}
-                      </span>
-                    </div>
-                    <h4 className="font-black text-[var(--ab-text-main)] text-base tracking-tight">{req.userName}</h4>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest leading-none">Durasi</p>
-                    <p className="text-sm font-black mt-0.5" style={{ color: "var(--ab-primary)" }}>
-                      {req.dates.length} Hari
-                    </p>
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex items-start gap-2 text-[10px] font-bold text-[var(--ab-text-dim)] bg-[var(--ab-bg-main)] p-3 rounded-2xl border border-[var(--ab-border)]">
-                    <CalendarDays size={12} className="mt-0.5 shrink-0" style={{ color: "var(--ab-primary)" }} />
-                    <span className="leading-relaxed">{req.dates.join(", ")}</span>
-                  </div>
-                  <div className="flex items-start gap-2 text-[10px] font-medium text-[var(--ab-text-dim)] italic px-2">
-                    <FileEdit size={12} className="mt-1 text-[var(--ab-text-dim)] shrink-0 opacity-40" />
-                    <span className="line-clamp-2">&ldquo;{req.reason}&rdquo;</span>
-                  </div>
-                </div>
+          Object.entries(groupedPending).map(([deptName, reqs]) => (
+            <div key={deptName} className="space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="bg-[var(--ab-primary)] w-2 h-6 rounded-full"></div>
+                <h2 className="text-lg font-black text-[var(--ab-text-main)] uppercase tracking-tight">{deptName}</h2>
+                <span className="bg-[var(--ab-bg-main)] px-2 py-1 rounded-full text-[10px] font-black text-[var(--ab-text-dim)] border border-[var(--ab-border)]">
+                  {reqs.length} Pengajuan
+                </span>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => processRequest(req, "approve")}
-                  className="flex-1 bg-green-500 text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-green-600 transition shadow-lg flex items-center justify-center gap-2"
-                >
-                  <Check size={14} /> Setujui
-                </button>
-                <button
-                  onClick={() => processRequest(req, "reject")}
-                  className="flex-1 bg-[var(--ab-bg-main)] text-red-500 border border-[var(--ab-border)] py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-500 hover:text-white transition flex items-center justify-center gap-2"
-                >
-                  <X size={14} /> Tolak
-                </button>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {reqs.map((req) => (
+                  <div
+                    key={req.id}
+                    className="bg-[var(--ab-bg-surface)] p-5 rounded-[32px] border border-[var(--ab-border)] shadow-sm flex flex-col justify-between gap-5 relative overflow-hidden"
+                  >
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${typeStyle(req.type)}`}>
+                              {typeLabel(req.type)}
+                            </span>
+                            <span className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest">
+                              {new Date(req.createdAt).toLocaleDateString("id-ID")}
+                            </span>
+                          </div>
+                          <h4 className="font-black text-[var(--ab-text-main)] text-base tracking-tight">{req.userName}</h4>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest leading-none">Durasi</p>
+                          <p className="text-sm font-black mt-0.5" style={{ color: "var(--ab-primary)" }}>
+                            {req.dates.length} Hari
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-2 text-[10px] font-bold text-[var(--ab-text-dim)] bg-[var(--ab-bg-main)] p-3 rounded-2xl border border-[var(--ab-border)]">
+                          <CalendarDays size={12} className="mt-0.5 shrink-0" style={{ color: "var(--ab-primary)" }} />
+                          <span className="leading-relaxed">{req.dates.join(", ")}</span>
+                        </div>
+                        <div className="flex items-start gap-2 text-[10px] font-medium text-[var(--ab-text-dim)] italic px-2">
+                          <FileEdit size={12} className="mt-1 text-[var(--ab-text-dim)] shrink-0 opacity-40" />
+                          <span className="line-clamp-2">&ldquo;{req.reason}&rdquo;</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => processRequest(req, "approve")}
+                        className="flex-1 bg-green-500 text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-green-600 transition shadow-lg flex items-center justify-center gap-2"
+                      >
+                        <Check size={14} /> Setujui
+                      </button>
+                      <button
+                        onClick={() => processRequest(req, "reject")}
+                        className="flex-1 bg-[var(--ab-bg-main)] text-red-500 border border-[var(--ab-border)] py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-500 hover:text-white transition flex items-center justify-center gap-2"
+                      >
+                        <X size={14} /> Tolak
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ))
@@ -286,56 +324,73 @@ export default function AdminApprovalsPage() {
 
       {/* Cancellation Requests */}
       {cancelReqs.length > 0 && (
-        <>
-          <div className="flex items-center gap-4 mt-8">
-            <h2 className="text-xl font-black text-orange-600 uppercase tracking-tight">Pengajuan Pembatalan</h2>
-            <div className="bg-orange-100 dark:bg-orange-900/20 text-orange-600 px-3 py-1 rounded-full text-[10px] font-black border border-orange-200 dark:border-orange-800">
-              {cancelReqs.length} MENUNGGU
-            </div>
+        <div className="space-y-4 mt-8">
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-black text-[var(--ab-text-main)] uppercase tracking-tight">Permohonan Batal Cuti</h2>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pb-10">
-            {cancelReqs.map((req) => (
-              <div
-                key={`cancel-${req.id}`}
-                className="bg-orange-50 dark:bg-orange-900/10 p-5 rounded-[32px] border border-orange-200 dark:border-orange-900/30 flex flex-col justify-between gap-5"
-              >
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${typeStyle(req.type)}`}>
-                      {typeLabel(req.type)}
-                    </span>
-                    <span className="text-[8px] font-black text-orange-500 uppercase tracking-widest bg-orange-100 dark:bg-orange-900/30 px-2 py-0.5 rounded">
-                      Minta Batal
-                    </span>
-                  </div>
-                  <h4 className="font-black text-[var(--ab-text-main)] text-base tracking-tight">{req.userName}</h4>
-                  <div className="flex items-start gap-2 text-[10px] font-bold text-[var(--ab-text-dim)] bg-[var(--ab-bg-surface)] p-3 rounded-2xl border border-orange-100 dark:border-slate-700">
-                    <CalendarDays size={12} className="mt-0.5 text-orange-400 shrink-0" />
-                    <span className="leading-relaxed">{req.dates.join(", ")}</span>
-                  </div>
-                  <div className="space-y-2 px-2 text-[10px] italic text-[var(--ab-text-dim)]">
-                    <p><span className="font-black not-italic text-[9px] text-[var(--ab-text-dim)] uppercase tracking-widest">Alasan Cuti: </span>&ldquo;{req.reason}&rdquo;</p>
-                    <p><span className="font-black not-italic text-[9px] text-orange-500 uppercase tracking-widest">Alasan Batal: </span>&ldquo;{req.cancellationReason}&rdquo;</p>
-                  </div>
+          <div className="space-y-8">
+            {Object.entries(groupedCancel).map(([deptName, reqs]) => (
+              <div key={deptName} className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="bg-red-500 w-2 h-6 rounded-full"></div>
+                  <h3 className="text-lg font-black text-[var(--ab-text-main)] uppercase tracking-tight">{deptName}</h3>
+                  <span className="bg-[var(--ab-bg-main)] px-2 py-1 rounded-full text-[10px] font-black text-[var(--ab-text-dim)] border border-[var(--ab-border)]">
+                    {reqs.length} Pengajuan
+                  </span>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => processCancellation(req, "approve")}
-                    className="flex-1 bg-green-500 text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-green-600 transition shadow-lg flex items-center justify-center gap-2"
-                  >
-                    <Check size={14} /> Setujui Batal
-                  </button>
-                  <button
-                    onClick={() => processCancellation(req, "reject")}
-                    className="flex-1 bg-white dark:bg-slate-800 text-red-500 border border-red-200 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-50 transition flex items-center justify-center gap-2"
-                  >
-                    <X size={14} /> Tolak
-                  </button>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {reqs.map((req) => (
+                    <div
+                      key={req.id}
+                      className="bg-red-50 dark:bg-red-950/20 p-5 rounded-[32px] border border-red-200 dark:border-red-900/30 flex flex-col justify-between gap-4 relative overflow-hidden"
+                    >
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-red-100 dark:bg-red-900/30 rounded-bl-[64px] -z-10" />
+                      <div className="space-y-4 relative z-10">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400">
+                                Batal Cuti
+                              </span>
+                              <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">
+                                {new Date(req.createdAt).toLocaleDateString("id-ID")}
+                              </span>
+                            </div>
+                            <h4 className="font-black text-red-900 dark:text-red-100 text-base tracking-tight">{req.userName}</h4>
+                          </div>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="flex items-start gap-2 text-[10px] font-bold text-red-800 dark:text-red-200 bg-red-100/50 dark:bg-red-900/20 p-3 rounded-2xl border border-red-200 dark:border-red-800/30">
+                            <CalendarDays size={12} className="mt-0.5 shrink-0 text-red-500" />
+                            <span className="leading-relaxed">{req.dates.join(", ")}</span>
+                          </div>
+                          <div className="flex flex-col gap-1 text-[10px] font-medium text-red-700 dark:text-red-300 italic px-2 border-l-2 border-red-300 dark:border-red-800 ml-1 pl-3">
+                            <span className="font-black uppercase text-[8px] tracking-widest opacity-60 not-italic">Alasan Batal</span>
+                            <span className="line-clamp-2">&ldquo;{req.cancellationReason}&rdquo;</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 relative z-10">
+                        <button
+                          onClick={() => processCancellation(req, "approve")}
+                          className="flex-1 bg-red-600 text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-700 transition flex items-center justify-center gap-2 shadow-lg shadow-red-500/20"
+                        >
+                          <Check size={14} /> Setujui Batal
+                        </button>
+                        <button
+                          onClick={() => processCancellation(req, "reject")}
+                          className="flex-1 bg-white dark:bg-red-950 text-red-500 border border-red-200 dark:border-red-900 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-50 dark:hover:bg-red-900/50 transition flex items-center justify-center gap-2"
+                        >
+                          <X size={14} /> Tolak Batal
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
           </div>
-        </>
+        </div>
       )}
 
       <ConfirmDialog

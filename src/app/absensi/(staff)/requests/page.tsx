@@ -29,7 +29,30 @@ type ConfirmCfg = {
 
 export default function StaffRequestsPage() {
   const { user } = useAuth();
-  const { requests, isLoading } = useMyLeaveRequests(user?.id ?? null);
+  const [globalRequests, setGlobalRequests] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Custom effect to fetch ALL leave requests for history
+  import("react").then(({ useEffect }) => {
+    useEffect(() => {
+      const supabase = createClient();
+      const fetchAll = async () => {
+        const { data } = await supabase
+          .from("leave_requests")
+          .select("*, users(name, department_id, departments(name))")
+          .order("created_at", { ascending: false });
+        
+        setGlobalRequests(data ?? []);
+        setIsLoading(false);
+      };
+      fetchAll();
+
+      const ch = supabase.channel("global_leave_reqs")
+        .on("postgres_changes", { event: "*", schema: "public", table: "leave_requests" }, fetchAll)
+        .subscribe();
+      return () => { ch.unsubscribe(); };
+    }, []);
+  });
   const { settings } = useAbsensiSettings();
   const { holidayDates } = useHolidays();
 
@@ -138,6 +161,66 @@ export default function StaffRequestsPage() {
         confirmLabel: "Ya, Lanjut",
         type: "danger",
       };
+    }
+
+    // ── Validation: Divisi Limit (Max 2 concurrent approved leaves if size >= 3)
+    if (user.departmentId && reqType === "leave") {
+      setIsSubmitting(true);
+      const tid = toast.loading("Memvalidasi kuota cuti divisi...");
+      try {
+        const supabase = createClient();
+        
+        const { count, error: countErr } = await supabase
+          .from("users")
+          .select("id", { count: "exact", head: true })
+          .eq("department_id", user.departmentId)
+          .eq("absensi_status", "active");
+          
+        if (countErr) throw countErr;
+        
+        const deptSize = count || 0;
+        
+        if (deptSize >= 3) {
+          const { data: deptLeavesJoined, error: leavesJoinedErr } = await supabase
+            .from("leave_requests")
+            .select("user_id, dates, users!inner(name, department_id)")
+            .eq("status", "approved")
+            .eq("users.department_id", user.departmentId)
+            .neq("user_id", user.id);
+            
+          if (leavesJoinedErr) throw leavesJoinedErr;
+          
+          let blockedDate = "";
+          let blockedNames: string[] = [];
+          
+          for (const sDate of selectedDates) {
+            const usersOnLeave = new Map<string, string>();
+            for (const r of (deptLeavesJoined || [])) {
+              if ((r.dates as string[]).includes(sDate)) {
+                usersOnLeave.set(r.user_id, (r.users as any).name);
+              }
+            }
+            if (usersOnLeave.size >= 2) {
+              blockedDate = sDate;
+              blockedNames = Array.from(usersOnLeave.values());
+              break;
+            }
+          }
+          
+          if (blockedDate) {
+            toast.error(`Jika Anda memaksakan mengajukan cuti maka sudah pasti akan ditolak karena sudah ada ${blockedNames.length} orang yang cuti di hari yang Anda pilih (${blockedDate}) yaitu ${blockedNames.join(" dan ")}`, { id: tid, duration: 10000 });
+            setIsSubmitting(false);
+            return;
+          }
+        }
+        
+        toast.dismiss(tid);
+      } catch (err: any) {
+        toast.error("Gagal validasi divisi: " + err.message, { id: tid });
+        setIsSubmitting(false);
+        return;
+      }
+      setIsSubmitting(false);
     }
 
     setConfirmCfg(cfg);
@@ -388,7 +471,7 @@ export default function StaffRequestsPage() {
             <div key={i} className="h-32 bg-[var(--ab-bg-surface)] rounded-[30px] border border-[var(--ab-border)] animate-pulse" />
           ))}
         </div>
-      ) : requests.length === 0 ? (
+      ) : globalRequests.length === 0 ? (
         <div className="p-16 text-center ab-animate-scaleIn">
           <div className="w-20 h-20 bg-white dark:bg-slate-800 rounded-[24px] flex items-center justify-center mx-auto mb-6 text-slate-300 dark:text-slate-600 shadow-sm border border-slate-100 dark:border-slate-700">
             <Smile size={36} />
@@ -398,11 +481,12 @@ export default function StaffRequestsPage() {
           </h4>
         </div>
       ) : (
-        <div className="space-y-5">
-          {requests.map((req) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {globalRequests.map((req) => (
             <RequestCard
               key={req.id}
               req={req}
+              isMine={req.user_id === user?.id}
               onCancel={handleCancelClick}
             />
           ))}
@@ -447,7 +531,7 @@ export default function StaffRequestsPage() {
 }
 
 // ─ Request Card ───────────────────────────────────────────────────────────────
-function RequestCard({ req, onCancel }: { req: LeaveRequest; onCancel: (req: LeaveRequest) => void }) {
+function RequestCard({ req, isMine, onCancel }: { req: any; isMine: boolean; onCancel: (req: any) => void }) {
   const statusColor =
     req.status === "approved" ? "bg-green-500" :
     req.status === "pending"  ? "bg-orange-400" :
@@ -483,7 +567,7 @@ function RequestCard({ req, onCancel }: { req: LeaveRequest; onCancel: (req: Lea
           <span className={`text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest ${statusBadgeStyle}`}>
             {statusLabel}
           </span>
-          {(req.status === "pending" || (req.status === "approved" && !req.cancellationRequested)) && (
+          {isMine && (req.status === "pending" || (req.status === "approved" && !req.cancellation_requested)) && (
             <button
               onClick={() => onCancel(req)}
               className="text-[8px] font-black uppercase tracking-widest text-red-400 hover:text-white hover:bg-red-500 px-3 py-1.5 rounded-lg border border-red-200 transition-all active:scale-95"
@@ -491,15 +575,23 @@ function RequestCard({ req, onCancel }: { req: LeaveRequest; onCancel: (req: Lea
               {req.status === "pending" ? "Batalkan" : "Pengajuan Batal"}
             </button>
           )}
-          {req.cancellationRequested && (
+          {req.cancellation_requested && (
             <span className="text-[8px] font-black uppercase tracking-widest text-orange-500 bg-orange-50 dark:bg-orange-900/20 px-2 py-1 rounded border border-orange-200 dark:border-orange-800">
               Menunggu Batal
             </span>
           )}
         </div>
       </div>
+      
+      {/* Name and Department */}
+      <div className="mb-4 flex flex-col border-b border-[var(--ab-border)] pb-3">
+        <span className="text-[14px] font-black text-[var(--ab-text-main)]">{req.users?.name ?? "Unknown"}</span>
+        <span className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest mt-1">
+          {req.users?.departments?.name ?? "Umum"}
+        </span>
+      </div>
       <div className="flex flex-wrap gap-2 mb-4">
-        {req.dates?.map((d) => (
+        {req.dates?.map((d: string) => (
           <span
             key={d}
             className="text-[10px] font-black text-[var(--ab-text-main)] bg-[var(--ab-bg-main)] px-3 py-1 rounded-lg border border-[var(--ab-border)]"
