@@ -97,17 +97,19 @@ export function AttendanceWidget() {
     if (allowedLocations.length > 0) {
       let minDist = Infinity;
       let minRadius = 100;
+      let bestOffice = null;
       for (const al of allowedLocations) {
         if (!al) continue;
         const dist = calcDist(loc.lat, loc.lng, al.lat, al.lng);
         if (dist < minDist) {
           minDist = dist;
           minRadius = al.radius;
+          bestOffice = { lat: al.lat, lng: al.lng, name: al.name };
         }
       }
-      return { dist: minDist, radius: minRadius, noLocationError: false };
+      return { dist: minDist, radius: minRadius, office: bestOffice, noLocationError: false };
     } else {
-      return { dist: Infinity, radius: 0, noLocationError: true };
+      return { dist: Infinity, radius: 0, office: null, noLocationError: true };
     }
   }, [allowedLocations]);
 
@@ -241,6 +243,7 @@ export function AttendanceWidget() {
 
     let locationStatus = "Lokasi Keblokir";
     let radiusPenalty = 0;
+    let locationToSave: any = location;
     if (location) {
       const nearest = getNearestLocation(location);
       if (nearest.dist <= nearest.radius) {
@@ -249,6 +252,14 @@ export function AttendanceWidget() {
         locationStatus = "Di Luar Area";
         if (nearest.dist > 500) radiusPenalty = 2;
       }
+      locationToSave = {
+        lat: location.lat,
+        lng: location.lng,
+        distance: Math.round(nearest.dist),
+        officeLat: nearest.office?.lat,
+        officeLng: nearest.office?.lng,
+        officeName: nearest.office?.name
+      };
     }
 
     const { error } = await supabase.from("attendance").insert({
@@ -257,7 +268,7 @@ export function AttendanceWidget() {
       check_in: getNowTime(),
       status: arrStat,
       type: "WFO",
-      location_in: location,
+      location_in: locationToSave,
       location_status: locationStatus,
       late_fine: lateFine,
       late_reason: lateReason,

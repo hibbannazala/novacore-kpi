@@ -830,7 +830,9 @@ export default function AdminDashboardPage() {
                       onClick={() => {
                         if (row.log) {
                           let dist: number | null = null;
-                          if (row.log.locationIn && officeLocations.length > 0) {
+                          if (row.log.locationIn && (row.log.locationIn as any).distance !== undefined) {
+                            dist = (row.log.locationIn as any).distance;
+                          } else if (row.log.locationIn && officeLocations.length > 0) {
                             let minDist = Infinity;
                             for (const ol of officeLocations) {
                               const d = calcDist(row.log.locationIn.lat, row.log.locationIn.lng, ol.lat, ol.lng);
@@ -1058,7 +1060,7 @@ export default function AdminDashboardPage() {
                         {selectedDist !== null && (
                           <div className="flex justify-between items-center">
                             <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">Jarak ke Kantor</span>
-                            <span className={`text-[10px] font-black uppercase ${selectedDist <= (officeLocations.length > 0 ? Math.max(...officeLocations.map(o => o.radius)) : (settings?.officeRadius ?? 100)) ? "text-green-500" : "text-red-500"}`}>{selectedDist} meter</span>
+                            <span className={`text-[10px] font-black uppercase ${selectedDist <= (officeLocations.length > 0 ? Math.max(...officeLocations.map(o => o.radius)) : (settings?.officeRadius ?? 100)) ? "text-green-500" : "text-red-500"}`}>{Math.round(selectedDist)} meter</span>
                           </div>
                         )}
                         {selectedRow.log.locationIn && (
@@ -1067,7 +1069,7 @@ export default function AdminDashboardPage() {
                             target="_blank" rel="noreferrer"
                             className="w-full flex items-center justify-center gap-2 bg-[var(--ab-bg-surface)] border border-[var(--ab-border)] py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-main)] hover:bg-[var(--ab-bg-main)] transition"
                           >
-                            <MapPin size={12} className="text-red-500" /> Buka Google Maps
+                            <MapPin size={12} className="text-red-500" /> Buka Google Maps ({selectedRow.log.locationIn.lat.toFixed(5)}, {selectedRow.log.locationIn.lng.toFixed(5)})
                           </a>
                         )}
                       </div>
