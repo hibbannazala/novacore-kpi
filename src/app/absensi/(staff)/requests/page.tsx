@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMyLeaveRequests } from "@/hooks/absensi/useLeaveRequests";
@@ -9,9 +9,10 @@ import { useHolidays } from "@/hooks/absensi/useHolidays";
 import type { LeaveRequest, LeaveRequestType } from "@/types/absensi";
 import ConfirmDialog from "@/components/absensi/ConfirmDialog";
 import PromptDialog from "@/components/absensi/PromptDialog";
+import { OvertimeStaffSection } from "@/components/absensi/OvertimeStaffSection";
 import {
   CalendarPlus, CalendarDays, History, X, Info,
-  FileEdit, Smile,
+  FileEdit, Smile, Clock
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,30 +30,30 @@ type ConfirmCfg = {
 
 export default function StaffRequestsPage() {
   const { user } = useAuth();
+  const [mainTab, setMainTab] = useState<"leave" | "overtime">("leave");
   const [globalRequests, setGlobalRequests] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Custom effect to fetch ALL leave requests for history
-  import("react").then(({ useEffect }) => {
-    useEffect(() => {
-      const supabase = createClient();
-      const fetchAll = async () => {
-        const { data } = await supabase
-          .from("leave_requests")
-          .select("*, users(name, department_id, departments(name))")
-          .order("created_at", { ascending: false });
-        
-        setGlobalRequests(data ?? []);
-        setIsLoading(false);
-      };
-      fetchAll();
+  // Fetch ALL leave requests for global team history
+  useEffect(() => {
+    const supabase = createClient();
+    const fetchAll = async () => {
+      const { data } = await supabase
+        .from("leave_requests")
+        .select("*, users(name, department_id, departments(name))")
+        .order("created_at", { ascending: false });
+      
+      setGlobalRequests(data ?? []);
+      setIsLoading(false);
+    };
+    fetchAll();
 
-      const ch = supabase.channel("global_leave_reqs")
-        .on("postgres_changes", { event: "*", schema: "public", table: "leave_requests" }, fetchAll)
-        .subscribe();
-      return () => { ch.unsubscribe(); };
-    }, []);
-  });
+    const ch = supabase.channel("global_leave_reqs")
+      .on("postgres_changes", { event: "*", schema: "public", table: "leave_requests" }, fetchAll)
+      .subscribe();
+    return () => { ch.unsubscribe(); };
+  }, []);
+
   const { settings } = useAbsensiSettings();
   const { holidayDates } = useHolidays();
 
@@ -344,7 +345,35 @@ export default function StaffRequestsPage() {
         )}
       </div>
 
-      {/* Form Card */}
+      {/* Main Mode Tabs (Cuti / Izin vs Lembur) */}
+      <div className="flex bg-[var(--ab-bg-surface)] p-2 rounded-2xl border border-[var(--ab-border)] shadow-md">
+        <button
+          onClick={() => setMainTab("leave")}
+          className={`flex-1 py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
+            mainTab === "leave"
+              ? "bg-[var(--ab-primary)] text-white shadow-lg"
+              : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
+          }`}
+        >
+          <CalendarDays size={16} /> Cuti, Sakit & WFA
+        </button>
+        <button
+          onClick={() => setMainTab("overtime")}
+          className={`flex-1 py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
+            mainTab === "overtime"
+              ? "bg-amber-500 text-white shadow-lg shadow-amber-500/30"
+              : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
+          }`}
+        >
+          <Clock size={16} /> Pengajuan Lembur (Overtime)
+        </button>
+      </div>
+
+      {mainTab === "overtime" ? (
+        <OvertimeStaffSection />
+      ) : (
+        <>
+          {/* Form Card */}
       <div className="ab-card-tactile space-y-6">
         {/* Type Selector */}
         <div>
@@ -493,6 +522,8 @@ export default function StaffRequestsPage() {
         </div>
       )}
       </div>
+      </>
+      )}
 
       {/* Dialogs */}
       <ConfirmDialog

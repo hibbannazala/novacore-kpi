@@ -395,6 +395,9 @@ export interface Payroll {
   deductions_detail?: Array<{name: string, amount: number, note?: string}> | null;
   additions_detail?: Array<{name: string, amount: number, note?: string}> | null;
   overtime_notes?: string | null;
+  system_overtime_minutes?: number | null;
+  payroll_overtime_minutes?: number | null;
+  overtime_rate?: number | null;
 }
 
 export interface DeductionType {

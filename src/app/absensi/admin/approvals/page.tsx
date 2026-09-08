@@ -5,8 +5,11 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import ConfirmDialog from "@/components/absensi/ConfirmDialog";
+import PromptDialog from "@/components/absensi/PromptDialog";
+import type { OvertimeRequest, OvertimeTaskReport } from "@/types/absensi";
 import {
   Check, X, CalendarDays, FileEdit, Smile, Shield, ArrowRight,
+  Clock, CheckCircle2, ClipboardCheck
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -36,11 +39,33 @@ type ConfirmCfg = {
 export default function AdminApprovalsPage() {
   const { user } = useAuth();
   const router = useRouter();
+
+  // Tabs: "leave" vs "overtime"
+  const [activeMainTab, setActiveMainTab] = useState<"leave" | "overtime">("leave");
+
+  // Cuti States
   const [pendingReqs, setPendingReqs] = useState<PendingRequest[]>([]);
   const [cancelReqs, setCancelReqs] = useState<PendingRequest[]>([]);
   const [pendingStaffCount, setPendingStaffCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [confirmCfg, setConfirmCfg] = useState<ConfirmCfg>(null);
+
+  // Overtime States
+  const [overtimes, setOvertimes] = useState<OvertimeRequest[]>([]);
+  const [overtimeTab, setOvertimeTab] = useState<"pending" | "reported" | "finalized">("pending");
+  const [adjustingReq, setAdjustingReq] = useState<OvertimeRequest | null>(null);
+  const [adjustStartTime, setAdjustStartTime] = useState("");
+  const [adjustEndTime, setAdjustEndTime] = useState("");
+  const [adjustNotes, setAdjustNotes] = useState("");
+
+  // Reject Overtime Dialog
+  const [rejectingReq, setRejectingReq] = useState<OvertimeRequest | null>(null);
+
+  // Finalize Overtime Dialog
+  const [finalizingReq, setFinalizingReq] = useState<OvertimeRequest | null>(null);
+  const [finalHours, setFinalHours] = useState(0);
+  const [finalMinutes, setFinalMinutes] = useState(0);
+  const [finalNotes, setFinalNotes] = useState("");
 
   useEffect(() => {
     const supabase = createClient();
@@ -105,7 +130,53 @@ export default function AdminApprovalsPage() {
       setPendingStaffCount(count ?? 0);
     };
 
-    Promise.all([fetchPending(), fetchCancel(), fetchPendingStaff()]);
+    const fetchOvertime = async () => {
+      const { data } = await supabase
+        .from("overtime_requests" as any)
+        .select("*, users(name, position, departments(name))")
+        .order("overtime_date", { ascending: false });
+
+      if (data) {
+        setOvertimes(
+          data.map((r: any) => ({
+            id: r.id,
+            userId: r.user_id,
+            requestDate: r.request_date,
+            overtimeDate: r.overtime_date,
+            requestedStartTime: (r.requested_start_time || "").substring(0, 5),
+            requestedEndTime: (r.requested_end_time || "").substring(0, 5),
+            requestedDurationMinutes: r.requested_duration_minutes,
+            tasks: r.tasks || [],
+            staffNotes: r.staff_notes,
+            status: r.status,
+            approvedStartTime: r.approved_start_time ? r.approved_start_time.substring(0, 5) : null,
+            approvedEndTime: r.approved_end_time ? r.approved_end_time.substring(0, 5) : null,
+            approvedDurationMinutes: r.approved_duration_minutes,
+            approvedBy: r.approved_by,
+            approvalDate: r.approval_date,
+            approvalNotes: r.approval_notes,
+            rejectionReason: r.rejection_reason,
+            actualStartTime: r.actual_start_time ? r.actual_start_time.substring(0, 5) : null,
+            actualEndTime: r.actual_end_time ? r.actual_end_time.substring(0, 5) : null,
+            actualDurationMinutes: r.actual_duration_minutes,
+            reportSubmittedAt: r.report_submitted_at,
+            taskReports: r.task_reports,
+            staffReportNotes: r.staff_report_notes,
+            finalDurationMinutes: r.final_duration_minutes,
+            finalizedBy: r.finalized_by,
+            finalizedDate: r.finalized_date,
+            finalNotes: r.final_notes,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+            userName: r.users?.name,
+            userDepartment: r.users?.departments?.name,
+            userPosition: r.users?.position,
+          }))
+        );
+      }
+    };
+
+    Promise.all([fetchPending(), fetchCancel(), fetchPendingStaff(), fetchOvertime()]);
 
     const ch = supabase
       .channel("admin_approvals")
@@ -113,11 +184,130 @@ export default function AdminApprovalsPage() {
         fetchPending();
         fetchCancel();
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "overtime_requests" }, fetchOvertime)
       .on("postgres_changes", { event: "*", schema: "public", table: "users" }, fetchPendingStaff)
       .subscribe();
 
     return () => { ch.unsubscribe(); };
   }, []);
+
+  const formatMinutes = (mins: number) => {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h === 0) return `${m} Menit`;
+    if (m === 0) return `${h} Jam`;
+    return `${h} Jam ${m} Menit`;
+  };
+
+  const calcDurationMinutes = (startStr: string, endStr: string) => {
+    if (!startStr || !endStr) return 0;
+    const [sh, sm] = startStr.split(":").map(Number);
+    const [eh, em] = endStr.split(":").map(Number);
+    return Math.max(0, (eh * 60 + em) - (sh * 60 + sm));
+  };
+
+  // Overtime Actions
+  const handleOpenApproveModal = (req: OvertimeRequest) => {
+    setAdjustingReq(req);
+    setAdjustStartTime(req.requestedStartTime);
+    setAdjustEndTime(req.requestedEndTime);
+    setAdjustNotes("");
+  };
+
+  const handleApproveOvertime = async () => {
+    if (!adjustingReq || !user) return;
+    const durMins = calcDurationMinutes(adjustStartTime, adjustEndTime);
+    if (durMins <= 0) { toast.error("Jam selesai harus lebih besar dari jam mulai."); return; }
+
+    const tid = toast.loading("Menyetujui jadwal lembur...");
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("overtime_requests" as any)
+        .update({
+          status: "approved",
+          approved_start_time: adjustStartTime + ":00",
+          approved_end_time: adjustEndTime + ":00",
+          approved_duration_minutes: durMins,
+          approved_by: user.id,
+          approval_date: new Date().toISOString(),
+          approval_notes: adjustNotes.trim() || null,
+        })
+        .eq("id", adjustingReq.id);
+
+      if (error) throw error;
+      toast.success("Lembur berhasil disetujui!", { id: tid });
+      setAdjustingReq(null);
+      // refetch
+      const { data } = await supabase.from("overtime_requests" as any).select("*, users(name, position, departments(name))").order("overtime_date", { ascending: false });
+      if (data) setOvertimes(data.map((r: any) => ({ ...r, userName: r.users?.name, userDepartment: r.users?.departments?.name })));
+    } catch (err: any) {
+      toast.error("Gagal: " + err.message, { id: tid });
+    }
+  };
+
+  const handleRejectOvertime = async (reason: string) => {
+    if (!rejectingReq || !user) return;
+    if (!reason.trim()) { toast.error("Alasan penolakan wajib diisi."); return; }
+
+    const tid = toast.loading("Menolak pengajuan lembur...");
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("overtime_requests" as any)
+        .update({
+          status: "rejected",
+          approved_by: user.id,
+          approval_date: new Date().toISOString(),
+          rejection_reason: reason.trim(),
+        })
+        .eq("id", rejectingReq.id);
+
+      if (error) throw error;
+      toast.success("Pengajuan lembur telah ditolak.", { id: tid });
+      setRejectingReq(null);
+      const { data } = await supabase.from("overtime_requests" as any).select("*, users(name, position, departments(name))").order("overtime_date", { ascending: false });
+      if (data) setOvertimes(data.map((r: any) => ({ ...r, userName: r.users?.name, userDepartment: r.users?.departments?.name })));
+    } catch (err: any) {
+      toast.error("Gagal: " + err.message, { id: tid });
+    }
+  };
+
+  const handleOpenFinalizeModal = (req: OvertimeRequest) => {
+    setFinalizingReq(req);
+    const defaultMins = req.actualDurationMinutes || req.approvedDurationMinutes || req.requestedDurationMinutes || 0;
+    setFinalHours(Math.floor(defaultMins / 60));
+    setFinalMinutes(defaultMins % 60);
+    setFinalNotes("");
+  };
+
+  const handleFinalizeOvertime = async () => {
+    if (!finalizingReq || !user) return;
+    const totalMins = finalHours * 60 + finalMinutes;
+
+    const tid = toast.loading("Memfinalisasi durasi lembur...");
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("overtime_requests" as any)
+        .update({
+          status: "finalized",
+          final_duration_minutes: totalMins,
+          finalized_by: user.id,
+          finalized_date: new Date().toISOString(),
+          final_notes: finalNotes.trim() || null,
+        })
+        .eq("id", finalizingReq.id);
+
+      if (error) throw error;
+      toast.success(`Lembur difinalisasi menjadi ${formatMinutes(totalMins)}!`, { id: tid });
+      setFinalizingReq(null);
+      const { data } = await supabase.from("overtime_requests" as any).select("*, users(name, position, departments(name))").order("overtime_date", { ascending: false });
+      if (data) setOvertimes(data.map((r: any) => ({ ...r, userName: r.users?.name, userDepartment: r.users?.departments?.name })));
+    } catch (err: any) {
+      toast.error("Gagal finalisasi: " + err.message, { id: tid });
+    }
+  };
 
   const processRequest = (req: PendingRequest, action: "approve" | "reject") => {
     setConfirmCfg({
@@ -212,6 +402,30 @@ export default function AdminApprovalsPage() {
         </div>
       </div>
 
+      {/* Main Mode Tabs */}
+      <div className="flex bg-[var(--ab-bg-surface)] p-2 rounded-2xl border border-[var(--ab-border)] shadow-md">
+        <button
+          onClick={() => setActiveMainTab("leave")}
+          className={`flex-1 py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
+            activeMainTab === "leave"
+              ? "bg-[var(--ab-primary)] text-white shadow-lg"
+              : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
+          }`}
+        >
+          <CalendarDays size={16} /> Persetujuan Cuti & Izin ({pendingReqs.length})
+        </button>
+        <button
+          onClick={() => setActiveMainTab("overtime")}
+          className={`flex-1 py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
+            activeMainTab === "overtime"
+              ? "bg-amber-500 text-white shadow-lg shadow-amber-500/30"
+              : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
+          }`}
+        >
+          <Clock size={16} /> Persetujuan & Verifikasi Lembur ({overtimes.filter(o => o.status === "pending" || o.status === "reported").length})
+        </button>
+      </div>
+
       {/* Pending Staff Banner */}
       {!isLoading && pendingStaffCount > 0 && (
         <button
@@ -236,162 +450,593 @@ export default function AdminApprovalsPage() {
         </button>
       )}
 
-      {/* Pending Requests */}
-      <div className="space-y-8 pb-4">
-        {isLoading ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="animate-pulse bg-[var(--ab-bg-surface)] p-6 rounded-[32px] border border-[var(--ab-border)] h-48" />
-            ))}
-          </div>
-        ) : pendingReqs.length === 0 ? (
-          <div className="p-20 text-center ab-animate-scaleIn">
-            <div className="w-16 h-16 bg-[var(--ab-bg-surface)] rounded-[20px] flex items-center justify-center mx-auto mb-4 text-[var(--ab-text-dim)]">
-              <Smile size={32} />
-            </div>
-            <h4 className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest italic">
-              Semua pengajuan sudah diproses. Aman!
-            </h4>
-          </div>
-        ) : (
-          Object.entries(groupedPending).map(([deptName, reqs]) => (
-            <div key={deptName} className="space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="bg-[var(--ab-primary)] w-2 h-6 rounded-full"></div>
-                <h2 className="text-lg font-black text-[var(--ab-text-main)] uppercase tracking-tight">{deptName}</h2>
-                <span className="bg-[var(--ab-bg-main)] px-2 py-1 rounded-full text-[10px] font-black text-[var(--ab-text-dim)] border border-[var(--ab-border)]">
-                  {reqs.length} Pengajuan
-                </span>
-              </div>
+      {/* TAB 1: PERSUTUJUAN CUTI & IZIN */}
+      {activeMainTab === "leave" && (
+        <div className="space-y-8">
+          {/* Pending Requests */}
+          <div className="space-y-8 pb-4">
+            {isLoading ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {reqs.map((req) => (
-                  <div
-                    key={req.id}
-                    className="bg-[var(--ab-bg-surface)] p-5 rounded-[32px] border border-[var(--ab-border)] shadow-sm flex flex-col justify-between gap-5 relative overflow-hidden"
-                  >
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-start">
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${typeStyle(req.type)}`}>
-                              {typeLabel(req.type)}
-                            </span>
-                            <span className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest">
-                              {new Date(req.createdAt).toLocaleDateString("id-ID")}
-                            </span>
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="animate-pulse bg-[var(--ab-bg-surface)] p-6 rounded-[32px] border border-[var(--ab-border)] h-48" />
+                ))}
+              </div>
+            ) : pendingReqs.length === 0 ? (
+              <div className="p-20 text-center ab-animate-scaleIn bg-[var(--ab-bg-surface)] rounded-3xl border border-[var(--ab-border)]">
+                <div className="w-16 h-16 bg-[var(--ab-bg-main)] rounded-[20px] flex items-center justify-center mx-auto mb-4 text-[var(--ab-text-dim)]">
+                  <Smile size={32} />
+                </div>
+                <h4 className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest italic">
+                  Semua pengajuan cuti sudah diproses. Aman!
+                </h4>
+              </div>
+            ) : (
+              Object.entries(groupedPending).map(([deptName, reqs]) => (
+                <div key={deptName} className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <div className="bg-[var(--ab-primary)] w-2 h-6 rounded-full"></div>
+                    <h2 className="text-lg font-black text-[var(--ab-text-main)] uppercase tracking-tight">{deptName}</h2>
+                    <span className="bg-[var(--ab-bg-main)] px-2 py-1 rounded-full text-[10px] font-black text-[var(--ab-text-dim)] border border-[var(--ab-border)]">
+                      {reqs.length} Pengajuan
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {reqs.map((req) => (
+                      <div
+                        key={req.id}
+                        className="bg-[var(--ab-bg-surface)] p-5 rounded-[32px] border border-[var(--ab-border)] shadow-sm flex flex-col justify-between gap-5 relative overflow-hidden"
+                      >
+                        <div className="space-y-4">
+                          <div className="flex justify-between items-start">
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${typeStyle(req.type)}`}>
+                                  {typeLabel(req.type)}
+                                </span>
+                                <span className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest">
+                                  {new Date(req.createdAt).toLocaleDateString("id-ID")}
+                                </span>
+                              </div>
+                              <h4 className="font-black text-[var(--ab-text-main)] text-base tracking-tight">{req.userName}</h4>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest leading-none">Durasi</p>
+                              <p className="text-sm font-black mt-0.5" style={{ color: "var(--ab-primary)" }}>
+                                {req.dates.length} Hari
+                              </p>
+                            </div>
                           </div>
-                          <h4 className="font-black text-[var(--ab-text-main)] text-base tracking-tight">{req.userName}</h4>
+                          <div className="space-y-3">
+                            <div className="flex items-start gap-2 text-[10px] font-bold text-[var(--ab-text-dim)] bg-[var(--ab-bg-main)] p-3 rounded-2xl border border-[var(--ab-border)]">
+                              <CalendarDays size={12} className="mt-0.5 shrink-0" style={{ color: "var(--ab-primary)" }} />
+                              <span className="leading-relaxed">{req.dates.join(", ")}</span>
+                            </div>
+                            <div className="flex items-start gap-2 text-[10px] font-medium text-[var(--ab-text-dim)] italic px-2">
+                              <FileEdit size={12} className="mt-1 text-[var(--ab-text-dim)] shrink-0 opacity-40" />
+                              <span className="line-clamp-2">&ldquo;{req.reason}&rdquo;</span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest leading-none">Durasi</p>
-                          <p className="text-sm font-black mt-0.5" style={{ color: "var(--ab-primary)" }}>
-                            {req.dates.length} Hari
-                          </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => processRequest(req, "approve")}
+                            className="flex-1 bg-green-500 text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-green-600 transition shadow-lg flex items-center justify-center gap-2"
+                          >
+                            <Check size={14} /> Setujui
+                          </button>
+                          <button
+                            onClick={() => processRequest(req, "reject")}
+                            className="flex-1 bg-[var(--ab-bg-main)] text-red-500 border border-[var(--ab-border)] py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-500 hover:text-white transition flex items-center justify-center gap-2"
+                          >
+                            <X size={14} /> Tolak
+                          </button>
                         </div>
                       </div>
-                      <div className="space-y-3">
-                        <div className="flex items-start gap-2 text-[10px] font-bold text-[var(--ab-text-dim)] bg-[var(--ab-bg-main)] p-3 rounded-2xl border border-[var(--ab-border)]">
-                          <CalendarDays size={12} className="mt-0.5 shrink-0" style={{ color: "var(--ab-primary)" }} />
-                          <span className="leading-relaxed">{req.dates.join(", ")}</span>
-                        </div>
-                        <div className="flex items-start gap-2 text-[10px] font-medium text-[var(--ab-text-dim)] italic px-2">
-                          <FileEdit size={12} className="mt-1 text-[var(--ab-text-dim)] shrink-0 opacity-40" />
-                          <span className="line-clamp-2">&ldquo;{req.reason}&rdquo;</span>
-                        </div>
-                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Cancellation Requests */}
+          {cancelReqs.length > 0 && (
+            <div className="space-y-4 mt-8">
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-black text-[var(--ab-text-main)] uppercase tracking-tight">Permohonan Batal Cuti</h2>
+              </div>
+              <div className="space-y-8">
+                {Object.entries(groupedCancel).map(([deptName, reqs]) => (
+                  <div key={deptName} className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-red-500 w-2 h-6 rounded-full"></div>
+                      <h3 className="text-lg font-black text-[var(--ab-text-main)] uppercase tracking-tight">{deptName}</h3>
+                      <span className="bg-[var(--ab-bg-main)] px-2 py-1 rounded-full text-[10px] font-black text-[var(--ab-text-dim)] border border-[var(--ab-border)]">
+                        {reqs.length} Pengajuan
+                      </span>
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => processRequest(req, "approve")}
-                        className="flex-1 bg-green-500 text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-green-600 transition shadow-lg flex items-center justify-center gap-2"
-                      >
-                        <Check size={14} /> Setujui
-                      </button>
-                      <button
-                        onClick={() => processRequest(req, "reject")}
-                        className="flex-1 bg-[var(--ab-bg-main)] text-red-500 border border-[var(--ab-border)] py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-500 hover:text-white transition flex items-center justify-center gap-2"
-                      >
-                        <X size={14} /> Tolak
-                      </button>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {reqs.map((req) => (
+                        <div
+                          key={req.id}
+                          className="bg-red-50 dark:bg-red-950/20 p-5 rounded-[32px] border border-red-200 dark:border-red-900/30 flex flex-col justify-between gap-4 relative overflow-hidden"
+                        >
+                          <div className="space-y-4 relative z-10">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400">
+                                    Batal Cuti
+                                  </span>
+                                  <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">
+                                    {new Date(req.createdAt).toLocaleDateString("id-ID")}
+                                  </span>
+                                </div>
+                                <h4 className="font-black text-red-900 dark:text-red-100 text-base tracking-tight">{req.userName}</h4>
+                              </div>
+                            </div>
+                            <div className="space-y-3">
+                              <div className="flex items-start gap-2 text-[10px] font-bold text-red-800 dark:text-red-200 bg-red-100/50 dark:bg-red-900/20 p-3 rounded-2xl border border-red-200 dark:border-red-800/30">
+                                <CalendarDays size={12} className="mt-0.5 shrink-0 text-red-500" />
+                                <span className="leading-relaxed">{req.dates.join(", ")}</span>
+                              </div>
+                              <div className="flex flex-col gap-1 text-[10px] font-medium text-red-700 dark:text-red-300 italic px-2 border-l-2 border-red-300 dark:border-red-800 ml-1 pl-3">
+                                <span className="font-black uppercase text-[8px] tracking-widest opacity-60 not-italic">Alasan Batal</span>
+                                <span className="line-clamp-2">&ldquo;{req.cancellationReason}&rdquo;</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 relative z-10">
+                            <button
+                              onClick={() => processCancellation(req, "approve")}
+                              className="flex-1 bg-red-600 text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-700 transition flex items-center justify-center gap-2 shadow-lg shadow-red-500/20"
+                            >
+                              <Check size={14} /> Setujui Batal
+                            </button>
+                            <button
+                              onClick={() => processCancellation(req, "reject")}
+                              className="flex-1 bg-white dark:bg-red-950 text-red-500 border border-red-200 dark:border-red-900 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-50 dark:hover:bg-red-900/50 transition flex items-center justify-center gap-2"
+                            >
+                              <X size={14} /> Tolak Batal
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-          ))
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
-      {/* Cancellation Requests */}
-      {cancelReqs.length > 0 && (
-        <div className="space-y-4 mt-8">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-black text-[var(--ab-text-main)] uppercase tracking-tight">Permohonan Batal Cuti</h2>
+      {/* TAB 2: OVERTIME MANAGEMENT */}
+      {activeMainTab === "overtime" && (
+        <div className="space-y-6">
+          {/* Overtime Sub Tabs */}
+          <div className="flex bg-[var(--ab-bg-main)] p-1.5 rounded-2xl border border-[var(--ab-border)] w-fit mx-auto shadow-inner">
+            <button
+              onClick={() => setOvertimeTab("pending")}
+              className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                overtimeTab === "pending"
+                  ? "bg-amber-500 text-white shadow-md"
+                  : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
+              }`}
+            >
+              1. Review Pengajuan ({overtimes.filter(o => o.status === "pending").length})
+            </button>
+            <button
+              onClick={() => setOvertimeTab("reported")}
+              className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                overtimeTab === "reported"
+                  ? "bg-purple-600 text-white shadow-md"
+                  : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
+              }`}
+            >
+              2. Verifikasi Laporan ({overtimes.filter(o => o.status === "reported").length})
+            </button>
+            <button
+              onClick={() => setOvertimeTab("finalized")}
+              className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                overtimeTab === "finalized"
+                  ? "bg-emerald-600 text-white shadow-md"
+                  : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
+              }`}
+            >
+              3. Selesai / Finalized ({overtimes.filter(o => o.status === "finalized").length})
+            </button>
           </div>
-          <div className="space-y-8">
-            {Object.entries(groupedCancel).map(([deptName, reqs]) => (
-              <div key={deptName} className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <div className="bg-red-500 w-2 h-6 rounded-full"></div>
-                  <h3 className="text-lg font-black text-[var(--ab-text-main)] uppercase tracking-tight">{deptName}</h3>
-                  <span className="bg-[var(--ab-bg-main)] px-2 py-1 rounded-full text-[10px] font-black text-[var(--ab-text-dim)] border border-[var(--ab-border)]">
-                    {reqs.length} Pengajuan
-                  </span>
+
+          {/* Sub Tab 1: Pending Review */}
+          {overtimeTab === "pending" && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {overtimes.filter(o => o.status === "pending").length === 0 ? (
+                <div className="col-span-full p-16 bg-[var(--ab-bg-surface)] rounded-3xl border border-[var(--ab-border)] text-center">
+                  <Smile size={36} className="mx-auto text-[var(--ab-text-dim)] opacity-40 mb-2" />
+                  <p className="text-xs font-black uppercase tracking-wider text-[var(--ab-text-dim)]">
+                    Tidak ada pengajuan lembur baru yang pending
+                  </p>
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {reqs.map((req) => (
-                    <div
-                      key={req.id}
-                      className="bg-red-50 dark:bg-red-950/20 p-5 rounded-[32px] border border-red-200 dark:border-red-900/30 flex flex-col justify-between gap-4 relative overflow-hidden"
-                    >
-                      <div className="absolute top-0 right-0 w-24 h-24 bg-red-100 dark:bg-red-900/30 rounded-bl-[64px] -z-10" />
-                      <div className="space-y-4 relative z-10">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400">
-                                Batal Cuti
-                              </span>
-                              <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">
-                                {new Date(req.createdAt).toLocaleDateString("id-ID")}
-                              </span>
-                            </div>
-                            <h4 className="font-black text-red-900 dark:text-red-100 text-base tracking-tight">{req.userName}</h4>
-                          </div>
+              ) : (
+                overtimes.filter(o => o.status === "pending").map((req) => (
+                  <div key={req.id} className="bg-[var(--ab-bg-surface)] p-5 rounded-3xl border border-[var(--ab-border)] shadow-sm space-y-4 flex flex-col justify-between">
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="text-[9px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
+                            {req.userDepartment || "Divisi Umum"}
+                          </span>
+                          <h4 className="text-base font-black text-[var(--ab-text-main)]">{req.userName}</h4>
                         </div>
-                        <div className="space-y-3">
-                          <div className="flex items-start gap-2 text-[10px] font-bold text-red-800 dark:text-red-200 bg-red-100/50 dark:bg-red-900/20 p-3 rounded-2xl border border-red-200 dark:border-red-800/30">
-                            <CalendarDays size={12} className="mt-0.5 shrink-0 text-red-500" />
-                            <span className="leading-relaxed">{req.dates.join(", ")}</span>
-                          </div>
-                          <div className="flex flex-col gap-1 text-[10px] font-medium text-red-700 dark:text-red-300 italic px-2 border-l-2 border-red-300 dark:border-red-800 ml-1 pl-3">
-                            <span className="font-black uppercase text-[8px] tracking-widest opacity-60 not-italic">Alasan Batal</span>
-                            <span className="line-clamp-2">&ldquo;{req.cancellationReason}&rdquo;</span>
-                          </div>
+                        <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                          {new Date(req.overtimeDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                        </span>
+                      </div>
+
+                      <div className="p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] flex items-center justify-between">
+                        <div>
+                          <span className="block text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Jadwal Diminta</span>
+                          <span className="text-xs font-black text-[var(--ab-text-main)]">{req.requestedStartTime} - {req.requestedEndTime}</span>
+                        </div>
+                        <span className="text-xs font-black text-amber-500 bg-[var(--ab-bg-surface)] px-2.5 py-1 rounded-lg border border-[var(--ab-border)]">
+                          {formatMinutes(req.requestedDurationMinutes)}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Workload / Rencana Tugas:</span>
+                        <div className="space-y-1">
+                          {req.tasks.map((t, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-xs py-1 px-2.5 bg-[var(--ab-bg-main)]/60 rounded-lg">
+                              <span className="font-bold text-[var(--ab-text-main)]">• {t.task}</span>
+                              <span className="text-[9px] font-black text-[var(--ab-text-dim)]">{t.target}</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                      <div className="flex gap-2 relative z-10">
-                        <button
-                          onClick={() => processCancellation(req, "approve")}
-                          className="flex-1 bg-red-600 text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-700 transition flex items-center justify-center gap-2 shadow-lg shadow-red-500/20"
-                        >
-                          <Check size={14} /> Setujui Batal
-                        </button>
-                        <button
-                          onClick={() => processCancellation(req, "reject")}
-                          className="flex-1 bg-white dark:bg-red-950 text-red-500 border border-red-200 dark:border-red-900 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-50 dark:hover:bg-red-900/50 transition flex items-center justify-center gap-2"
-                        >
-                          <X size={14} /> Tolak Batal
-                        </button>
+
+                      {req.staffNotes && (
+                        <div className="p-2.5 bg-slate-500/5 rounded-xl text-xs italic text-[var(--ab-text-dim)]">
+                          &ldquo;{req.staffNotes}&rdquo;
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2 pt-2 border-t border-[var(--ab-border)]/50">
+                      <button
+                        onClick={() => handleOpenApproveModal(req)}
+                        className="flex-1 py-2.5 bg-green-500 hover:bg-green-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md"
+                      >
+                        <Check size={14} /> Review & Approve
+                      </button>
+                      <button
+                        onClick={() => setRejectingReq(req)}
+                        className="px-4 py-2.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all border border-red-500/20"
+                      >
+                        Tolak
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* Sub Tab 2: Reported (Waiting Verification) */}
+          {overtimeTab === "reported" && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {overtimes.filter(o => o.status === "reported").length === 0 ? (
+                <div className="col-span-full p-16 bg-[var(--ab-bg-surface)] rounded-3xl border border-[var(--ab-border)] text-center">
+                  <CheckCircle2 size={36} className="mx-auto text-[var(--ab-text-dim)] opacity-40 mb-2" />
+                  <p className="text-xs font-black uppercase tracking-wider text-[var(--ab-text-dim)]">
+                    Tidak ada laporan lembur yang menunggu verifikasi HR
+                  </p>
+                </div>
+              ) : (
+                overtimes.filter(o => o.status === "reported").map((req) => (
+                  <div key={req.id} className="bg-[var(--ab-bg-surface)] p-5 rounded-3xl border border-[var(--ab-border)] shadow-sm space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[9px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
+                          {req.userDepartment || "Divisi Umum"}
+                        </span>
+                        <h4 className="text-base font-black text-[var(--ab-text-main)]">{req.userName}</h4>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/20">
+                        {new Date(req.overtimeDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                      </span>
+                    </div>
+
+                    {/* Compare Box */}
+                    <div className="grid grid-cols-2 gap-2.5 p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] text-center text-xs">
+                      <div className="p-2 rounded-xl bg-[var(--ab-bg-surface)]">
+                        <span className="block text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Disetujui HR</span>
+                        <span className="font-black text-blue-500">{req.approvedStartTime} - {req.approvedEndTime}</span>
+                        <span className="block text-[9px] font-bold text-blue-500">({formatMinutes(req.approvedDurationMinutes || 0)})</span>
+                      </div>
+                      <div className="p-2 rounded-xl bg-[var(--ab-bg-surface)]">
+                        <span className="block text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Actual Selesai</span>
+                        <span className="font-black text-purple-500">{req.actualStartTime} - {req.actualEndTime}</span>
+                        <span className="block text-[9px] font-bold text-purple-500">({formatMinutes(req.actualDurationMinutes || 0)})</span>
                       </div>
                     </div>
-                  ))}
+
+                    {/* Task Reports */}
+                    <div className="space-y-1.5">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Laporan Hasil Kerja:</span>
+                      <div className="space-y-1.5">
+                        {(req.taskReports || []).map((tr, idx) => (
+                          <div key={idx} className="p-2.5 bg-[var(--ab-bg-main)] rounded-xl border border-[var(--ab-border)] text-xs space-y-1">
+                            <div className="flex justify-between items-center font-bold text-[var(--ab-text-main)]">
+                              <span>• {tr.task}</span>
+                              <span className={tr.status === "completed" ? "text-emerald-500" : "text-amber-500"}>
+                                {tr.status === "completed" ? "✅ Selesai" : "⏳ Sebagian"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center text-[10px] text-[var(--ab-text-dim)]">
+                              <span>Target: {tr.target}</span>
+                              <span className="font-black text-[var(--ab-text-main)]">Hasil: {tr.actualResult || "-"}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {req.staffReportNotes && (
+                      <div className="p-2.5 bg-purple-500/5 border border-purple-500/10 rounded-xl text-xs text-purple-600 dark:text-purple-400 space-y-0.5">
+                        <span className="font-black uppercase text-[8px] tracking-widest">Catatan Staf:</span>
+                        <p className="font-medium italic">&ldquo;{req.staffReportNotes}&rdquo;</p>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => handleOpenFinalizeModal(req)}
+                      className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2"
+                    >
+                      <ClipboardCheck size={16} /> Verifikasi & Tentukan Durasi Final
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* Sub Tab 3: Finalized */}
+          {overtimeTab === "finalized" && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {overtimes.filter(o => o.status === "finalized").length === 0 ? (
+                <div className="col-span-full p-16 bg-[var(--ab-bg-surface)] rounded-3xl border border-[var(--ab-border)] text-center">
+                  <p className="text-xs font-black uppercase tracking-wider text-[var(--ab-text-dim)]">
+                    Belum ada riwayat lembur yang difinalisasi
+                  </p>
+                </div>
+              ) : (
+                overtimes.filter(o => o.status === "finalized").map((req) => (
+                  <div key={req.id} className="bg-[var(--ab-bg-surface)] p-5 rounded-3xl border border-[var(--ab-border)] shadow-sm space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[9px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
+                          {req.userDepartment || "Divisi Umum"}
+                        </span>
+                        <h4 className="text-base font-black text-[var(--ab-text-main)]">{req.userName}</h4>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                        Final: {formatMinutes(req.finalDurationMinutes || 0)}
+                      </span>
+                    </div>
+
+                    <div className="p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] flex items-center justify-between text-xs">
+                      <div>
+                        <span className="text-[9px] font-bold text-[var(--ab-text-dim)]">Tanggal:</span>
+                        <p className="font-black">{new Date(req.overtimeDate).toLocaleDateString("id-ID")}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[9px] font-bold text-[var(--ab-text-dim)]">Actual:</span>
+                        <p className="font-bold text-purple-500">{formatMinutes(req.actualDurationMinutes || 0)}</p>
+                      </div>
+                    </div>
+
+                    {req.finalNotes && (
+                      <p className="text-xs italic text-[var(--ab-text-dim)] px-1">
+                        Catatan HR: &ldquo;{req.finalNotes}&rdquo;
+                      </p>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MODAL 1: APPROVE & ADJUST JADWAL LEMBUR */}
+      {adjustingReq && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[var(--ab-bg-surface)] max-w-md w-full p-6 rounded-3xl border border-[var(--ab-border)] shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-center border-b border-[var(--ab-border)] pb-3">
+              <div>
+                <h3 className="text-base font-black text-[var(--ab-text-main)] uppercase tracking-tight">
+                  Review & Setujui Lembur
+                </h3>
+                <p className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
+                  {adjustingReq.userName} ({adjustingReq.userDepartment})
+                </p>
+              </div>
+              <button onClick={() => setAdjustingReq(null)} className="p-2 text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] text-xs space-y-1">
+              <span className="text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Permintaan Awal Staf:</span>
+              <p className="font-black text-amber-500">{adjustingReq.requestedStartTime} - {adjustingReq.requestedEndTime} ({formatMinutes(adjustingReq.requestedDurationMinutes)})</p>
+            </div>
+
+            {/* HR Adjust Time Inputs */}
+            <div className="space-y-3">
+              <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest block">
+                Sesuaikan Waktu yang Disetujui HR
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <span className="text-[9px] font-bold text-[var(--ab-text-dim)]">Mulai:</span>
+                  <input
+                    type="time"
+                    value={adjustStartTime}
+                    onChange={(e) => setAdjustStartTime(e.target.value)}
+                    className="ab-input text-xs font-black py-2 px-3 rounded-xl text-center"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[9px] font-bold text-[var(--ab-text-dim)]">Selesai:</span>
+                  <input
+                    type="time"
+                    value={adjustEndTime}
+                    onChange={(e) => setAdjustEndTime(e.target.value)}
+                    className="ab-input text-xs font-black py-2 px-3 rounded-xl text-center"
+                  />
                 </div>
               </div>
-            ))}
+              <p className="text-center text-xs font-black text-blue-500 pt-1">
+                Durasi Disetujui: {formatMinutes(calcDurationMinutes(adjustStartTime, adjustEndTime))}
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest">
+                Catatan Persetujuan HR (Opsional)
+              </label>
+              <textarea
+                rows={2}
+                value={adjustNotes}
+                onChange={(e) => setAdjustNotes(e.target.value)}
+                placeholder="Catatan penyesuaian jam atau target tambahan..."
+                className="ab-input text-xs w-full py-2.5 px-3 rounded-xl resize-none"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setAdjustingReq(null)}
+                className="flex-1 py-3 bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] font-black text-xs uppercase tracking-widest rounded-xl hover:bg-[var(--ab-border)] transition-all"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleApproveOvertime}
+                className="flex-1 py-3 bg-green-500 hover:bg-green-600 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5"
+              >
+                <Check size={14} /> Approve Jadwal
+              </button>
+            </div>
           </div>
         </div>
       )}
+
+      {/* MODAL 2: FINALIZE OVERTIME */}
+      {finalizingReq && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[var(--ab-bg-surface)] max-w-md w-full p-6 rounded-3xl border border-[var(--ab-border)] shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-center border-b border-[var(--ab-border)] pb-3">
+              <div>
+                <h3 className="text-base font-black text-[var(--ab-text-main)] uppercase tracking-tight">
+                  Penetapan Durasi Final Lembur
+                </h3>
+                <p className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
+                  {finalizingReq.userName} • {finalizingReq.overtimeDate}
+                </p>
+              </div>
+              <button onClick={() => setFinalizingReq(null)} className="p-2 text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs text-center p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)]">
+              <div>
+                <span className="text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Approved HR</span>
+                <p className="font-black text-blue-500">{formatMinutes(finalizingReq.approvedDurationMinutes || 0)}</p>
+              </div>
+              <div>
+                <span className="text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Actual Staf</span>
+                <p className="font-black text-purple-500">{formatMinutes(finalizingReq.actualDurationMinutes || 0)}</p>
+              </div>
+            </div>
+
+            {/* Input Final Durasi */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest block">
+                Keputusan Durasi Final yang Diakui
+              </label>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 space-y-1">
+                  <span className="text-[9px] font-bold text-[var(--ab-text-dim)]">Jam:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="24"
+                    value={finalHours}
+                    onChange={(e) => setFinalHours(Math.max(0, Number(e.target.value)))}
+                    className="ab-input text-sm font-black py-2.5 px-3 rounded-xl text-center"
+                  />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <span className="text-[9px] font-bold text-[var(--ab-text-dim)]">Menit:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    value={finalMinutes}
+                    onChange={(e) => setFinalMinutes(Math.max(0, Math.min(59, Number(e.target.value))))}
+                    className="ab-input text-sm font-black py-2.5 px-3 rounded-xl text-center"
+                  />
+                </div>
+              </div>
+              <p className="text-xs font-black text-emerald-500 text-center pt-1">
+                Total Final: {formatMinutes(finalHours * 60 + finalMinutes)}
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest">
+                Catatan Keputusan HR
+              </label>
+              <textarea
+                rows={2}
+                value={finalNotes}
+                onChange={(e) => setFinalNotes(e.target.value)}
+                placeholder="Alasan durasi diakui penuh / dipotong sesuai evaluasi..."
+                className="ab-input text-xs w-full py-2.5 px-3 rounded-xl resize-none"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setFinalizingReq(null)}
+                className="flex-1 py-3 bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] font-black text-xs uppercase tracking-widest rounded-xl hover:bg-[var(--ab-border)] transition-all"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleFinalizeOvertime}
+                className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5"
+              >
+                <Check size={14} /> Simpan Durasi Final
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Dialog Prompt */}
+      <PromptDialog
+        isOpen={!!rejectingReq}
+        title="Tolak Pengajuan Lembur"
+        message={`Masukkan alasan mengapa pengajuan lembur dari ${rejectingReq?.userName} ditolak:`}
+        placeholder="Cth: Workload tidak memenuhi syarat lembur, deadline bukan hari ini..."
+        onConfirm={handleRejectOvertime}
+        onCancel={() => setRejectingReq(null)}
+      />
 
       <ConfirmDialog
         isOpen={!!confirmCfg}

@@ -112,20 +112,38 @@ export default function HrPayrollPage() {
 
   async function fetchData() {
     setLoading(true);
-    const [usersRes, settingsRes, payrollsRes, deductionTypesRes, additionTypesRes] = await Promise.all([
+
+    const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+    const [usersRes, settingsRes, payrollsRes, deductionTypesRes, additionTypesRes, overtimeRes] = await Promise.all([
       supabase.from("users").select("id, name, email, department_id, departments(name)").eq("absensi_status", "active").order("name"),
       supabase.from("payroll_staff_settings").select("*"),
       supabase.from("payrolls").select("*").eq("month", month).eq("year", year),
       supabase.from("payroll_deduction_types").select("*").order("name"),
       supabase.from("payroll_addition_types").select("*").order("name"),
+      supabase.from("overtime_requests" as any)
+        .select("user_id, final_duration_minutes, overtime_date")
+        .eq("status", "finalized")
+        .gte("overtime_date", startDate)
+        .lte("overtime_date", endDate)
     ]);
 
     const users = (usersRes.data ?? []) as any[];
     const settings = (settingsRes.data ?? []) as PayrollStaffSetting[];
     const payrolls = (payrollsRes.data ?? []) as Payroll[];
+    const overtimesData = (overtimeRes.data ?? []) as any[];
     setDeductionTypes((deductionTypesRes.data ?? []) as DeductionType[]);
     setAdditionTypes((additionTypesRes.data ?? []) as AdditionType[]);
     
+    // Group monthly overtime minutes by user_id
+    const userOvertimeMap: Record<string, number> = {};
+    overtimesData.forEach((ot) => {
+      const uId = ot.user_id;
+      userOvertimeMap[uId] = (userOvertimeMap[uId] || 0) + (ot.final_duration_minutes || 0);
+    });
+
     const draftKey = `payroll_draft_${month}_${year}`;
     let drafts: StaffRow[] = [];
     try {
@@ -136,13 +154,23 @@ export default function HrPayrollPage() {
     const built: StaffRow[] = users.map((u: any) => {
       const setting = settings.find((s) => s.user_id === u.id) || null;
       const existing = payrolls.find((p) => p.user_id === u.id);
+      const systemOvertimeMins = userOvertimeMap[u.id] || 0;
+      const overtimeRate = existing?.overtime_rate ?? 25000;
+      const payrollMins = existing?.payroll_overtime_minutes !== undefined && existing?.payroll_overtime_minutes !== null
+        ? existing.payroll_overtime_minutes
+        : systemOvertimeMins;
+
+      const calcOvertimePay = Math.round((payrollMins / 60) * overtimeRate);
       
       const payrollBase = {
         id: existing?.id,
         base_salary: existing?.base_salary ?? setting?.default_base_salary ?? 0,
         mobility_allowance: existing?.mobility_allowance ?? setting?.default_mobility_allowance ?? 0,
         performance_bonus: existing?.performance_bonus ?? 0,
-        overtime_pay: existing?.overtime_pay ?? 0,
+        overtime_pay: existing?.overtime_pay !== undefined ? existing.overtime_pay : calcOvertimePay,
+        overtime_rate: overtimeRate,
+        system_overtime_minutes: systemOvertimeMins,
+        payroll_overtime_minutes: payrollMins,
         overtime_notes: existing?.overtime_notes ?? "",
         additions_detail: existing?.additions_detail ?? [],
         deductions: existing?.deductions ?? 0,
@@ -189,6 +217,9 @@ export default function HrPayrollPage() {
         mobility_allowance: row.payroll.mobility_allowance || 0,
         performance_bonus: row.payroll.performance_bonus || 0,
         overtime_pay: row.payroll.overtime_pay || 0,
+        overtime_rate: row.payroll.overtime_rate || 25000,
+        system_overtime_minutes: row.payroll.system_overtime_minutes || 0,
+        payroll_overtime_minutes: row.payroll.payroll_overtime_minutes ?? row.payroll.system_overtime_minutes ?? 0,
         overtime_notes: row.payroll.overtime_notes || "",
         additions_detail: row.payroll.additions_detail || [],
         deductions: row.payroll.deductions || 0,
@@ -226,6 +257,9 @@ export default function HrPayrollPage() {
         mobility_allowance: row.payroll.mobility_allowance || 0,
         performance_bonus: row.payroll.performance_bonus || 0,
         overtime_pay: row.payroll.overtime_pay || 0,
+        overtime_rate: row.payroll.overtime_rate || 25000,
+        system_overtime_minutes: row.payroll.system_overtime_minutes || 0,
+        payroll_overtime_minutes: row.payroll.payroll_overtime_minutes ?? row.payroll.system_overtime_minutes ?? 0,
         overtime_notes: row.payroll.overtime_notes || "",
         additions_detail: row.payroll.additions_detail || [],
         deductions: row.payroll.deductions || 0,
@@ -415,27 +449,95 @@ export default function HrPayrollPage() {
                         </div>
                       ))}
                       
-                      {/* Overtime with Note */}
-                      <div className="col-span-2 md:col-span-3 grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest">Upah Lembur</label>
-                          <input
-                            type="number"
-                            disabled={isPublished}
-                            value={row.payroll.overtime_pay || ""}
-                            onChange={(e) => updateField(row.id, "overtime_pay", Number(e.target.value))}
-                            className="ab-input text-sm font-mono w-full py-2.5 disabled:opacity-40"
-                            placeholder="0"
-                          />
+                      {/* Overtime with Rate & Calculation */}
+                      <div className="col-span-2 md:col-span-3 space-y-3 bg-amber-50/50 p-4 rounded-xl border border-amber-100">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[10px] font-black uppercase text-amber-700 tracking-widest flex items-center gap-1.5">
+                            Manajemen Upah Lembur
+                            <span className="text-[9px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md font-bold">
+                              Sistem: {Math.floor((row.payroll.system_overtime_minutes || 0) / 60)}j {(row.payroll.system_overtime_minutes || 0) % 60}m
+                            </span>
+                          </label>
+                          <span className="text-[10px] font-black text-amber-600">
+                            Total: {formatRp(row.payroll.overtime_pay || 0)}
+                          </span>
                         </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-amber-900 tracking-widest">
+                              Rate / Jam (Rp)
+                            </label>
+                            <input
+                              type="number"
+                              disabled={isPublished}
+                              value={row.payroll.overtime_rate || 25000}
+                              onChange={(e) => {
+                                const rate = Number(e.target.value);
+                                const mins = row.payroll.payroll_overtime_minutes || 0;
+                                const newPay = Math.round((mins / 60) * rate);
+                                setRows(prev => prev.map(r => r.id === row.id ? {
+                                  ...r,
+                                  payroll: { ...r.payroll, overtime_rate: rate, overtime_pay: newPay, _dirty: true }
+                                } : r));
+                              }}
+                              className="ab-input text-xs font-mono w-full py-2 bg-white"
+                              placeholder="25000"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-amber-900 tracking-widest">
+                              Durasi Payroll (Menit)
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="number"
+                                disabled={isPublished}
+                                value={row.payroll.payroll_overtime_minutes ?? (row.payroll.system_overtime_minutes || 0)}
+                                onChange={(e) => {
+                                  const mins = Number(e.target.value);
+                                  const rate = row.payroll.overtime_rate || 25000;
+                                  const newPay = Math.round((mins / 60) * rate);
+                                  setRows(prev => prev.map(r => r.id === row.id ? {
+                                    ...r,
+                                    payroll: { ...r.payroll, payroll_overtime_minutes: mins, overtime_pay: newPay, _dirty: true }
+                                  } : r));
+                                }}
+                                className="ab-input text-xs font-mono w-full py-2 bg-white"
+                                placeholder="0"
+                              />
+                              <span className="text-[10px] font-bold text-amber-800 whitespace-nowrap">
+                                = {Math.floor((row.payroll.payroll_overtime_minutes ?? (row.payroll.system_overtime_minutes || 0)) / 60)}j {(row.payroll.payroll_overtime_minutes ?? (row.payroll.system_overtime_minutes || 0)) % 60}m
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase text-amber-900 tracking-widest">
+                              Nominal Final Lembur (Rp)
+                            </label>
+                            <input
+                              type="number"
+                              disabled={isPublished}
+                              value={row.payroll.overtime_pay || ""}
+                              onChange={(e) => updateField(row.id, "overtime_pay", Number(e.target.value))}
+                              className="ab-input text-xs font-mono font-bold w-full py-2 bg-white text-amber-900"
+                              placeholder="0"
+                            />
+                          </div>
+                        </div>
+
                         <div className="space-y-1">
-                          <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest">Ket. Lembur</label>
+                          <label className="text-[9px] font-black uppercase text-amber-900 tracking-widest">
+                            Catatan Lembur di Slip Gaji
+                          </label>
                           <textarea
                             disabled={isPublished}
                             value={row.payroll.overtime_notes || ""}
                             onChange={(e) => updateField(row.id, "overtime_notes", e.target.value)}
-                            className="ab-input text-sm w-full py-2 min-h-[50px] resize-none disabled:opacity-40 mt-2"
-                            placeholder="Keterangan lembur (bisa multi baris/enter)"
+                            className="ab-input text-xs w-full py-2 min-h-[40px] resize-none bg-white"
+                            placeholder="Contoh: Lembur project kampanye 12 jam @ Rp 25.000/jam..."
                           />
                         </div>
                       </div>

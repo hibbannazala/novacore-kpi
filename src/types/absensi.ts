@@ -172,3 +172,110 @@ export function rowToSettings(row: Record<string, unknown>): AbsensiSettings {
     lastSyncDate:  row.last_sync_date as string | null,
   };
 }
+
+// ─── Overtime ─────────────────────────────────────────────────────────────────
+
+export type OvertimeStatus = "pending" | "approved" | "rejected" | "reported" | "finalized" | "cancelled";
+
+export interface OvertimeTask {
+  id: string;
+  task: string;
+  target: string;
+  note?: string;
+}
+
+export interface OvertimeTaskReport {
+  id: string;
+  task: string;
+  target: string;
+  actualResult: string;
+  progress: number; // 0 - 100
+  status: "completed" | "partial" | "not_completed";
+  note?: string;
+}
+
+export interface OvertimeRequest {
+  id: string;
+  userId: string;
+  requestDate: string; // YYYY-MM-DD
+  overtimeDate: string; // YYYY-MM-DD
+  
+  // Requested
+  requestedStartTime: string; // HH:MM
+  requestedEndTime: string;   // HH:MM
+  requestedDurationMinutes: number;
+  tasks: OvertimeTask[];
+  staffNotes: string | null;
+
+  // Approval HR
+  status: OvertimeStatus;
+  approvedStartTime: string | null;
+  approvedEndTime: string | null;
+  approvedDurationMinutes: number | null;
+  approvedBy: string | null;
+  approvalDate: string | null;
+  approvalNotes: string | null;
+  rejectionReason: string | null;
+
+  // Actual Execution & Report
+  actualStartTime: string | null;
+  actualEndTime: string | null;
+  actualDurationMinutes: number | null;
+  reportSubmittedAt: string | null;
+  taskReports: OvertimeTaskReport[] | null;
+  staffReportNotes: string | null;
+
+  // Final Decision HR
+  finalDurationMinutes: number | null;
+  finalizedBy: string | null;
+  finalizedDate: string | null;
+  finalNotes: string | null;
+
+  createdAt: string;
+  updatedAt: string;
+
+  // Relation joins
+  userName?: string;
+  userDepartment?: string;
+  userPosition?: string;
+}
+
+export function rowToOvertimeRequest(row: Record<string, unknown>): OvertimeRequest {
+  const u = row.users as Record<string, unknown> | null;
+  const dept = u?.departments as Record<string, unknown> | null;
+  return {
+    id:                       row.id as string,
+    userId:                   row.user_id as string,
+    requestDate:              row.request_date as string,
+    overtimeDate:             row.overtime_date as string,
+    requestedStartTime:       ((row.requested_start_time as string) ?? "").substring(0, 5),
+    requestedEndTime:         ((row.requested_end_time as string) ?? "").substring(0, 5),
+    requestedDurationMinutes: (row.requested_duration_minutes as number) ?? 0,
+    tasks:                    (row.tasks as OvertimeTask[]) ?? [],
+    staffNotes:               row.staff_notes as string | null,
+    status:                   (row.status as OvertimeStatus) ?? "pending",
+    approvedStartTime:        row.approved_start_time ? (row.approved_start_time as string).substring(0, 5) : null,
+    approvedEndTime:          row.approved_end_time ? (row.approved_end_time as string).substring(0, 5) : null,
+    approvedDurationMinutes:  row.approved_duration_minutes as number | null,
+    approvedBy:               row.approved_by as string | null,
+    approvalDate:             row.approval_date as string | null,
+    approvalNotes:            row.approval_notes as string | null,
+    rejectionReason:          row.rejection_reason as string | null,
+    actualStartTime:          row.actual_start_time ? (row.actual_start_time as string).substring(0, 5) : null,
+    actualEndTime:            row.actual_end_time ? (row.actual_end_time as string).substring(0, 5) : null,
+    actualDurationMinutes:    row.actual_duration_minutes as number | null,
+    reportSubmittedAt:        row.report_submitted_at as string | null,
+    taskReports:              (row.task_reports as OvertimeTaskReport[]) ?? null,
+    staffReportNotes:         row.staff_report_notes as string | null,
+    finalDurationMinutes:     row.final_duration_minutes as number | null,
+    finalizedBy:              row.finalized_by as string | null,
+    finalizedDate:            row.finalized_date as string | null,
+    finalNotes:               row.final_notes as string | null,
+    createdAt:                row.created_at as string,
+    updatedAt:                row.updated_at as string,
+    userName:                 u?.name as string | undefined,
+    userDepartment:           dept?.name as string | undefined,
+    userPosition:             u?.position as string | undefined,
+  };
+}
+
