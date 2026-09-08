@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { PenLine } from "lucide-react";
 
 interface Props {
@@ -14,8 +15,29 @@ interface Props {
 
 export default function PromptDialog({ isOpen, title, message, placeholder, onConfirm, onCancel }: Props) {
   const [value, setValue] = useState("");
+  const [mounted, setMounted] = useState(false);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Lock scroll on body and main container when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalBodyOverflow = document.body.style.overflow;
+    const mainEl = document.querySelector("main");
+    const originalMainOverflow = mainEl ? mainEl.style.overflow : "";
+
+    document.body.style.overflow = "hidden";
+    if (mainEl) mainEl.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      if (mainEl) mainEl.style.overflow = originalMainOverflow;
+    };
+  }, [isOpen]);
+
+  if (!isOpen || !mounted || typeof document === "undefined") return null;
 
   const handleConfirm = () => {
     if (!value.trim()) return;
@@ -23,40 +45,54 @@ export default function PromptDialog({ isOpen, title, message, placeholder, onCo
     setValue("");
   };
 
-  return (
-    <div className="ab-confirm-overlay ab-animate-fadeIn fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 99999, background: "rgba(2, 8, 23, 0.65)", backdropFilter: "blur(8px)" }}>
-      <div className="rounded-[32px] p-8 max-w-sm w-full mx-4 shadow-2xl ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
-        <div className="flex flex-col items-center text-center">
-          <div className="bg-blue-500 w-16 h-16 rounded-3xl flex items-center justify-center text-white mb-6 shadow-lg">
-            <PenLine size={32} />
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 bg-slate-950/75 backdrop-blur-md overflow-y-auto overscroll-contain animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          setValue("");
+          onCancel();
+        }
+      }}
+    >
+      <div className="w-full max-w-sm sm:max-w-md my-auto bg-[var(--ab-bg-surface)] rounded-[32px] p-6 sm:p-8 border border-[var(--ab-border)] shadow-2xl ab-animate-scaleIn max-h-[90vh] overflow-y-auto text-center">
+        <div className="flex flex-col items-center">
+          <div className="bg-blue-600 w-14 h-14 sm:w-16 sm:h-16 rounded-3xl flex items-center justify-center text-white mb-5 shadow-lg shadow-blue-500/30">
+            <PenLine size={30} />
           </div>
-          <h3 className="text-xl font-black text-gray-800 dark:text-white mb-2 tracking-tighter">{title}</h3>
-          <p className="text-gray-500 dark:text-slate-400 text-sm font-medium leading-relaxed mb-4">{message}</p>
+          <h3 className="text-lg sm:text-xl font-black text-[var(--ab-text-main)] mb-2 tracking-tight">{title}</h3>
+          <p className="text-[var(--ab-text-dim)] text-xs sm:text-sm font-medium leading-relaxed mb-4 px-2">{message}</p>
           <textarea
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder={placeholder ?? "Tulis alasan..."}
             rows={3}
-            className="w-full rounded-2xl px-4 py-3 text-sm border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-700 text-gray-800 dark:text-white resize-none outline-none focus:ring-2 focus:ring-blue-500/30 mb-6"
+            className="w-full rounded-2xl px-4 py-3 text-xs sm:text-sm border border-[var(--ab-border)] bg-[var(--ab-bg-main)] text-[var(--ab-text-main)] resize-none outline-none focus:ring-2 focus:ring-blue-500/30 mb-6"
             autoFocus
           />
-          <div className="flex gap-3 w-full">
+          <div className="flex flex-col-reverse sm:flex-row gap-2.5 sm:gap-3 w-full">
             <button
-              onClick={() => { setValue(""); onCancel(); }}
-              className="flex-1 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest text-gray-400 hover:text-gray-600 hover:bg-gray-50 dark:hover:bg-slate-700 transition-all border border-gray-100 dark:border-slate-700"
+              type="button"
+              onClick={() => {
+                setValue("");
+                onCancel();
+              }}
+              className="w-full sm:flex-1 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest text-[var(--ab-text-dim)] hover:bg-[var(--ab-bg-main)] transition-all border border-[var(--ab-border)]"
             >
               Batal
             </button>
             <button
+              type="button"
               onClick={handleConfirm}
               disabled={!value.trim()}
-              className="flex-1 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 shadow-lg active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full sm:flex-1 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest bg-blue-600 text-white hover:bg-blue-700 shadow-lg active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Kirim
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

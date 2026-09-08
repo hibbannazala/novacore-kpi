@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -39,6 +40,11 @@ type ConfirmCfg = {
 export default function AdminApprovalsPage() {
   const { user } = useAuth();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Tabs: "leave" vs "overtime"
   const [activeMainTab, setActiveMainTab] = useState<"leave" | "overtime">("leave");
@@ -66,6 +72,23 @@ export default function AdminApprovalsPage() {
   const [finalHours, setFinalHours] = useState(0);
   const [finalMinutes, setFinalMinutes] = useState(0);
   const [finalNotes, setFinalNotes] = useState("");
+
+  // Lock background scroll when adjustingReq or finalizingReq is open
+  useEffect(() => {
+    const isAnyModalOpen = !!adjustingReq || !!finalizingReq;
+    if (!isAnyModalOpen) return;
+    const prevBody = document.body.style.overflow;
+    const mainEl = document.querySelector("main");
+    const prevMain = mainEl ? mainEl.style.overflow : "";
+
+    document.body.style.overflow = "hidden";
+    if (mainEl) mainEl.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = prevBody;
+      if (mainEl) mainEl.style.overflow = prevMain;
+    };
+  }, [adjustingReq, finalizingReq]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -851,9 +874,14 @@ export default function AdminApprovalsPage() {
       )}
 
       {/* MODAL 1: APPROVE & ADJUST JADWAL LEMBUR */}
-      {adjustingReq && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--ab-bg-surface)] max-w-md w-full p-6 rounded-3xl border border-[var(--ab-border)] shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+      {adjustingReq && mounted && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[99999] bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto overscroll-contain animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setAdjustingReq(null);
+          }}
+        >
+          <div className="w-full max-w-sm sm:max-w-md my-auto bg-[var(--ab-bg-surface)] rounded-[32px] p-5 sm:p-7 border border-[var(--ab-border)] shadow-2xl ab-animate-scaleIn max-h-[90vh] overflow-y-auto space-y-5 relative">
             <div className="flex justify-between items-center border-b border-[var(--ab-border)] pb-3">
               <div>
                 <h3 className="text-base font-black text-[var(--ab-text-main)] uppercase tracking-tight">
@@ -863,12 +891,16 @@ export default function AdminApprovalsPage() {
                   {adjustingReq.userName} ({adjustingReq.userDepartment})
                 </p>
               </div>
-              <button onClick={() => setAdjustingReq(null)} className="p-2 text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]">
+              <button
+                type="button"
+                onClick={() => setAdjustingReq(null)}
+                className="p-2 rounded-full text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)] hover:bg-[var(--ab-bg-main)] transition-colors"
+              >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] text-xs space-y-1">
+            <div className="p-3.5 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] text-xs space-y-1">
               <span className="text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Permintaan Awal Staf:</span>
               <p className="font-black text-amber-500">{adjustingReq.requestedStartTime} - {adjustingReq.requestedEndTime} ({formatMinutes(adjustingReq.requestedDurationMinutes)})</p>
             </div>
@@ -885,7 +917,7 @@ export default function AdminApprovalsPage() {
                     type="time"
                     value={adjustStartTime}
                     onChange={(e) => setAdjustStartTime(e.target.value)}
-                    className="ab-input text-xs font-black py-2 px-3 rounded-xl text-center"
+                    className="ab-input text-xs font-black py-2.5 px-3 rounded-xl text-center"
                   />
                 </div>
                 <div className="space-y-1">
@@ -894,7 +926,7 @@ export default function AdminApprovalsPage() {
                     type="time"
                     value={adjustEndTime}
                     onChange={(e) => setAdjustEndTime(e.target.value)}
-                    className="ab-input text-xs font-black py-2 px-3 rounded-xl text-center"
+                    className="ab-input text-xs font-black py-2.5 px-3 rounded-xl text-center"
                   />
                 </div>
               </div>
@@ -916,28 +948,36 @@ export default function AdminApprovalsPage() {
               />
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-col-reverse sm:flex-row gap-2.5 pt-2">
               <button
+                type="button"
                 onClick={() => setAdjustingReq(null)}
-                className="flex-1 py-3 bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] font-black text-xs uppercase tracking-widest rounded-xl hover:bg-[var(--ab-border)] transition-all"
+                className="w-full sm:flex-1 py-3.5 bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-[var(--ab-border)] transition-all border border-[var(--ab-border)]"
               >
                 Batal
               </button>
               <button
+                type="button"
                 onClick={handleApproveOvertime}
-                className="flex-1 py-3 bg-green-500 hover:bg-green-600 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5"
+                className="w-full sm:flex-1 py-3.5 bg-green-500 hover:bg-green-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg transition-all flex items-center justify-center gap-1.5 active:scale-95"
               >
                 <Check size={14} /> Approve Jadwal
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* MODAL 2: FINALIZE OVERTIME */}
-      {finalizingReq && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--ab-bg-surface)] max-w-md w-full p-6 rounded-3xl border border-[var(--ab-border)] shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+      {finalizingReq && mounted && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[99999] bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto overscroll-contain animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setFinalizingReq(null);
+          }}
+        >
+          <div className="w-full max-w-sm sm:max-w-md my-auto bg-[var(--ab-bg-surface)] rounded-[32px] p-5 sm:p-7 border border-[var(--ab-border)] shadow-2xl ab-animate-scaleIn max-h-[90vh] overflow-y-auto space-y-5 relative">
             <div className="flex justify-between items-center border-b border-[var(--ab-border)] pb-3">
               <div>
                 <h3 className="text-base font-black text-[var(--ab-text-main)] uppercase tracking-tight">
@@ -947,12 +987,16 @@ export default function AdminApprovalsPage() {
                   {finalizingReq.userName} • {finalizingReq.overtimeDate}
                 </p>
               </div>
-              <button onClick={() => setFinalizingReq(null)} className="p-2 text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]">
+              <button
+                type="button"
+                onClick={() => setFinalizingReq(null)}
+                className="p-2 rounded-full text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)] hover:bg-[var(--ab-bg-main)] transition-colors"
+              >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-xs text-center p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)]">
+            <div className="grid grid-cols-2 gap-2 text-xs text-center p-3.5 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)]">
               <div>
                 <span className="text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Approved HR</span>
                 <p className="font-black text-blue-500">{formatMinutes(finalizingReq.approvedDurationMinutes || 0)}</p>
@@ -1010,22 +1054,25 @@ export default function AdminApprovalsPage() {
               />
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-col-reverse sm:flex-row gap-2.5 pt-2">
               <button
+                type="button"
                 onClick={() => setFinalizingReq(null)}
-                className="flex-1 py-3 bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] font-black text-xs uppercase tracking-widest rounded-xl hover:bg-[var(--ab-border)] transition-all"
+                className="w-full sm:flex-1 py-3.5 bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-[var(--ab-border)] transition-all border border-[var(--ab-border)]"
               >
                 Batal
               </button>
               <button
+                type="button"
                 onClick={handleFinalizeOvertime}
-                className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5"
+                className="w-full sm:flex-1 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg transition-all flex items-center justify-center gap-1.5 active:scale-95"
               >
                 <Check size={14} /> Simpan Durasi Final
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Reject Dialog Prompt */}

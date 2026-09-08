@@ -1,6 +1,7 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { OvertimeRequest, OvertimeTask, OvertimeTaskReport } from "@/types/absensi";
@@ -13,9 +14,14 @@ import { toast } from "sonner";
 
 export function OvertimeStaffSection() {
   const { user } = useAuth();
+  const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"form" | "history">("form");
   const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Form State
   const [overtimeDate, setOvertimeDate] = useState(() => {
@@ -37,6 +43,22 @@ export function OvertimeStaffSection() {
   const [taskReports, setTaskReports] = useState<OvertimeTaskReport[]>([]);
   const [reportNotes, setReportNotes] = useState("");
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+
+  // Lock background scroll when report modal is open
+  useEffect(() => {
+    if (!reportingReq) return;
+    const originalBodyOverflow = document.body.style.overflow;
+    const mainEl = document.querySelector("main");
+    const originalMainOverflow = mainEl ? mainEl.style.overflow : "";
+
+    document.body.style.overflow = "hidden";
+    if (mainEl) mainEl.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      if (mainEl) mainEl.style.overflow = originalMainOverflow;
+    };
+  }, [reportingReq]);
 
   // Auto calculate requested duration in minutes
   const calcDurationMinutes = (startStr: string, endStr: string) => {
@@ -251,10 +273,10 @@ export function OvertimeStaffSection() {
   return (
     <div className="space-y-6">
       {/* Sub Tabs */}
-      <div className="flex bg-[var(--ab-bg-main)] p-1.5 rounded-2xl border border-[var(--ab-border)] w-fit mx-auto shadow-inner">
+      <div className="flex bg-[var(--ab-bg-main)] p-1.5 rounded-2xl border border-[var(--ab-border)] w-full sm:w-fit mx-auto shadow-inner">
         <button
           onClick={() => setActiveTab("form")}
-          className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+          className={`flex-1 sm:flex-initial px-3 sm:px-6 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all text-center ${
             activeTab === "form"
               ? "bg-[var(--ab-bg-surface)] text-[var(--ab-primary)] shadow-md border border-[var(--ab-border)]"
               : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
@@ -264,13 +286,13 @@ export function OvertimeStaffSection() {
         </button>
         <button
           onClick={() => setActiveTab("history")}
-          className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
+          className={`flex-1 sm:flex-initial px-3 sm:px-6 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 sm:gap-2 ${
             activeTab === "history"
               ? "bg-[var(--ab-bg-surface)] text-[var(--ab-primary)] shadow-md border border-[var(--ab-border)]"
               : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
           }`}
         >
-          <History size={14} /> Riwayat Lembur ({overtimeRequests.length})
+          <History size={13} /> Riwayat ({overtimeRequests.length})
         </button>
       </div>
 
@@ -291,7 +313,7 @@ export function OvertimeStaffSection() {
           </div>
 
           {/* User Identitas Card (Readonly) */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] text-xs">
             <div>
               <span className="block text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Nama Karyawan</span>
               <span className="font-black text-[var(--ab-text-main)]">{user?.name}</span>
@@ -561,9 +583,14 @@ export function OvertimeStaffSection() {
       />
 
       {/* Report Modal */}
-      {reportingReq && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--ab-bg-surface)] max-w-lg w-full p-6 rounded-3xl border border-[var(--ab-border)] shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+      {reportingReq && mounted && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[99999] bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto overscroll-contain animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setReportingReq(null);
+          }}
+        >
+          <div className="w-full max-w-lg my-auto bg-[var(--ab-bg-surface)] rounded-[32px] p-5 sm:p-7 border border-[var(--ab-border)] shadow-2xl ab-animate-scaleIn max-h-[90vh] overflow-y-auto space-y-5 relative">
             <div className="flex justify-between items-center border-b border-[var(--ab-border)] pb-3">
               <div>
                 <h3 className="text-base font-black text-[var(--ab-text-main)] uppercase tracking-tight">
@@ -574,8 +601,9 @@ export function OvertimeStaffSection() {
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setReportingReq(null)}
-                className="p-2 text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
+                className="p-2 rounded-full text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)] hover:bg-[var(--ab-bg-main)] transition-colors"
               >
                 <X size={18} />
               </button>
@@ -586,12 +614,12 @@ export function OvertimeStaffSection() {
               <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest block">
                 Jam Selesai Aktual (Bisa lebih cepat / lebih lama)
               </label>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                 <input
                   type="time"
                   value={actualEndTime}
                   onChange={(e) => setActualEndTime(e.target.value)}
-                  className="ab-input text-sm font-black py-2 px-3 rounded-xl text-center w-36"
+                  className="ab-input text-sm font-black py-2.5 px-3 rounded-xl text-center w-full sm:w-36"
                 />
                 <span className="text-xs font-bold text-[var(--ab-text-dim)]">
                   Mulai: {reportingReq.approvedStartTime || reportingReq.requestedStartTime}
@@ -605,12 +633,12 @@ export function OvertimeStaffSection() {
                 Hasil Pencapaian Tugas
               </label>
               {taskReports.map((tr, idx) => (
-                <div key={tr.id} className="p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] space-y-2">
-                  <div className="flex justify-between items-center text-xs">
+                <div key={tr.id} className="p-3.5 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] space-y-2.5">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center text-xs gap-1">
                     <span className="font-black text-[var(--ab-text-main)]">• {tr.task}</span>
-                    <span className="text-[9px] font-bold text-[var(--ab-text-dim)]">Target: {tr.target}</span>
+                    <span className="text-[10px] font-bold text-[var(--ab-text-dim)]">Target: {tr.target}</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <input
                       type="text"
                       placeholder="Hasil riil (cth: 3 Video Selesai)"
@@ -619,7 +647,7 @@ export function OvertimeStaffSection() {
                         const val = e.target.value;
                         setTaskReports(prev => prev.map(p => p.id === tr.id ? { ...p, actualResult: val } : p));
                       }}
-                      className="ab-input text-xs py-1.5 px-3 rounded-lg"
+                      className="ab-input text-xs py-2 px-3 rounded-xl"
                     />
                     <select
                       value={tr.status}
@@ -627,7 +655,7 @@ export function OvertimeStaffSection() {
                         const val = e.target.value as any;
                         setTaskReports(prev => prev.map(p => p.id === tr.id ? { ...p, status: val } : p));
                       }}
-                      className="ab-input text-xs py-1.5 px-2 rounded-lg font-bold"
+                      className="ab-input text-xs py-2 px-3 rounded-xl font-bold"
                     >
                       <option value="completed">✅ Selesai Penuh (100%)</option>
                       <option value="partial">⏳ Sebagian</option>
@@ -652,23 +680,26 @@ export function OvertimeStaffSection() {
               />
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-col-reverse sm:flex-row gap-2.5 pt-2">
               <button
+                type="button"
                 onClick={() => setReportingReq(null)}
-                className="flex-1 py-3 bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] font-black text-xs uppercase tracking-widest rounded-xl hover:bg-[var(--ab-border)] transition-all"
+                className="w-full sm:flex-1 py-3.5 bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-[var(--ab-border)] transition-all border border-[var(--ab-border)]"
               >
                 Batal
               </button>
               <button
+                type="button"
                 onClick={handleSubmitReport}
                 disabled={isSubmittingReport}
-                className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg hover:opacity-95 transition-all"
+                className="w-full sm:flex-1 py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg hover:opacity-95 active:scale-95 transition-all"
               >
                 {isSubmittingReport ? "Mengirim..." : "Kirim Laporan"}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
