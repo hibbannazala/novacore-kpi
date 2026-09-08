@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { Clock, Settings, MapPin, CalendarDays, Plus, Trash2, Map } from "lucide-react";
+import { Clock, Settings, MapPin, CalendarDays, Plus, Trash2, Map, Pencil, X, Check } from "lucide-react";
 import ConfirmDialog from "@/components/absensi/ConfirmDialog";
 
 interface WorkSettings {
@@ -34,6 +34,8 @@ export default function AdminSettingsPage() {
 
   // For adding new office location
   const [newOffice, setNewOffice] = useState({ name: "", lat: "", lng: "", radius: "100" });
+  const [editingOfficeId, setEditingOfficeId] = useState<string | null>(null);
+  const [editOfficeData, setEditOfficeData] = useState({ name: "", lat: "", lng: "", radius: "100" });
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -180,6 +182,24 @@ export default function AdminSettingsPage() {
     } catch (err: unknown) { toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid }); }
   };
 
+  const saveEditOfficeLocation = async (id: string) => {
+    if (!editOfficeData.name.trim() || !editOfficeData.lat || !editOfficeData.lng || !editOfficeData.radius) return toast.error("Isi semua data kantor.");
+    const supabase = createClient();
+    const tid = toast.loading("Menyimpan perubahan...");
+    try {
+      const lat = parseFloat(editOfficeData.lat);
+      const lng = parseFloat(editOfficeData.lng);
+      const radius = parseInt(editOfficeData.radius);
+      const { error } = await supabase.from("office_locations" as any).update({
+        name: editOfficeData.name.trim(), lat, lng, radius
+      }).eq("id", id);
+      if (error) throw error;
+      setOfficeLocations(prev => prev.map(o => o.id === id ? { ...o, name: editOfficeData.name.trim(), lat, lng, radius } : o));
+      setEditingOfficeId(null);
+      toast.success("Perubahan disimpan.", { id: tid });
+    } catch (err: unknown) { toast.error("Gagal: " + (err instanceof Error ? err.message : "Unknown"), { id: tid }); }
+  };
+
   const deleteOfficeLocation = (id: string, name: string) => {
     setConfirmCfg({
       title: "Hapus Kantor Cabang", message: `Yakin hapus lokasi "${name}"?`, type: "danger",
@@ -271,18 +291,36 @@ export default function AdminSettingsPage() {
           <div className="space-y-4 max-h-[300px] overflow-y-auto ab-scrollbar pr-1">
             {officeLocations.map((o) => (
               <div key={o.id} className="bg-[var(--ab-bg-main)] border border-[var(--ab-border)] p-3 rounded-xl flex flex-col gap-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="font-black text-xs text-[var(--ab-text-main)] uppercase">{o.name}</div>
-                    <div className="text-[10px] text-[var(--ab-text-dim)] flex items-center gap-1">
-                      <a href={`https://www.google.com/maps/search/?api=1&query=${o.lat},${o.lng}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline hover:text-blue-600 transition">
-                        {o.lat}, {o.lng}
-                      </a>
-                      <span>&bull; R: {o.radius}m</span>
+                {editingOfficeId === o.id ? (
+                  <div className="space-y-2">
+                    <input type="text" value={editOfficeData.name} onChange={e => setEditOfficeData({...editOfficeData, name: e.target.value})} className="ab-input w-full text-xs font-bold" />
+                    <div className="flex gap-2">
+                      <input type="number" step="any" placeholder="Lat" value={editOfficeData.lat} onChange={e => setEditOfficeData({...editOfficeData, lat: e.target.value})} className="ab-input w-full text-xs" />
+                      <input type="number" step="any" placeholder="Lng" value={editOfficeData.lng} onChange={e => setEditOfficeData({...editOfficeData, lng: e.target.value})} className="ab-input w-full text-xs" />
+                      <input type="number" placeholder="Radius" value={editOfficeData.radius} onChange={e => setEditOfficeData({...editOfficeData, radius: e.target.value})} className="ab-input w-24 text-xs" />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button onClick={() => saveEditOfficeLocation(o.id)} className="flex-1 bg-green-500 hover:bg-green-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest py-1.5 transition flex items-center justify-center gap-1"><Check size={12}/> Simpan</button>
+                      <button onClick={() => setEditingOfficeId(null)} className="flex-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-[10px] font-black uppercase tracking-widest py-1.5 transition flex items-center justify-center gap-1"><X size={12}/> Batal</button>
                     </div>
                   </div>
-                  <button onClick={() => deleteOfficeLocation(o.id, o.name)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={14}/></button>
-                </div>
+                ) : (
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="font-black text-xs text-[var(--ab-text-main)] uppercase">{o.name}</div>
+                      <div className="text-[10px] text-[var(--ab-text-dim)] flex items-center gap-1">
+                        <a href={`https://www.google.com/maps/search/?api=1&query=${o.lat},${o.lng}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline hover:text-blue-600 transition">
+                          {o.lat}, {o.lng}
+                        </a>
+                        <span>&bull; R: {o.radius}m</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 bg-[var(--ab-bg-surface)] p-1 rounded-lg border border-[var(--ab-border)]">
+                      <button onClick={() => { setEditingOfficeId(o.id); setEditOfficeData({ name: o.name, lat: String(o.lat), lng: String(o.lng), radius: String(o.radius) }); }} className="text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 p-1.5 rounded transition"><Pencil size={12}/></button>
+                      <button onClick={() => deleteOfficeLocation(o.id, o.name)} className="text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 p-1.5 rounded transition"><Trash2 size={12}/></button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Departemen yang bisa absen di kantor ini */}
                 <div className="pt-2 border-t border-[var(--ab-border)]">
