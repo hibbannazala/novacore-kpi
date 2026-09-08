@@ -17,6 +17,7 @@ interface ProfileData {
   emergencyContact: string | null;
   npwp: string | null;
   photoUrl: string | null;
+  religion: string | null;
 }
 
 export default function ProfilePage() {
@@ -31,7 +32,7 @@ export default function ProfilePage() {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("users")
-        .select("id, name, email, nik, ttl, address_ktp, phone_wa, emergency_contact, npwp, photo_url")
+        .select("id, name, email, nik, ttl, address_ktp, phone_wa, emergency_contact, npwp, photo_url, religion")
         .eq("id", user.id)
         .single();
       
@@ -48,6 +49,7 @@ export default function ProfilePage() {
           emergencyContact: (data as any).emergency_contact as string | null,
           npwp: (data as any).npwp as string | null,
           photoUrl: (data as any).photo_url as string | null,
+          religion: (data as any).religion as string | null,
         });
       }
       setIsLoading(false);
@@ -72,6 +74,7 @@ export default function ProfilePage() {
         phone_wa: profile.phoneWa || null,
         emergency_contact: profile.emergencyContact || null,
         npwp: profile.npwp || null,
+        religion: profile.religion || null,
       };
       const { error } = await supabase.from("users").update(payload).eq("id", profile.id);
 
@@ -168,6 +171,26 @@ export default function ProfilePage() {
               className="ab-input w-full text-sm font-semibold p-3" 
               placeholder="08123456789" 
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1 flex items-center gap-1.5">
+              <User size={12} /> Agama
+            </label>
+            <select
+              value={profile.religion ?? ""}
+              onChange={e => handleChange("religion", e.target.value)}
+              className="ab-input w-full text-sm font-semibold p-3 appearance-none bg-white dark:bg-slate-900"
+            >
+              <option value="">Pilih Agama</option>
+              <option value="Islam">Islam</option>
+              <option value="Kristen">Kristen</option>
+              <option value="Katolik">Katolik</option>
+              <option value="Hindu">Hindu</option>
+              <option value="Buddha">Buddha</option>
+              <option value="Konghucu">Konghucu</option>
+              <option value="Lainnya">Lainnya</option>
+            </select>
           </div>
 
           <div className="space-y-1.5">

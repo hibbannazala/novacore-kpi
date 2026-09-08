@@ -33,6 +33,7 @@ interface StaffUser {
   contractEndDate: string | null;
   npwp: string | null;
   photoUrl: string | null;
+  religion: string | null;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -69,7 +70,7 @@ export default function AdminStaffPage() {
 
     const fetchAll = async () => {
       const [usersRes, deptsRes] = await Promise.all([
-        supabase.from("users").select("id, name, email, absensi_role, kpi_role, absensi_status, leave_quota, sick_quota, is_hidden, department_id, departments(name), nik, ttl, address_ktp, phone_wa, emergency_contact, position, join_date, employment_status, contract_end_date, npwp, photo_url"),
+        supabase.from("users").select("id, name, email, absensi_role, kpi_role, absensi_status, leave_quota, sick_quota, is_hidden, department_id, departments(name), nik, ttl, address_ktp, phone_wa, emergency_contact, position, join_date, employment_status, contract_end_date, npwp, photo_url, religion"),
         supabase.from("departments").select("id, name").order("name"),
       ]);
 
@@ -96,6 +97,7 @@ export default function AdminStaffPage() {
         contractEndDate: r.contract_end_date as string | null,
         npwp: (r.npwp as string) ?? null,
         photoUrl: r.photo_url as string | null,
+        religion: (r.religion as string) ?? null,
       }));
 
       const newCounts: Record<string, number> = {};
@@ -150,6 +152,7 @@ export default function AdminStaffPage() {
       if (profileEdits.employmentStatus !== undefined) updatePayload.employment_status = profileEdits.employmentStatus;
       if (profileEdits.contractEndDate !== undefined) updatePayload.contract_end_date = profileEdits.contractEndDate;
       if (profileEdits.npwp !== undefined) updatePayload.npwp = profileEdits.npwp;
+      if (profileEdits.religion !== undefined) updatePayload.religion = profileEdits.religion;
 
       const { error } = await supabase.from("users").update(updatePayload).eq("id", editingProfile.id);
       if (error) throw error;
@@ -683,6 +686,19 @@ export default function AdminStaffPage() {
                   <div className="space-y-1">
                     <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Email</label>
                     <input type="email" value={getEdit("email")} onChange={e => patchEdit({ email: e.target.value })} className="ab-input text-xs w-full" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">Agama</label>
+                    <select value={getEdit("religion") ?? ""} onChange={e => patchEdit({ religion: e.target.value })} className="ab-input text-xs w-full bg-white dark:bg-slate-900 appearance-none">
+                      <option value="">Pilih Agama</option>
+                      <option value="Islam">Islam</option>
+                      <option value="Kristen">Kristen</option>
+                      <option value="Katolik">Katolik</option>
+                      <option value="Hindu">Hindu</option>
+                      <option value="Buddha">Buddha</option>
+                      <option value="Konghucu">Konghucu</option>
+                      <option value="Lainnya">Lainnya</option>
+                    </select>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[9px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest ml-1">NIK Karyawan</label>
