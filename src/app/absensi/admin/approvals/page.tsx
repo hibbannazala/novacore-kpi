@@ -9,9 +9,16 @@ import ConfirmDialog from "@/components/absensi/ConfirmDialog";
 import PromptDialog from "@/components/absensi/PromptDialog";
 import type { OvertimeRequest, OvertimeTaskReport } from "@/types/absensi";
 import ImageLightboxModal from "@/components/absensi/ImageLightboxModal";
+import OvertimeDetailModal from "@/components/absensi/OvertimeDetailModal";
+import {
+  formatDurationDetail,
+  formatScheduleRange,
+  calcDurationMinutes,
+} from "@/lib/overtimeHelpers";
 import {
   Check, X, CalendarDays, FileEdit, Smile, Shield, ArrowRight,
-  Clock, CheckCircle2, ClipboardCheck, Image as ImageIcon, Eye
+  Clock, CheckCircle2, ClipboardCheck, Image as ImageIcon, Eye,
+  Search, Filter, Users, ChevronRight, Sparkles, AlertCircle
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -73,6 +80,14 @@ export default function AdminApprovalsPage() {
   const [finalHours, setFinalHours] = useState(0);
   const [finalMinutes, setFinalMinutes] = useState(0);
   const [finalNotes, setFinalNotes] = useState("");
+
+  // Search & Filter States
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterDate, setFilterDate] = useState("");
+  const [quickDateFilter, setQuickDateFilter] = useState<"all" | "today" | "custom">("all");
+
+  // Detail Modal State
+  const [selectedDetailOvertime, setSelectedDetailOvertime] = useState<OvertimeRequest | null>(null);
 
   // Lightbox Preview Modal State
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
@@ -228,20 +243,36 @@ export default function AdminApprovalsPage() {
     return () => { ch.unsubscribe(); };
   }, [fetchOvertime]);
 
-  const formatMinutes = (mins: number) => {
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    if (h === 0) return `${m} Menit`;
-    if (m === 0) return `${h} Jam`;
-    return `${h} Jam ${m} Menit`;
-  };
+  const formatMinutes = formatDurationDetail;
 
-  const calcDurationMinutes = (startStr: string, endStr: string) => {
-    if (!startStr || !endStr) return 0;
-    const [sh, sm] = startStr.split(":").map(Number);
-    const [eh, em] = endStr.split(":").map(Number);
-    return Math.max(0, (eh * 60 + em) - (sh * 60 + sm));
-  };
+  const todayDateStr = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+
+  const activeFilterDate = quickDateFilter === "today" ? todayDateStr : quickDateFilter === "custom" ? filterDate : "";
+
+  const filteredOvertimes = overtimes.filter((o) => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchName = (o.userName || "").toLowerCase().includes(q);
+      const matchDept = (o.userDepartment || "").toLowerCase().includes(q);
+      const matchPos = (o.userPosition || "").toLowerCase().includes(q);
+      const matchTask = (o.tasks || []).some(t => t.task.toLowerCase().includes(q));
+      if (!matchName && !matchDept && !matchPos && !matchTask) return false;
+    }
+
+    if (activeFilterDate) {
+      if (o.overtimeDate !== activeFilterDate) return false;
+    }
+
+    return true;
+  });
+
+  const targetSummaryDate = activeFilterDate || todayDateStr;
+  const targetDateOvertimes = overtimes.filter(
+    (o) => o.overtimeDate === targetSummaryDate && o.status !== "rejected" && o.status !== "cancelled"
+  );
 
   // Overtime Actions
   const handleOpenApproveModal = (req: OvertimeRequest) => {
@@ -647,8 +678,165 @@ export default function AdminApprovalsPage() {
       {/* TAB 2: OVERTIME MANAGEMENT */}
       {activeMainTab === "overtime" && (
         <div className="space-y-6">
+          {/* Widget Info Tim Lembur Hari Ini / Tanggal Terpilih */}
+          <div className="p-4 sm:p-5 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-purple-500/10 rounded-3xl border border-amber-500/20 shadow-sm space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+                  <Users size={18} />
+                </div>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-black text-[var(--ab-text-main)] uppercase tracking-tight flex items-center gap-2">
+                    Info Staf Lembur ({targetSummaryDate === todayDateStr ? "Hari Ini" : new Date(targetSummaryDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })})
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500 text-white">
+                      {targetDateOvertimes.length} Staf
+                    </span>
+                  </h3>
+                  <p className="text-[10px] font-bold text-[var(--ab-text-dim)]">
+                    Daftar karyawan yang memiliki jadwal atau pelaksanaan lembur pada tanggal ini
+                  </p>
+                </div>
+              </div>
+              {quickDateFilter !== "today" && (
+                <button
+                  onClick={() => {
+                    setQuickDateFilter("today");
+                    setFilterDate(todayDateStr);
+                  }}
+                  className="text-[10px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 rounded-xl border border-amber-500/30 transition-colors w-fit self-end sm:self-center"
+                >
+                  Lihat Hari Ini
+                </button>
+              )}
+            </div>
+
+            {targetDateOvertimes.length === 0 ? (
+              <div className="p-3.5 rounded-2xl bg-[var(--ab-bg-surface)] border border-[var(--ab-border)] text-center text-xs font-bold text-[var(--ab-text-dim)]">
+                Tidak ada staf yang dijadwalkan lembur pada tanggal ini.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {targetDateOvertimes.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => setSelectedDetailOvertime(item)}
+                    className="p-3 rounded-2xl bg-[var(--ab-bg-surface)] border border-[var(--ab-border)] hover:border-amber-500/40 hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center font-black text-xs shrink-0 uppercase">
+                        {item.userName ? item.userName.substring(0, 2) : "ST"}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-[var(--ab-text-main)] truncate group-hover:text-amber-500 transition-colors">
+                          {item.userName}
+                        </p>
+                        <p className="text-[9.5px] font-bold text-[var(--ab-text-dim)] truncate">
+                          {formatScheduleRange(
+                            item.approvedStartTime || item.requestedStartTime,
+                            item.actualEndTime || item.approvedEndTime || item.requestedEndTime,
+                            item.finalDurationMinutes || item.actualDurationMinutes || item.approvedDurationMinutes || item.requestedDurationMinutes
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      {item.status === "finalized" ? (
+                        <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                          Final
+                        </span>
+                      ) : item.status === "reported" ? (
+                        <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 border border-purple-500/20">
+                          Lapor
+                        </span>
+                      ) : item.status === "approved" ? (
+                        <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 border border-blue-500/20">
+                          Disetujui
+                        </span>
+                      ) : (
+                        <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                          Review
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Search & Filter Toolbar */}
+          <div className="p-3 sm:p-4 bg-[var(--ab-bg-surface)] rounded-2xl border border-[var(--ab-border)] shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            {/* Search Box */}
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--ab-text-dim)]" />
+              <input
+                type="text"
+                placeholder="Cari nama staf, divisi, atau tugas..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="ab-input pl-10 pr-8 text-xs py-2.5 rounded-xl w-full"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {/* Date Filters */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  setQuickDateFilter("all");
+                  setFilterDate("");
+                }}
+                className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                  quickDateFilter === "all"
+                    ? "bg-[var(--ab-primary)] text-white shadow-sm"
+                    : "bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)] border border-[var(--ab-border)]"
+                }`}
+              >
+                Semua Tanggal
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setQuickDateFilter("today");
+                  setFilterDate(todayDateStr);
+                }}
+                className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                  quickDateFilter === "today"
+                    ? "bg-amber-500 text-white shadow-sm"
+                    : "bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)] border border-[var(--ab-border)]"
+                }`}
+              >
+                Hari Ini
+              </button>
+
+              <div className="relative">
+                <input
+                  type="date"
+                  value={filterDate}
+                  onChange={(e) => {
+                    setFilterDate(e.target.value);
+                    setQuickDateFilter(e.target.value ? "custom" : "all");
+                  }}
+                  className={`ab-input text-xs py-1.5 px-3 rounded-xl cursor-pointer w-36 ${
+                    quickDateFilter === "custom" ? "border-amber-500 text-amber-500 font-bold" : ""
+                  }`}
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Overtime Sub Tabs */}
-          <div className="flex bg-[var(--ab-bg-main)] p-1.5 rounded-2xl border border-[var(--ab-border)] w-fit mx-auto shadow-inner">
+          <div className="flex bg-[var(--ab-bg-main)] p-1.5 rounded-2xl border border-[var(--ab-border)] w-fit mx-auto shadow-inner flex-wrap justify-center gap-1">
             <button
               onClick={() => setOvertimeTab("pending")}
               className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
@@ -657,7 +845,7 @@ export default function AdminApprovalsPage() {
                   : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
               }`}
             >
-              1. Review Pengajuan ({overtimes.filter(o => o.status === "pending").length})
+              1. Review Pengajuan ({filteredOvertimes.filter(o => o.status === "pending").length})
             </button>
             <button
               onClick={() => setOvertimeTab("reported")}
@@ -667,7 +855,7 @@ export default function AdminApprovalsPage() {
                   : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
               }`}
             >
-              2. Verifikasi Laporan ({overtimes.filter(o => o.status === "reported").length})
+              2. Verifikasi Laporan ({filteredOvertimes.filter(o => o.status === "reported").length})
             </button>
             <button
               onClick={() => setOvertimeTab("finalized")}
@@ -677,22 +865,22 @@ export default function AdminApprovalsPage() {
                   : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
               }`}
             >
-              3. Selesai / Finalized ({overtimes.filter(o => o.status === "finalized").length})
+              3. Selesai / Finalized ({filteredOvertimes.filter(o => o.status === "finalized").length})
             </button>
           </div>
 
           {/* Sub Tab 1: Pending Review */}
           {overtimeTab === "pending" && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {overtimes.filter(o => o.status === "pending").length === 0 ? (
+              {filteredOvertimes.filter(o => o.status === "pending").length === 0 ? (
                 <div className="col-span-full p-16 bg-[var(--ab-bg-surface)] rounded-3xl border border-[var(--ab-border)] text-center">
                   <Smile size={36} className="mx-auto text-[var(--ab-text-dim)] opacity-40 mb-2" />
                   <p className="text-xs font-black uppercase tracking-wider text-[var(--ab-text-dim)]">
-                    Tidak ada pengajuan lembur baru yang pending
+                    Tidak ada pengajuan lembur yang pending sesuai filter
                   </p>
                 </div>
               ) : (
-                overtimes.filter(o => o.status === "pending").map((req) => (
+                filteredOvertimes.filter(o => o.status === "pending").map((req) => (
                   <div key={req.id} className="bg-[var(--ab-bg-surface)] p-5 rounded-3xl border border-[var(--ab-border)] shadow-sm space-y-4 flex flex-col justify-between">
                     <div className="space-y-3">
                       <div className="flex justify-between items-start">
@@ -709,12 +897,11 @@ export default function AdminApprovalsPage() {
 
                       <div className="p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] flex items-center justify-between">
                         <div>
-                          <span className="block text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Jadwal Diminta</span>
-                          <span className="text-xs font-black text-[var(--ab-text-main)]">{req.requestedStartTime} - {req.requestedEndTime}</span>
+                          <span className="block text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Jadwal Diminta Staf</span>
+                          <span className="text-xs font-black text-[var(--ab-text-main)]">
+                            {formatScheduleRange(req.requestedStartTime, req.requestedEndTime, req.requestedDurationMinutes)}
+                          </span>
                         </div>
-                        <span className="text-xs font-black text-amber-500 bg-[var(--ab-bg-surface)] px-2.5 py-1 rounded-lg border border-[var(--ab-border)]">
-                          {formatMinutes(req.requestedDurationMinutes)}
-                        </span>
                       </div>
 
                       <div className="space-y-1.5">
@@ -736,19 +923,28 @@ export default function AdminApprovalsPage() {
                       )}
                     </div>
 
-                    <div className="flex gap-2 pt-2 border-t border-[var(--ab-border)]/50">
+                    <div className="space-y-2 pt-2 border-t border-[var(--ab-border)]/50">
                       <button
-                        onClick={() => handleOpenApproveModal(req)}
-                        className="flex-1 py-2.5 bg-green-500 hover:bg-green-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md"
+                        type="button"
+                        onClick={() => setSelectedDetailOvertime(req)}
+                        className="w-full py-2 bg-[var(--ab-bg-main)] hover:bg-[var(--ab-border)] text-[var(--ab-text-main)] font-black text-[10px] uppercase tracking-wider rounded-xl transition-all border border-[var(--ab-border)] flex items-center justify-center gap-1.5"
                       >
-                        <Check size={14} /> Review & Approve
+                        <Eye size={13} /> Lihat Detail Lengkap
                       </button>
-                      <button
-                        onClick={() => setRejectingReq(req)}
-                        className="px-4 py-2.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all border border-red-500/20"
-                      >
-                        Tolak
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleOpenApproveModal(req)}
+                          className="flex-1 py-2.5 bg-green-500 hover:bg-green-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md"
+                        >
+                          <Check size={14} /> Review & Approve
+                        </button>
+                        <button
+                          onClick={() => setRejectingReq(req)}
+                          className="px-4 py-2.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all border border-red-500/20"
+                        >
+                          Tolak
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -759,104 +955,117 @@ export default function AdminApprovalsPage() {
           {/* Sub Tab 2: Reported (Waiting Verification) */}
           {overtimeTab === "reported" && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {overtimes.filter(o => o.status === "reported").length === 0 ? (
+              {filteredOvertimes.filter(o => o.status === "reported").length === 0 ? (
                 <div className="col-span-full p-16 bg-[var(--ab-bg-surface)] rounded-3xl border border-[var(--ab-border)] text-center">
                   <CheckCircle2 size={36} className="mx-auto text-[var(--ab-text-dim)] opacity-40 mb-2" />
                   <p className="text-xs font-black uppercase tracking-wider text-[var(--ab-text-dim)]">
-                    Tidak ada laporan lembur yang menunggu verifikasi HR
+                    Tidak ada laporan lembur yang menunggu verifikasi HR sesuai filter
                   </p>
                 </div>
               ) : (
-                overtimes.filter(o => o.status === "reported").map((req) => (
-                  <div key={req.id} className="bg-[var(--ab-bg-surface)] p-5 rounded-3xl border border-[var(--ab-border)] shadow-sm space-y-4">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <span className="text-[9px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
-                          {req.userDepartment || "Divisi Umum"}
+                filteredOvertimes.filter(o => o.status === "reported").map((req) => (
+                  <div key={req.id} className="bg-[var(--ab-bg-surface)] p-5 rounded-3xl border border-[var(--ab-border)] shadow-sm space-y-4 flex flex-col justify-between">
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="text-[9px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
+                            {req.userDepartment || "Divisi Umum"}
+                          </span>
+                          <h4 className="text-base font-black text-[var(--ab-text-main)]">{req.userName}</h4>
+                        </div>
+                        <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/20">
+                          {new Date(req.overtimeDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
                         </span>
-                        <h4 className="text-base font-black text-[var(--ab-text-main)]">{req.userName}</h4>
                       </div>
-                      <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-purple-500/10 text-purple-500 border border-purple-500/20">
-                        {new Date(req.overtimeDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
-                      </span>
-                    </div>
 
-                    {/* Compare Box */}
-                    <div className="grid grid-cols-2 gap-2.5 p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] text-center text-xs">
-                      <div className="p-2 rounded-xl bg-[var(--ab-bg-surface)]">
-                        <span className="block text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Disetujui HR</span>
-                        <span className="font-black text-blue-500">{req.approvedStartTime} - {req.approvedEndTime}</span>
-                        <span className="block text-[9px] font-bold text-blue-500">({formatMinutes(req.approvedDurationMinutes || 0)})</span>
+                      {/* Compare Box */}
+                      <div className="grid grid-cols-2 gap-2.5 p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] text-center text-xs">
+                        <div className="p-2.5 rounded-xl bg-[var(--ab-bg-surface)]">
+                          <span className="block text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Disetujui HR</span>
+                          <span className="font-black text-blue-500 block mt-0.5">
+                            {formatScheduleRange(req.approvedStartTime, req.approvedEndTime, req.approvedDurationMinutes)}
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-[var(--ab-bg-surface)]">
+                          <span className="block text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Actual Selesai</span>
+                          <span className="font-black text-purple-500 block mt-0.5">
+                            {formatScheduleRange(req.actualStartTime, req.actualEndTime, req.actualDurationMinutes)}
+                          </span>
+                        </div>
                       </div>
-                      <div className="p-2 rounded-xl bg-[var(--ab-bg-surface)]">
-                        <span className="block text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Actual Selesai</span>
-                        <span className="font-black text-purple-500">{req.actualStartTime} - {req.actualEndTime}</span>
-                        <span className="block text-[9px] font-bold text-purple-500">({formatMinutes(req.actualDurationMinutes || 0)})</span>
-                      </div>
-                    </div>
 
-                    {/* Task Reports */}
-                    <div className="space-y-1.5">
-                      <span className="text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Laporan Hasil Kerja:</span>
+                      {/* Task Reports */}
                       <div className="space-y-1.5">
-                        {(req.taskReports || []).map((tr, idx) => (
-                          <div key={idx} className="p-2.5 bg-[var(--ab-bg-main)] rounded-xl border border-[var(--ab-border)] text-xs space-y-1">
-                            <div className="flex justify-between items-center font-bold text-[var(--ab-text-main)]">
-                              <span>• {tr.task}</span>
-                              <span className={tr.status === "completed" ? "text-emerald-500" : "text-amber-500"}>
-                                {tr.status === "completed" ? "✅ Selesai" : "⏳ Sebagian"}
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center text-[10px] text-[var(--ab-text-dim)]">
-                              <span>Target: {tr.target}</span>
-                              <span className="font-black text-[var(--ab-text-main)]">Hasil: {tr.actualResult || "-"}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {req.staffReportNotes && (
-                      <div className="p-2.5 bg-purple-500/5 border border-purple-500/10 rounded-xl text-xs text-purple-600 dark:text-purple-400 space-y-0.5">
-                        <span className="font-black uppercase text-[8px] tracking-widest">Catatan Staf:</span>
-                        <p className="font-medium italic">&ldquo;{req.staffReportNotes}&rdquo;</p>
-                      </div>
-                    )}
-
-                    {/* Bukti Foto Kerja */}
-                    {req.proofImages && req.proofImages.length > 0 && (
-                      <div className="space-y-1.5 p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)]">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-dim)] flex items-center gap-1.5">
-                          <ImageIcon size={13} className="text-purple-500" /> Foto Bukti Pekerjaan ({req.proofImages.length} Foto):
-                        </span>
-                        <div className="flex items-center gap-2.5 flex-wrap">
-                          {req.proofImages.map((imgUrl, imgIdx) => (
-                            <div
-                              key={imgIdx}
-                              onClick={() => setPreviewImageUrl(imgUrl)}
-                              className="relative w-24 h-16 rounded-xl overflow-hidden border border-[var(--ab-border)] bg-black/10 cursor-pointer hover:opacity-90 hover:scale-105 transition-all group shadow-sm"
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={imgUrl}
-                                alt={`Bukti ${imgIdx + 1}`}
-                                className="w-full h-full object-cover"
-                              />
-                              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
-                                <Eye size={16} />
+                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Laporan Hasil Kerja:</span>
+                        <div className="space-y-1.5">
+                          {(req.taskReports || []).map((tr, idx) => (
+                            <div key={idx} className="p-2.5 bg-[var(--ab-bg-main)] rounded-xl border border-[var(--ab-border)] text-xs space-y-1">
+                              <div className="flex justify-between items-center font-bold text-[var(--ab-text-main)]">
+                                <span>• {tr.task}</span>
+                                <span className={tr.status === "completed" ? "text-emerald-500" : "text-amber-500"}>
+                                  {tr.status === "completed" ? "✅ Selesai 100%" : "⏳ Sebagian"}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center text-[10px] text-[var(--ab-text-dim)]">
+                                <span>Target: {tr.target}</span>
+                                <span className="font-black text-[var(--ab-text-main)]">Hasil: {tr.actualResult || "-"}</span>
                               </div>
                             </div>
                           ))}
                         </div>
                       </div>
-                    )}
 
-                    <button
-                      onClick={() => handleOpenFinalizeModal(req)}
-                      className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2"
-                    >
-                      <ClipboardCheck size={16} /> Verifikasi & Tentukan Durasi Final
-                    </button>
+                      {req.staffReportNotes && (
+                        <div className="p-2.5 bg-purple-500/5 border border-purple-500/10 rounded-xl text-xs text-purple-600 dark:text-purple-400 space-y-0.5">
+                          <span className="font-black uppercase text-[8px] tracking-widest">Catatan Staf:</span>
+                          <p className="font-medium italic">&ldquo;{req.staffReportNotes}&rdquo;</p>
+                        </div>
+                      )}
+
+                      {/* Bukti Foto Kerja */}
+                      {req.proofImages && req.proofImages.length > 0 && (
+                        <div className="space-y-1.5 p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)]">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-dim)] flex items-center gap-1.5">
+                            <ImageIcon size={13} className="text-purple-500" /> Foto Bukti Pekerjaan ({req.proofImages.length} Foto):
+                          </span>
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            {req.proofImages.map((imgUrl, imgIdx) => (
+                              <div
+                                key={imgIdx}
+                                onClick={() => setPreviewImageUrl(imgUrl)}
+                                className="relative w-24 h-16 rounded-xl overflow-hidden border border-[var(--ab-border)] bg-black/10 cursor-pointer hover:opacity-90 hover:scale-105 transition-all group shadow-sm"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={imgUrl}
+                                  alt={`Bukti ${imgIdx + 1}`}
+                                  className="w-full h-full object-cover"
+                                />
+                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                  <Eye size={16} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 pt-2 border-t border-[var(--ab-border)]/50">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDetailOvertime(req)}
+                        className="w-full py-2 bg-[var(--ab-bg-main)] hover:bg-[var(--ab-border)] text-[var(--ab-text-main)] font-black text-[10px] uppercase tracking-wider rounded-xl transition-all border border-[var(--ab-border)] flex items-center justify-center gap-1.5"
+                      >
+                        <Eye size={13} /> Lihat Detail Lengkap
+                      </button>
+                      <button
+                        onClick={() => handleOpenFinalizeModal(req)}
+                        className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2"
+                      >
+                        <ClipboardCheck size={16} /> Verifikasi & Tentukan Durasi Final
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
@@ -866,65 +1075,91 @@ export default function AdminApprovalsPage() {
           {/* Sub Tab 3: Finalized */}
           {overtimeTab === "finalized" && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {overtimes.filter(o => o.status === "finalized").length === 0 ? (
+              {filteredOvertimes.filter(o => o.status === "finalized").length === 0 ? (
                 <div className="col-span-full p-16 bg-[var(--ab-bg-surface)] rounded-3xl border border-[var(--ab-border)] text-center">
                   <p className="text-xs font-black uppercase tracking-wider text-[var(--ab-text-dim)]">
-                    Belum ada riwayat lembur yang difinalisasi
+                    Belum ada riwayat lembur yang difinalisasi sesuai filter
                   </p>
                 </div>
               ) : (
-                overtimes.filter(o => o.status === "finalized").map((req) => (
-                  <div key={req.id} className="bg-[var(--ab-bg-surface)] p-5 rounded-3xl border border-[var(--ab-border)] shadow-sm space-y-3">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <span className="text-[9px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
-                          {req.userDepartment || "Divisi Umum"}
+                filteredOvertimes.filter(o => o.status === "finalized").map((req) => (
+                  <div key={req.id} className="bg-[var(--ab-bg-surface)] p-5 rounded-3xl border border-[var(--ab-border)] shadow-sm space-y-4 flex flex-col justify-between">
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="text-[9px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
+                            {req.userDepartment || "Divisi Umum"}
+                          </span>
+                          <h4 className="text-base font-black text-[var(--ab-text-main)]">{req.userName}</h4>
+                        </div>
+                        <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          Final: {formatDurationDetail(req.finalDurationMinutes || 0)}
                         </span>
-                        <h4 className="text-base font-black text-[var(--ab-text-main)]">{req.userName}</h4>
                       </div>
-                      <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                        Final: {formatMinutes(req.finalDurationMinutes || 0)}
-                      </span>
-                    </div>
 
-                    <div className="p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] flex items-center justify-between text-xs">
-                      <div>
-                        <span className="text-[9px] font-bold text-[var(--ab-text-dim)]">Tanggal:</span>
-                        <p className="font-black">{new Date(req.overtimeDate).toLocaleDateString("id-ID")}</p>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[9px] font-bold text-[var(--ab-text-dim)]">Actual:</span>
-                        <p className="font-bold text-purple-500">{formatMinutes(req.actualDurationMinutes || 0)}</p>
-                      </div>
-                    </div>
-
-                    {/* Bukti Foto Finalized */}
-                    {req.proofImages && req.proofImages.length > 0 && (
-                      <div className="space-y-1 pt-1">
-                        <span className="text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Foto Bukti:</span>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {req.proofImages.map((imgUrl, imgIdx) => (
-                            <div
-                              key={imgIdx}
-                              onClick={() => setPreviewImageUrl(imgUrl)}
-                              className="relative w-14 h-10 rounded-lg overflow-hidden border border-[var(--ab-border)] bg-black/10 cursor-pointer hover:scale-105 transition-transform group"
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={imgUrl} alt="Bukti" className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
-                                <Eye size={12} />
-                              </div>
-                            </div>
-                          ))}
+                      <div className="p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] space-y-2 text-xs">
+                        <div className="flex items-center justify-between border-b border-[var(--ab-border)] pb-1.5">
+                          <span className="text-[9px] font-bold text-[var(--ab-text-dim)]">Tanggal Lembur:</span>
+                          <p className="font-black text-[var(--ab-text-main)]">
+                            {new Date(req.overtimeDate).toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-center pt-1">
+                          <div className="p-2 bg-[var(--ab-bg-surface)] rounded-xl border border-[var(--ab-border)]">
+                            <span className="block text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Jadwal HR</span>
+                            <span className="font-bold text-blue-500 text-[11px] block mt-0.5">
+                              {formatScheduleRange(req.approvedStartTime, req.approvedEndTime, req.approvedDurationMinutes)}
+                            </span>
+                          </div>
+                          <div className="p-2 bg-[var(--ab-bg-surface)] rounded-xl border border-[var(--ab-border)]">
+                            <span className="block text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Aktual Staf</span>
+                            <span className="font-bold text-purple-500 text-[11px] block mt-0.5">
+                              {formatScheduleRange(req.actualStartTime, req.actualEndTime, req.actualDurationMinutes)}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    )}
 
-                    {req.finalNotes && (
-                      <p className="text-xs italic text-[var(--ab-text-dim)] px-1">
-                        Catatan HR: &ldquo;{req.finalNotes}&rdquo;
-                      </p>
-                    )}
+                      {/* Bukti Foto Finalized */}
+                      {req.proofImages && req.proofImages.length > 0 && (
+                        <div className="space-y-1.5 pt-1">
+                          <span className="text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)] flex items-center gap-1">
+                            <ImageIcon size={11} className="text-purple-500" /> Foto Bukti ({req.proofImages.length}):
+                          </span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {req.proofImages.map((imgUrl, imgIdx) => (
+                              <div
+                                key={imgIdx}
+                                onClick={() => setPreviewImageUrl(imgUrl)}
+                                className="relative w-16 h-11 rounded-xl overflow-hidden border border-[var(--ab-border)] bg-black/10 cursor-pointer hover:scale-105 transition-transform group shadow-sm"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={imgUrl} alt="Bukti" className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                  <Eye size={14} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {req.finalNotes && (
+                        <div className="p-2.5 bg-emerald-500/5 rounded-xl border border-emerald-500/10 text-xs italic text-[var(--ab-text-dim)]">
+                          Catatan HR: &ldquo;{req.finalNotes}&rdquo;
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-2 border-t border-[var(--ab-border)]/50">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDetailOvertime(req)}
+                        className="w-full py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-black text-[10px] uppercase tracking-wider rounded-xl transition-all border border-emerald-500/30 flex items-center justify-center gap-1.5"
+                      >
+                        <Eye size={13} /> Lihat Detail Lengkap (Semua Tahap)
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
@@ -1059,11 +1294,15 @@ export default function AdminApprovalsPage() {
             <div className="grid grid-cols-2 gap-2 text-xs text-center p-3.5 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)]">
               <div>
                 <span className="text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Approved HR</span>
-                <p className="font-black text-blue-500">{formatMinutes(finalizingReq.approvedDurationMinutes || 0)}</p>
+                <p className="font-black text-blue-500 block mt-0.5">
+                  {formatScheduleRange(finalizingReq.approvedStartTime, finalizingReq.approvedEndTime, finalizingReq.approvedDurationMinutes)}
+                </p>
               </div>
               <div>
                 <span className="text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Actual Staf</span>
-                <p className="font-black text-purple-500">{formatMinutes(finalizingReq.actualDurationMinutes || 0)}</p>
+                <p className="font-black text-purple-500 block mt-0.5">
+                  {formatScheduleRange(finalizingReq.actualStartTime, finalizingReq.actualEndTime, finalizingReq.actualDurationMinutes)}
+                </p>
               </div>
             </div>
 
@@ -1180,6 +1419,14 @@ export default function AdminApprovalsPage() {
         type={confirmCfg?.type ?? "warning"}
         onConfirm={confirmCfg?.onConfirm ?? (() => {})}
         onCancel={() => setConfirmCfg(null)}
+      />
+
+      {/* Overtime Full Detail Modal */}
+      <OvertimeDetailModal
+        isOpen={!!selectedDetailOvertime}
+        overtime={selectedDetailOvertime}
+        onClose={() => setSelectedDetailOvertime(null)}
+        onPreviewImage={(url) => setPreviewImageUrl(url)}
       />
 
       {/* Image Preview Lightbox */}

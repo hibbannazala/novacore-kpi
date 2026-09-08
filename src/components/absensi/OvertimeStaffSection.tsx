@@ -7,41 +7,21 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { OvertimeRequest, OvertimeTask, OvertimeTaskReport } from "@/types/absensi";
 import ConfirmDialog from "@/components/absensi/ConfirmDialog";
 import ImageLightboxModal from "@/components/absensi/ImageLightboxModal";
+import OvertimeDetailModal from "@/components/absensi/OvertimeDetailModal";
 import { compressImage, formatBytes } from "@/lib/imageCompression";
+import {
+  formatDurationDetail,
+  formatScheduleRange,
+  getOvertimeStepState,
+} from "@/lib/overtimeHelpers";
 import {
   Clock, Plus, Trash2, CheckCircle2, AlertCircle, CalendarDays,
   FileText, Send, Loader2, Sparkles, Check, X, ShieldAlert, History,
-  Camera, Image as ImageIcon, Eye
+  Camera, Image as ImageIcon, Eye, Users, Info
 } from "lucide-react";
 import { toast } from "sonner";
 
-const getStepState = (stepNumber: 1 | 2 | 3 | 4, status: string) => {
-  // Step 1: Pengajuan (Selalu selesai jika sudah diajukan)
-  if (stepNumber === 1) return { state: "completed", label: "Diajukan" };
-
-  // Step 2: Review Jadwal HR
-  if (stepNumber === 2) {
-    if (status === "pending") return { state: "current", label: "Review HR" };
-    if (status === "rejected") return { state: "rejected", label: "Ditolak" };
-    return { state: "completed", label: "Disetujui" };
-  }
-
-  // Step 3: Laporan Kerja (Staff)
-  if (stepNumber === 3) {
-    if (status === "pending" || status === "rejected") return { state: "upcoming", label: "Laporan Kerja" };
-    if (status === "approved") return { state: "current", label: "Isi Laporan" };
-    return { state: "completed", label: "Laporan Terkirim" };
-  }
-
-  // Step 4: Keputusan Final (Payroll)
-  if (stepNumber === 4) {
-    if (status === "finalized") return { state: "completed", label: "Final Sah" };
-    if (status === "reported") return { state: "current", label: "Validasi HR" };
-    return { state: "upcoming", label: "Final Payroll" };
-  }
-
-  return { state: "upcoming", label: "" };
-};
+const getStepState = (stepNumber: 1 | 2 | 3 | 4, status: string) => getOvertimeStepState(stepNumber, status);
 
 export function OvertimeStaffSection() {
   const { user } = useAuth();
@@ -89,6 +69,13 @@ export function OvertimeStaffSection() {
   // Lightbox Preview Modal State
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
+  // Full detail modal state
+  const [selectedDetailOvertime, setSelectedDetailOvertime] = useState<OvertimeRequest | null>(null);
+
+  // Today's team overtime colleagues
+  const [todayColleagues, setTodayColleagues] = useState<OvertimeRequest[]>([]);
+  const [isLoadingColleagues, setIsLoadingColleagues] = useState(false);
+
   // Lock background scroll when report modal is open
   useEffect(() => {
     if (!reportingReq) return;
@@ -115,13 +102,7 @@ export function OvertimeStaffSection() {
     return Math.max(0, endMins - startMins);
   };
 
-  const formatMinutes = (mins: number) => {
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    if (h === 0) return `${m} Menit`;
-    if (m === 0) return `${h} Jam`;
-    return `${h} Jam ${m} Menit`;
-  };
+  const formatMinutes = (mins: number | null | undefined) => formatDurationDetail(mins);
 
   const durationMinutes = calcDurationMinutes(startTime, endTime);
 
@@ -174,6 +155,7 @@ export function OvertimeStaffSection() {
             finalizedBy: r.finalized_by,
             finalizedDate: r.finalized_date,
             finalNotes: r.final_notes,
+            proofImages: r.proof_images || [],
             createdAt: r.created_at,
             updatedAt: r.updated_at,
             userName: r.users?.name,
@@ -186,6 +168,68 @@ export function OvertimeStaffSection() {
       console.error(err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const todayDateStr = new Date().toISOString().substring(0, 10);
+
+  // Fetch all staff overtime for today (Rekan Tim Lembur Hari Ini)
+  const fetchTodayColleagues = async () => {
+    setIsLoadingColleagues(true);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("overtime_requests" as any)
+        .select("*, users!user_id(name, position, departments(name))")
+        .eq("overtime_date", todayDateStr)
+        .neq("status", "rejected")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching today colleagues:", error);
+      } else if (data) {
+        setTodayColleagues(
+          data.map((r: any) => ({
+            id: r.id,
+            userId: r.user_id,
+            requestDate: r.request_date,
+            overtimeDate: r.overtime_date,
+            requestedStartTime: (r.requested_start_time || "").substring(0, 5),
+            requestedEndTime: (r.requested_end_time || "").substring(0, 5),
+            requestedDurationMinutes: r.requested_duration_minutes,
+            tasks: r.tasks || [],
+            staffNotes: r.staff_notes,
+            status: r.status,
+            approvedStartTime: r.approved_start_time ? r.approved_start_time.substring(0, 5) : null,
+            approvedEndTime: r.approved_end_time ? r.approved_end_time.substring(0, 5) : null,
+            approvedDurationMinutes: r.approved_duration_minutes,
+            approvedBy: r.approved_by,
+            approvalDate: r.approval_date,
+            approvalNotes: r.approval_notes,
+            rejectionReason: r.rejection_reason,
+            actualStartTime: r.actual_start_time ? r.actual_start_time.substring(0, 5) : null,
+            actualEndTime: r.actual_end_time ? r.actual_end_time.substring(0, 5) : null,
+            actualDurationMinutes: r.actual_duration_minutes,
+            reportSubmittedAt: r.report_submitted_at,
+            taskReports: r.task_reports,
+            staffReportNotes: r.staff_report_notes,
+            finalDurationMinutes: r.final_duration_minutes,
+            finalizedBy: r.finalized_by,
+            finalizedDate: r.finalized_date,
+            finalNotes: r.final_notes,
+            proofImages: r.proof_images || [],
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+            userName: r.users?.name,
+            userDepartment: r.users?.departments?.name,
+            userPosition: r.users?.position,
+          }))
+        );
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoadingColleagues(false);
     }
   };
 
@@ -206,6 +250,7 @@ export function OvertimeStaffSection() {
       toast.success("Pengajuan lembur berhasil dibatalkan", { id: tid });
       setCancelingId(null);
       fetchOvertimes();
+      fetchTodayColleagues();
     } catch (err: any) {
       toast.error("Gagal membatalkan: " + (err.message || "Terjadi kesalahan"), { id: tid });
     } finally {
@@ -215,10 +260,14 @@ export function OvertimeStaffSection() {
 
   useEffect(() => {
     fetchOvertimes();
+    fetchTodayColleagues();
     const supabase = createClient();
     const ch = supabase
       .channel("overtime_staff_watch")
-      .on("postgres_changes", { event: "*", schema: "public", table: "overtime_requests" }, fetchOvertimes)
+      .on("postgres_changes", { event: "*", schema: "public", table: "overtime_requests" }, () => {
+        fetchOvertimes();
+        fetchTodayColleagues();
+      })
       .subscribe();
     return () => { ch.unsubscribe(); };
   }, [user]);
@@ -451,6 +500,84 @@ export function OvertimeStaffSection() {
 
   return (
     <div className="space-y-6">
+      {/* Widget Info Rekan Tim Lembur Hari Ini */}
+      <div className="p-4 sm:p-5 bg-gradient-to-r from-amber-500/10 via-[var(--ab-bg-surface)] to-amber-500/5 rounded-3xl border border-amber-500/20 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+              <Users size={16} />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-black text-[var(--ab-text-main)] uppercase tracking-tight flex items-center gap-2">
+                Staf Lembur Hari Ini ({new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "short" })})
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-500 text-white">
+                  {todayColleagues.length} Orang
+                </span>
+              </h4>
+              <p className="text-[9.5px] font-bold text-[var(--ab-text-dim)] uppercase tracking-wider">
+                Rekan kerja yang terjadwal atau sedang melaksanakan lembur hari ini
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {todayColleagues.length === 0 ? (
+          <div className="p-3 bg-[var(--ab-bg-surface)]/60 rounded-2xl border border-[var(--ab-border)]/50 text-center">
+            <p className="text-xs font-bold text-[var(--ab-text-dim)]">
+              Belum ada rekan staf yang mengajukan / terjadwal lembur hari ini.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-1">
+            {todayColleagues.map((colleague) => (
+              <div
+                key={colleague.id}
+                onClick={() => setSelectedDetailOvertime(colleague)}
+                className="p-3 rounded-2xl bg-[var(--ab-bg-surface)] border border-[var(--ab-border)] hover:border-amber-500/40 hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                title="Klik untuk lihat detail lembur"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center font-black text-xs shrink-0 uppercase">
+                    {colleague.userName ? colleague.userName.substring(0, 2) : "ST"}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-black text-[var(--ab-text-main)] truncate group-hover:text-amber-500 transition-colors">
+                      {colleague.userName} {colleague.userId === user?.id && <span className="text-amber-500 font-bold">(Anda)</span>}
+                    </p>
+                    <p className="text-[9.5px] font-bold text-[var(--ab-text-dim)] truncate">
+                      {formatScheduleRange(
+                        colleague.approvedStartTime || colleague.requestedStartTime,
+                        colleague.actualEndTime || colleague.approvedEndTime || colleague.requestedEndTime,
+                        colleague.finalDurationMinutes || colleague.actualDurationMinutes || colleague.approvedDurationMinutes || colleague.requestedDurationMinutes
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  {colleague.status === "finalized" ? (
+                    <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                      Final
+                    </span>
+                  ) : colleague.status === "reported" ? (
+                    <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 border border-purple-500/20">
+                      Lapor
+                    </span>
+                  ) : colleague.status === "approved" ? (
+                    <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 border border-blue-500/20">
+                      Disetujui
+                    </span>
+                  ) : (
+                    <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                      Review
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Sub Tabs */}
       <div className="flex bg-[var(--ab-bg-main)] p-1.5 rounded-2xl border border-[var(--ab-border)] w-full sm:w-fit mx-auto shadow-inner">
         <button
@@ -545,15 +672,20 @@ export function OvertimeStaffSection() {
           </div>
 
           {/* Durasi Summary Box */}
-          <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-between">
+          <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Clock size={16} className="text-amber-500" />
-              <span className="text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                Estimasi Durasi Pengajuan
-              </span>
+              <div>
+                <span className="text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
+                  Estimasi Durasi Pengajuan
+                </span>
+                <span className="text-[10px] font-bold text-[var(--ab-text-dim)]">
+                  Jadwal: {startTime} s/d {endTime}
+                </span>
+              </div>
             </div>
-            <span className="text-sm font-black text-amber-600 dark:text-amber-400">
-              {formatMinutes(durationMinutes)}
+            <span className="text-sm sm:text-base font-black text-amber-600 dark:text-amber-400 self-end sm:self-center">
+              {formatDurationDetail(durationMinutes)}
             </span>
           </div>
 
@@ -685,10 +817,38 @@ export function OvertimeStaffSection() {
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 relative">
                     {[
-                      { step: 1, title: "1. Pengajuan", desc: `${req.requestedStartTime} - ${req.requestedEndTime} (${formatMinutes(req.requestedDurationMinutes)})` },
-                      { step: 2, title: "2. Review HR", desc: req.status === "pending" ? "Menunggu HR" : req.status === "rejected" ? "Ditolak" : req.approvedStartTime ? `${req.approvedStartTime} - ${req.approvedEndTime}` : "Disetujui" },
-                      { step: 3, title: "3. Laporan Kerja", desc: req.actualEndTime ? `Selesai ${req.actualEndTime}` : req.status === "approved" ? "Waktunya Lapor" : "Belum mulai" },
-                      { step: 4, title: "4. Final Sah", desc: req.finalDurationMinutes ? `${formatMinutes(req.finalDurationMinutes)}` : "Slip Gaji" },
+                      {
+                        step: 1,
+                        title: "1. Pengajuan",
+                        desc: formatScheduleRange(req.requestedStartTime, req.requestedEndTime, req.requestedDurationMinutes),
+                      },
+                      {
+                        step: 2,
+                        title: "2. Review HR",
+                        desc: req.status === "pending"
+                          ? "Menunggu HR"
+                          : req.status === "rejected"
+                          ? "Ditolak"
+                          : req.approvedStartTime
+                          ? formatScheduleRange(req.approvedStartTime, req.approvedEndTime, req.approvedDurationMinutes)
+                          : "Disetujui",
+                      },
+                      {
+                        step: 3,
+                        title: "3. Laporan Kerja",
+                        desc: req.actualEndTime
+                          ? `Selesai ${req.actualEndTime} (${formatDurationDetail(req.actualDurationMinutes)})`
+                          : req.status === "approved"
+                          ? "Waktunya Lapor"
+                          : "Belum mulai",
+                      },
+                      {
+                        step: 4,
+                        title: "4. Final Sah",
+                        desc: req.finalDurationMinutes !== null && req.finalDurationMinutes !== undefined
+                          ? formatDurationDetail(req.finalDurationMinutes)
+                          : "Slip Gaji",
+                      },
                     ].map((st) => {
                       const { state } = getStepState(st.step as any, req.status);
                       return (
@@ -758,7 +918,7 @@ export function OvertimeStaffSection() {
                       <div className="flex items-start gap-2">
                         <CheckCircle2 size={16} className="text-blue-500 shrink-0 mt-0.5" />
                         <p className="text-[11px] font-bold leading-relaxed">
-                          HR telah menyetujui jadwal lembur ({req.approvedStartTime} - {req.approvedEndTime}, {formatMinutes(req.approvedDurationMinutes || 0)}). Setelah selesai bekerja, segera laporkan hasil pekerjaan aktual Anda.
+                          HR telah menyetujui jadwal lembur ({formatScheduleRange(req.approvedStartTime, req.approvedEndTime, req.approvedDurationMinutes)}). Setelah selesai bekerja, segera laporkan hasil pekerjaan aktual Anda.
                         </p>
                       </div>
                       <button
@@ -792,7 +952,7 @@ export function OvertimeStaffSection() {
                     <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-700 dark:text-emerald-300 flex items-start gap-2">
                       <Sparkles size={16} className="text-emerald-500 shrink-0 mt-0.5" />
                       <p className="text-[11px] font-bold leading-relaxed">
-                        Lembur telah disahkan oleh HR dengan durasi final <span className="font-black text-emerald-600 dark:text-emerald-400">{formatMinutes(req.finalDurationMinutes || 0)}</span> dan otomatis masuk ke perhitungan Slip Gaji.
+                        Lembur telah disahkan oleh HR dengan durasi final <span className="font-black text-emerald-600 dark:text-emerald-400">{formatDurationDetail(req.finalDurationMinutes)}</span> dan otomatis masuk ke perhitungan Slip Gaji.
                       </p>
                     </div>
                   )}
@@ -814,39 +974,39 @@ export function OvertimeStaffSection() {
 
                 {/* 4 Durasi Columns Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3.5 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] text-center">
-                  <div className="p-2 rounded-xl bg-[var(--ab-bg-surface)] border border-[var(--ab-border)]/40">
-                    <span className="block text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">1. Request</span>
-                    <span className="text-xs font-black text-[var(--ab-text-main)]">{req.requestedStartTime} - {req.requestedEndTime}</span>
-                    <span className="block text-[9px] font-bold text-amber-500">({formatMinutes(req.requestedDurationMinutes)})</span>
+                  <div className="p-2.5 rounded-xl bg-[var(--ab-bg-surface)] border border-[var(--ab-border)]/40">
+                    <span className="block text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">1. Request Staf</span>
+                    <span className="text-xs font-black text-[var(--ab-text-main)] block">{req.requestedStartTime} - {req.requestedEndTime}</span>
+                    <span className="block text-[9.5px] font-bold text-amber-500 mt-0.5">({formatDurationDetail(req.requestedDurationMinutes)})</span>
                   </div>
-                  <div className="p-2 rounded-xl bg-[var(--ab-bg-surface)] border border-[var(--ab-border)]/40">
+                  <div className="p-2.5 rounded-xl bg-[var(--ab-bg-surface)] border border-[var(--ab-border)]/40">
                     <span className="block text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">2. Approved HR</span>
                     {req.approvedStartTime ? (
                       <>
-                        <span className="text-xs font-black text-blue-500">{req.approvedStartTime} - {req.approvedEndTime}</span>
-                        <span className="block text-[9px] font-bold text-blue-500">({formatMinutes(req.approvedDurationMinutes || 0)})</span>
+                        <span className="text-xs font-black text-blue-500 block">{req.approvedStartTime} - {req.approvedEndTime}</span>
+                        <span className="block text-[9.5px] font-bold text-blue-500 mt-0.5">({formatDurationDetail(req.approvedDurationMinutes)})</span>
                       </>
                     ) : (
-                      <span className="text-xs font-bold text-[var(--ab-text-dim)]">-</span>
+                      <span className="text-xs font-bold text-[var(--ab-text-dim)] block mt-1.5">-</span>
                     )}
                   </div>
-                  <div className="p-2 rounded-xl bg-[var(--ab-bg-surface)] border border-[var(--ab-border)]/40">
+                  <div className="p-2.5 rounded-xl bg-[var(--ab-bg-surface)] border border-[var(--ab-border)]/40">
                     <span className="block text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">3. Actual Selesai</span>
                     {req.actualEndTime ? (
                       <>
-                        <span className="text-xs font-black text-purple-500">{req.actualStartTime} - {req.actualEndTime}</span>
-                        <span className="block text-[9px] font-bold text-purple-500">({formatMinutes(req.actualDurationMinutes || 0)})</span>
+                        <span className="text-xs font-black text-purple-500 block">{req.actualStartTime} - {req.actualEndTime}</span>
+                        <span className="block text-[9.5px] font-bold text-purple-500 mt-0.5">({formatDurationDetail(req.actualDurationMinutes)})</span>
                       </>
                     ) : (
-                      <span className="text-xs font-bold text-[var(--ab-text-dim)]">Belum lapor</span>
+                      <span className="text-xs font-bold text-[var(--ab-text-dim)] block mt-1.5">Belum lapor</span>
                     )}
                   </div>
-                  <div className="p-2 rounded-xl bg-[var(--ab-bg-surface)] border border-[var(--ab-border)]/40">
+                  <div className="p-2.5 rounded-xl bg-[var(--ab-bg-surface)] border border-[var(--ab-border)]/40">
                     <span className="block text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">4. Final Sah</span>
                     {req.finalDurationMinutes !== null && req.finalDurationMinutes !== undefined ? (
-                      <span className="text-xs font-black text-emerald-500">{formatMinutes(req.finalDurationMinutes)}</span>
+                      <span className="text-xs font-black text-emerald-500 block mt-1.5">{formatDurationDetail(req.finalDurationMinutes)}</span>
                     ) : (
-                      <span className="text-xs font-bold text-[var(--ab-text-dim)]">-</span>
+                      <span className="text-xs font-bold text-[var(--ab-text-dim)] block mt-1.5">-</span>
                     )}
                   </div>
                 </div>
@@ -929,6 +1089,17 @@ export function OvertimeStaffSection() {
                     <p className="font-bold">{req.finalNotes}</p>
                   </div>
                 )}
+
+                {/* Button Lihat Detail Lengkap */}
+                <div className="pt-2 border-t border-[var(--ab-border)]/50">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDetailOvertime(req)}
+                    className="w-full py-2.5 bg-[var(--ab-bg-main)] hover:bg-[var(--ab-border)]/50 text-[var(--ab-text-main)] font-black text-[10px] sm:text-xs uppercase tracking-wider rounded-xl transition-all border border-[var(--ab-border)] flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <Eye size={14} className="text-amber-500" /> Lihat Detail Lengkap (Semua Tahap)
+                  </button>
+                </div>
               </div>
             ))
           )}
@@ -986,20 +1157,44 @@ export function OvertimeStaffSection() {
             </div>
 
             {/* Jam Selesai Riil */}
-            <div className="space-y-1.5 p-3.5 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)]">
-              <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest block">
-                Jam Selesai Aktual (Bisa lebih cepat / lebih lama)
-              </label>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                <input
-                  type="time"
-                  value={actualEndTime}
-                  onChange={(e) => setActualEndTime(e.target.value)}
-                  className="ab-input text-sm font-black py-2.5 px-3 rounded-xl text-center w-full sm:w-36"
-                />
-                <span className="text-xs font-bold text-[var(--ab-text-dim)]">
-                  Mulai: {reportingReq.approvedStartTime || reportingReq.requestedStartTime}
+            <div className="space-y-2.5 p-3.5 sm:p-4 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] box-border max-w-full overflow-hidden">
+              <div className="flex items-center justify-between flex-wrap gap-1">
+                <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest block">
+                  Jam Selesai Aktual
+                </label>
+                <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 px-2.5 py-0.5 rounded-full border border-purple-500/20">
+                  Bisa lebih cepat / lebih lama
                 </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                <div className="space-y-1">
+                  <span className="text-[9px] font-bold text-[var(--ab-text-dim)] block">Waktu Selesai (Riil):</span>
+                  <input
+                    type="time"
+                    value={actualEndTime}
+                    onChange={(e) => setActualEndTime(e.target.value)}
+                    className="ab-input text-sm font-black py-2.5 px-3 rounded-xl text-center w-full box-border max-w-full"
+                  />
+                </div>
+                <div className="p-2.5 bg-[var(--ab-bg-surface)] rounded-xl border border-[var(--ab-border)] text-xs space-y-1">
+                  <div className="flex justify-between items-center text-[10px] text-[var(--ab-text-dim)] font-bold">
+                    <span>Mulai:</span>
+                    <span className="font-black text-[var(--ab-text-main)]">
+                      {reportingReq.approvedStartTime || reportingReq.requestedStartTime}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] text-[var(--ab-text-dim)] font-bold">
+                    <span>Durasi Riil:</span>
+                    <span className="font-black text-purple-600 dark:text-purple-400">
+                      {formatDurationDetail(
+                        calcDurationMinutes(
+                          reportingReq.approvedStartTime || reportingReq.requestedStartTime,
+                          actualEndTime
+                        )
+                      )}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1194,6 +1389,14 @@ export function OvertimeStaffSection() {
         </div>,
         document.body
       )}
+
+      {/* Overtime Full Detail Modal */}
+      <OvertimeDetailModal
+        isOpen={!!selectedDetailOvertime}
+        overtime={selectedDetailOvertime}
+        onClose={() => setSelectedDetailOvertime(null)}
+        onPreviewImage={(url) => setPreviewImageUrl(url)}
+      />
 
       {/* Image Preview Lightbox */}
       <ImageLightboxModal

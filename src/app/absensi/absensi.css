@@ -124,6 +124,8 @@ html.dark .absensi-root {
 
 /* ── Input Styles ── */
 .ab-input {
+  box-sizing: border-box;
+  max-width: 100%;
   border-radius: 1rem;
   padding: 0.75rem 1.25rem;
   outline: none;
@@ -138,6 +140,14 @@ html.dark .absensi-root {
   ring: 4px solid var(--ab-primary);
   box-shadow: inset 8px 8px 16px var(--ab-nm-shadow), inset -4px -4px 10px var(--ab-nm-light),
               0 0 0 3px var(--ab-primary-glow);
+}
+
+input[type="time"].ab-input,
+input[type="date"].ab-input,
+input[type="number"].ab-input {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
 }
 
 /* ── Buttons ── */
