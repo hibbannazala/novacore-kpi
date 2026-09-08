@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -90,6 +90,61 @@ export default function AdminApprovalsPage() {
     };
   }, [adjustingReq, finalizingReq]);
 
+  const fetchOvertime = useCallback(async () => {
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("overtime_requests" as any)
+        .select("*, users!user_id(name, position, departments(name))")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching overtime in admin approvals:", error);
+      }
+
+      if (data) {
+        setOvertimes(
+          data.map((r: any) => ({
+            id: r.id,
+            userId: r.user_id,
+            requestDate: r.request_date,
+            overtimeDate: r.overtime_date,
+            requestedStartTime: (r.requested_start_time || "").substring(0, 5),
+            requestedEndTime: (r.requested_end_time || "").substring(0, 5),
+            requestedDurationMinutes: r.requested_duration_minutes,
+            tasks: r.tasks || [],
+            staffNotes: r.staff_notes,
+            status: r.status,
+            approvedStartTime: r.approved_start_time ? r.approved_start_time.substring(0, 5) : null,
+            approvedEndTime: r.approved_end_time ? r.approved_end_time.substring(0, 5) : null,
+            approvedDurationMinutes: r.approved_duration_minutes,
+            approvedBy: r.approved_by,
+            approvalDate: r.approval_date,
+            approvalNotes: r.approval_notes,
+            rejectionReason: r.rejection_reason,
+            actualStartTime: r.actual_start_time ? r.actual_start_time.substring(0, 5) : null,
+            actualEndTime: r.actual_end_time ? r.actual_end_time.substring(0, 5) : null,
+            actualDurationMinutes: r.actual_duration_minutes,
+            reportSubmittedAt: r.report_submitted_at,
+            taskReports: r.task_reports,
+            staffReportNotes: r.staff_report_notes,
+            finalDurationMinutes: r.final_duration_minutes,
+            finalizedBy: r.finalized_by,
+            finalizedDate: r.finalized_date,
+            finalNotes: r.final_notes,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+            userName: r.users?.name,
+            userDepartment: r.users?.departments?.name,
+            userPosition: r.users?.position,
+          }))
+        );
+      }
+    } catch (err) {
+      console.error("fetchOvertime exception:", err);
+    }
+  }, []);
+
   useEffect(() => {
     const supabase = createClient();
 
@@ -153,52 +208,6 @@ export default function AdminApprovalsPage() {
       setPendingStaffCount(count ?? 0);
     };
 
-    const fetchOvertime = async () => {
-      const { data } = await supabase
-        .from("overtime_requests" as any)
-        .select("*, users(name, position, departments(name))")
-        .order("overtime_date", { ascending: false });
-
-      if (data) {
-        setOvertimes(
-          data.map((r: any) => ({
-            id: r.id,
-            userId: r.user_id,
-            requestDate: r.request_date,
-            overtimeDate: r.overtime_date,
-            requestedStartTime: (r.requested_start_time || "").substring(0, 5),
-            requestedEndTime: (r.requested_end_time || "").substring(0, 5),
-            requestedDurationMinutes: r.requested_duration_minutes,
-            tasks: r.tasks || [],
-            staffNotes: r.staff_notes,
-            status: r.status,
-            approvedStartTime: r.approved_start_time ? r.approved_start_time.substring(0, 5) : null,
-            approvedEndTime: r.approved_end_time ? r.approved_end_time.substring(0, 5) : null,
-            approvedDurationMinutes: r.approved_duration_minutes,
-            approvedBy: r.approved_by,
-            approvalDate: r.approval_date,
-            approvalNotes: r.approval_notes,
-            rejectionReason: r.rejection_reason,
-            actualStartTime: r.actual_start_time ? r.actual_start_time.substring(0, 5) : null,
-            actualEndTime: r.actual_end_time ? r.actual_end_time.substring(0, 5) : null,
-            actualDurationMinutes: r.actual_duration_minutes,
-            reportSubmittedAt: r.report_submitted_at,
-            taskReports: r.task_reports,
-            staffReportNotes: r.staff_report_notes,
-            finalDurationMinutes: r.final_duration_minutes,
-            finalizedBy: r.finalized_by,
-            finalizedDate: r.finalized_date,
-            finalNotes: r.final_notes,
-            createdAt: r.created_at,
-            updatedAt: r.updated_at,
-            userName: r.users?.name,
-            userDepartment: r.users?.departments?.name,
-            userPosition: r.users?.position,
-          }))
-        );
-      }
-    };
-
     Promise.all([fetchPending(), fetchCancel(), fetchPendingStaff(), fetchOvertime()]);
 
     const ch = supabase
@@ -212,7 +221,7 @@ export default function AdminApprovalsPage() {
       .subscribe();
 
     return () => { ch.unsubscribe(); };
-  }, []);
+  }, [fetchOvertime]);
 
   const formatMinutes = (mins: number) => {
     const h = Math.floor(mins / 60);
@@ -261,9 +270,7 @@ export default function AdminApprovalsPage() {
       if (error) throw error;
       toast.success("Lembur berhasil disetujui!", { id: tid });
       setAdjustingReq(null);
-      // refetch
-      const { data } = await supabase.from("overtime_requests" as any).select("*, users(name, position, departments(name))").order("overtime_date", { ascending: false });
-      if (data) setOvertimes(data.map((r: any) => ({ ...r, userName: r.users?.name, userDepartment: r.users?.departments?.name })));
+      await fetchOvertime();
     } catch (err: any) {
       toast.error("Gagal: " + err.message, { id: tid });
     }
@@ -289,8 +296,7 @@ export default function AdminApprovalsPage() {
       if (error) throw error;
       toast.success("Pengajuan lembur telah ditolak.", { id: tid });
       setRejectingReq(null);
-      const { data } = await supabase.from("overtime_requests" as any).select("*, users(name, position, departments(name))").order("overtime_date", { ascending: false });
-      if (data) setOvertimes(data.map((r: any) => ({ ...r, userName: r.users?.name, userDepartment: r.users?.departments?.name })));
+      await fetchOvertime();
     } catch (err: any) {
       toast.error("Gagal: " + err.message, { id: tid });
     }
@@ -325,8 +331,7 @@ export default function AdminApprovalsPage() {
       if (error) throw error;
       toast.success(`Lembur difinalisasi menjadi ${formatMinutes(totalMins)}!`, { id: tid });
       setFinalizingReq(null);
-      const { data } = await supabase.from("overtime_requests" as any).select("*, users(name, position, departments(name))").order("overtime_date", { ascending: false });
-      if (data) setOvertimes(data.map((r: any) => ({ ...r, userName: r.users?.name, userDepartment: r.users?.departments?.name })));
+      await fetchOvertime();
     } catch (err: any) {
       toast.error("Gagal finalisasi: " + err.message, { id: tid });
     }

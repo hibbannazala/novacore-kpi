@@ -12,6 +12,34 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+const getStepState = (stepNumber: 1 | 2 | 3 | 4, status: string) => {
+  // Step 1: Pengajuan (Selalu selesai jika sudah diajukan)
+  if (stepNumber === 1) return { state: "completed", label: "Diajukan" };
+
+  // Step 2: Review Jadwal HR
+  if (stepNumber === 2) {
+    if (status === "pending") return { state: "current", label: "Review HR" };
+    if (status === "rejected") return { state: "rejected", label: "Ditolak" };
+    return { state: "completed", label: "Disetujui" };
+  }
+
+  // Step 3: Laporan Kerja (Staff)
+  if (stepNumber === 3) {
+    if (status === "pending" || status === "rejected") return { state: "upcoming", label: "Laporan Kerja" };
+    if (status === "approved") return { state: "current", label: "Isi Laporan" };
+    return { state: "completed", label: "Laporan Terkirim" };
+  }
+
+  // Step 4: Keputusan Final (Payroll)
+  if (stepNumber === 4) {
+    if (status === "finalized") return { state: "completed", label: "Final Sah" };
+    if (status === "reported") return { state: "current", label: "Validasi HR" };
+    return { state: "upcoming", label: "Final Payroll" };
+  }
+
+  return { state: "upcoming", label: "" };
+};
+
 export function OvertimeStaffSection() {
   const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
@@ -80,56 +108,92 @@ export function OvertimeStaffSection() {
 
   const durationMinutes = calcDurationMinutes(startTime, endTime);
 
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
+  const [isCanceling, setIsCanceling] = useState(false);
+
   // Fetch overtime requests for current user
   const fetchOvertimes = async () => {
     if (!user) return;
     setIsLoading(true);
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("overtime_requests" as any)
-      .select("*, users(name, position, departments(name))")
-      .eq("user_id", user.id)
-      .order("overtime_date", { ascending: false });
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("overtime_requests" as any)
+        .select("*, users!user_id(name, position, departments(name))")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
 
-    if (data) {
-      setOvertimeRequests(
-        data.map((r: any) => ({
-          id: r.id,
-          userId: r.user_id,
-          requestDate: r.request_date,
-          overtimeDate: r.overtime_date,
-          requestedStartTime: (r.requested_start_time || "").substring(0, 5),
-          requestedEndTime: (r.requested_end_time || "").substring(0, 5),
-          requestedDurationMinutes: r.requested_duration_minutes,
-          tasks: r.tasks || [],
-          staffNotes: r.staff_notes,
-          status: r.status,
-          approvedStartTime: r.approved_start_time ? r.approved_start_time.substring(0, 5) : null,
-          approvedEndTime: r.approved_end_time ? r.approved_end_time.substring(0, 5) : null,
-          approvedDurationMinutes: r.approved_duration_minutes,
-          approvedBy: r.approved_by,
-          approvalDate: r.approval_date,
-          approvalNotes: r.approval_notes,
-          rejectionReason: r.rejection_reason,
-          actualStartTime: r.actual_start_time ? r.actual_start_time.substring(0, 5) : null,
-          actualEndTime: r.actual_end_time ? r.actual_end_time.substring(0, 5) : null,
-          actualDurationMinutes: r.actual_duration_minutes,
-          reportSubmittedAt: r.report_submitted_at,
-          taskReports: r.task_reports,
-          staffReportNotes: r.staff_report_notes,
-          finalDurationMinutes: r.final_duration_minutes,
-          finalizedBy: r.finalized_by,
-          finalizedDate: r.finalized_date,
-          finalNotes: r.final_notes,
-          createdAt: r.created_at,
-          updatedAt: r.updated_at,
-          userName: r.users?.name,
-          userDepartment: r.users?.departments?.name,
-          userPosition: r.users?.position,
-        }))
-      );
+      if (error) {
+        console.error("Error fetching overtime requests:", error);
+      }
+
+      if (data) {
+        setOvertimeRequests(
+          data.map((r: any) => ({
+            id: r.id,
+            userId: r.user_id,
+            requestDate: r.request_date,
+            overtimeDate: r.overtime_date,
+            requestedStartTime: (r.requested_start_time || "").substring(0, 5),
+            requestedEndTime: (r.requested_end_time || "").substring(0, 5),
+            requestedDurationMinutes: r.requested_duration_minutes,
+            tasks: r.tasks || [],
+            staffNotes: r.staff_notes,
+            status: r.status,
+            approvedStartTime: r.approved_start_time ? r.approved_start_time.substring(0, 5) : null,
+            approvedEndTime: r.approved_end_time ? r.approved_end_time.substring(0, 5) : null,
+            approvedDurationMinutes: r.approved_duration_minutes,
+            approvedBy: r.approved_by,
+            approvalDate: r.approval_date,
+            approvalNotes: r.approval_notes,
+            rejectionReason: r.rejection_reason,
+            actualStartTime: r.actual_start_time ? r.actual_start_time.substring(0, 5) : null,
+            actualEndTime: r.actual_end_time ? r.actual_end_time.substring(0, 5) : null,
+            actualDurationMinutes: r.actual_duration_minutes,
+            reportSubmittedAt: r.report_submitted_at,
+            taskReports: r.task_reports,
+            staffReportNotes: r.staff_report_notes,
+            finalDurationMinutes: r.final_duration_minutes,
+            finalizedBy: r.finalized_by,
+            finalizedDate: r.finalized_date,
+            finalNotes: r.final_notes,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+            userName: r.users?.name,
+            userDepartment: r.users?.departments?.name,
+            userPosition: r.users?.position,
+          }))
+        );
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
+  };
+
+  const handleCancelRequest = async () => {
+    if (!cancelingId || !user) return;
+    setIsCanceling(true);
+    const tid = toast.loading("Membatalkan pengajuan lembur...");
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("overtime_requests" as any)
+        .delete()
+        .eq("id", cancelingId)
+        .eq("user_id", user.id)
+        .eq("status", "pending");
+
+      if (error) throw error;
+      toast.success("Pengajuan lembur berhasil dibatalkan", { id: tid });
+      setCancelingId(null);
+      fetchOvertimes();
+    } catch (err: any) {
+      toast.error("Gagal membatalkan: " + (err.message || "Terjadi kesalahan"), { id: tid });
+    } finally {
+      setIsCanceling(false);
+    }
   };
 
   useEffect(() => {
@@ -471,11 +535,14 @@ export function OvertimeStaffSection() {
             overtimeRequests.map((req) => (
               <div
                 key={req.id}
-                className="bg-[var(--ab-bg-surface)] p-5 rounded-3xl border border-[var(--ab-border)] shadow-sm space-y-4 relative overflow-hidden"
+                className="bg-[var(--ab-bg-surface)] p-5 rounded-3xl border border-[var(--ab-border)] shadow-sm space-y-5 relative overflow-hidden"
               >
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-[var(--ab-border)]/60 pb-3">
+                {/* Header: Date & Status */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--ab-border)]/60 pb-3">
                   <div className="flex items-center gap-3">
-                    <CalendarDays size={18} className="text-amber-500" />
+                    <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center font-black shrink-0">
+                      <CalendarDays size={20} />
+                    </div>
                     <div>
                       <h4 className="text-sm font-black text-[var(--ab-text-main)]">
                         {new Date(req.overtimeDate).toLocaleDateString("id-ID", {
@@ -488,6 +555,137 @@ export function OvertimeStaffSection() {
                     </div>
                   </div>
                   <div>{statusBadge(req.status)}</div>
+                </div>
+
+                {/* Visual Progress Stepper (Tracker 4 Tahap) */}
+                <div className="p-4 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[var(--ab-text-dim)] flex items-center gap-1.5">
+                      <Sparkles size={13} className="text-amber-500" /> Progres Pengajuan Lembur
+                    </span>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-[var(--ab-text-dim)]">
+                      Tahap {req.status === "pending" ? "1 dari 4" : req.status === "approved" ? "2 dari 4" : req.status === "reported" ? "3 dari 4" : req.status === "finalized" ? "Selesai (4/4)" : "Ditolak"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 relative">
+                    {[
+                      { step: 1, title: "1. Pengajuan", desc: `${req.requestedStartTime} - ${req.requestedEndTime} (${formatMinutes(req.requestedDurationMinutes)})` },
+                      { step: 2, title: "2. Review HR", desc: req.status === "pending" ? "Menunggu HR" : req.status === "rejected" ? "Ditolak" : req.approvedStartTime ? `${req.approvedStartTime} - ${req.approvedEndTime}` : "Disetujui" },
+                      { step: 3, title: "3. Laporan Kerja", desc: req.actualEndTime ? `Selesai ${req.actualEndTime}` : req.status === "approved" ? "Waktunya Lapor" : "Belum mulai" },
+                      { step: 4, title: "4. Final Sah", desc: req.finalDurationMinutes ? `${formatMinutes(req.finalDurationMinutes)}` : "Slip Gaji" },
+                    ].map((st) => {
+                      const { state } = getStepState(st.step as any, req.status);
+                      return (
+                        <div
+                          key={st.step}
+                          className={`flex flex-col items-center text-center p-2.5 rounded-xl transition-all border ${
+                            state === "completed"
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                              : state === "current"
+                              ? "bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400 ring-2 ring-amber-500/20"
+                              : state === "rejected"
+                              ? "bg-rose-500/10 border-rose-500/30 text-rose-500"
+                              : "bg-[var(--ab-bg-surface)] border-[var(--ab-border)]/40 text-[var(--ab-text-dim)] opacity-60"
+                          }`}
+                        >
+                          <div
+                            className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black mb-1.5 ${
+                              state === "completed"
+                                ? "bg-emerald-500 text-white shadow-sm"
+                                : state === "current"
+                                ? "bg-amber-500 text-white animate-pulse shadow-sm shadow-amber-500/50"
+                                : state === "rejected"
+                                ? "bg-rose-500 text-white"
+                                : "bg-[var(--ab-border)] text-[var(--ab-text-dim)]"
+                            }`}
+                          >
+                            {state === "completed" ? (
+                              <Check size={12} strokeWidth={3} />
+                            ) : state === "rejected" ? (
+                              <X size={12} strokeWidth={3} />
+                            ) : (
+                              st.step
+                            )}
+                          </div>
+                          <span className="text-[10px] font-black uppercase tracking-tight line-clamp-1">
+                            {st.title}
+                          </span>
+                          <span className="text-[8.5px] font-bold line-clamp-1 opacity-85 mt-0.5">
+                            {st.desc}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Status Guidance Banner */}
+                  {req.status === "pending" && (
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="flex items-start gap-2">
+                        <Clock size={16} className="text-amber-500 shrink-0 mt-0.5" />
+                        <p className="text-[11px] font-bold leading-relaxed">
+                          Pengajuan lembur Anda telah terkirim dan saat ini <span className="font-black text-amber-600 dark:text-amber-400">sedang di-review oleh HR</span>.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setCancelingId(req.id)}
+                        disabled={isCanceling}
+                        className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-rose-500 hover:bg-rose-500/10 border border-rose-500/30 rounded-lg shrink-0 transition-colors w-fit self-end sm:self-center"
+                      >
+                        Batalkan
+                      </button>
+                    </div>
+                  )}
+
+                  {req.status === "approved" && (
+                    <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-700 dark:text-blue-300 space-y-3">
+                      <div className="flex items-start gap-2">
+                        <CheckCircle2 size={16} className="text-blue-500 shrink-0 mt-0.5" />
+                        <p className="text-[11px] font-bold leading-relaxed">
+                          HR telah menyetujui jadwal lembur ({req.approvedStartTime} - {req.approvedEndTime}, {formatMinutes(req.approvedDurationMinutes || 0)}). Setelah selesai bekerja, segera laporkan hasil pekerjaan aktual Anda.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleOpenReportModal(req)}
+                        className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2"
+                      >
+                        <FileText size={15} /> Isi Laporan Selesai Lembur
+                      </button>
+                    </div>
+                  )}
+
+                  {req.status === "reported" && (
+                    <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-700 dark:text-purple-300 flex items-start gap-2">
+                      <CheckCircle2 size={16} className="text-purple-500 shrink-0 mt-0.5" />
+                      <p className="text-[11px] font-bold leading-relaxed">
+                        Laporan hasil kerja lembur Anda telah terkirim (Jam Selesai Riil: {req.actualEndTime}). Menunggu validasi akhir HR untuk penetapan durasi final pada Slip Gaji.
+                      </p>
+                    </div>
+                  )}
+
+                  {req.status === "finalized" && (
+                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-700 dark:text-emerald-300 flex items-start gap-2">
+                      <Sparkles size={16} className="text-emerald-500 shrink-0 mt-0.5" />
+                      <p className="text-[11px] font-bold leading-relaxed">
+                        Lembur telah disahkan oleh HR dengan durasi final <span className="font-black text-emerald-600 dark:text-emerald-400">{formatMinutes(req.finalDurationMinutes || 0)}</span> dan otomatis masuk ke perhitungan Slip Gaji.
+                      </p>
+                    </div>
+                  )}
+
+                  {req.status === "rejected" && (
+                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2">
+                      <AlertCircle size={16} className="text-rose-500 shrink-0 mt-0.5" />
+                      <div className="text-[11px] font-bold leading-relaxed">
+                        Pengajuan lembur ditolak oleh HR.
+                        {req.rejectionReason && (
+                          <span className="block mt-0.5 font-black text-rose-600 dark:text-rose-400">
+                            Alasan: {req.rejectionReason}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* 4 Durasi Columns Grid */}
@@ -529,24 +727,48 @@ export function OvertimeStaffSection() {
                   </div>
                 </div>
 
-                {/* Task List */}
+                {/* Workload / Tasks List */}
                 <div className="space-y-1.5">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Daftar Pekerjaan:</span>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Daftar Pekerjaan & Target:</span>
                   <div className="space-y-1">
                     {req.tasks.map((t, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-xs py-1 px-3 bg-[var(--ab-bg-main)]/50 rounded-lg">
+                      <div key={idx} className="flex items-center justify-between text-xs py-1.5 px-3 bg-[var(--ab-bg-main)]/50 rounded-xl border border-[var(--ab-border)]/40">
                         <span className="font-bold text-[var(--ab-text-main)]">• {t.task}</span>
-                        <span className="text-[10px] font-black text-[var(--ab-text-dim)] bg-[var(--ab-bg-surface)] px-2 py-0.5 rounded border border-[var(--ab-border)]">{t.target}</span>
+                        <span className="text-[10px] font-black text-[var(--ab-text-dim)] bg-[var(--ab-bg-surface)] px-2 py-0.5 rounded-lg border border-[var(--ab-border)]">{t.target}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                {/* Notes from HR if any */}
-                {req.rejectionReason && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-500 space-y-0.5">
-                    <span className="font-black uppercase text-[8px] tracking-widest">Alasan Penolakan HR:</span>
-                    <p className="font-bold">{req.rejectionReason}</p>
+                {/* Actual Task Reports if already reported */}
+                {req.taskReports && req.taskReports.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-purple-500">Hasil Pekerjaan Riil:</span>
+                    <div className="space-y-1">
+                      {req.taskReports.map((tr, idx) => (
+                        <div key={idx} className="p-2.5 bg-purple-500/5 rounded-xl border border-purple-500/20 text-xs space-y-1">
+                          <div className="flex justify-between items-center">
+                            <span className="font-black text-[var(--ab-text-main)]">{tr.task}</span>
+                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-600 dark:text-purple-400">
+                              {tr.status === "completed" ? "✅ Selesai 100%" : tr.status === "partial" ? "⏳ Sebagian" : "❌ Belum Selesai"}
+                            </span>
+                          </div>
+                          {tr.actualResult && (
+                            <p className="text-[11px] font-bold text-[var(--ab-text-dim)]">
+                              Hasil: <span className="text-[var(--ab-text-main)]">{tr.actualResult}</span>
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Notes from HR */}
+                {req.approvalNotes && (
+                  <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-xs text-blue-600 dark:text-blue-400 space-y-0.5">
+                    <span className="font-black uppercase text-[8px] tracking-widest">Catatan Persetujuan HR:</span>
+                    <p className="font-bold">{req.approvalNotes}</p>
                   </div>
                 )}
                 {req.finalNotes && (
@@ -554,16 +776,6 @@ export function OvertimeStaffSection() {
                     <span className="font-black uppercase text-[8px] tracking-widest">Catatan Final HR:</span>
                     <p className="font-bold">{req.finalNotes}</p>
                   </div>
-                )}
-
-                {/* Action button to Submit Report */}
-                {req.status === "approved" && (
-                  <button
-                    onClick={() => handleOpenReportModal(req)}
-                    className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2"
-                  >
-                    <FileText size={14} /> Isi Laporan Selesai Lembur
-                  </button>
                 )}
               </div>
             ))
@@ -580,6 +792,18 @@ export function OvertimeStaffSection() {
         type="info"
         onConfirm={handleSubmitForm}
         onCancel={() => setShowConfirm(false)}
+      />
+
+      {/* Cancel Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={Boolean(cancelingId)}
+        title="Batalkan Pengajuan Lembur"
+        message="Apakah Anda yakin ingin membatalkan pengajuan lembur ini? Tindakan ini tidak dapat dibatalkan."
+        confirmLabel="Ya, Batalkan"
+        cancelLabel="Kembali"
+        type="danger"
+        onConfirm={handleCancelRequest}
+        onCancel={() => setCancelingId(null)}
       />
 
       {/* Report Modal */}
