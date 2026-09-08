@@ -224,6 +224,7 @@ export interface OvertimeRequest {
   reportSubmittedAt: string | null;
   taskReports: OvertimeTaskReport[] | null;
   staffReportNotes: string | null;
+  proofImages?: string[];
 
   // Final Decision HR
   finalDurationMinutes: number | null;
@@ -267,6 +268,7 @@ export function rowToOvertimeRequest(row: Record<string, unknown>): OvertimeRequ
     reportSubmittedAt:        row.report_submitted_at as string | null,
     taskReports:              (row.task_reports as OvertimeTaskReport[]) ?? null,
     staffReportNotes:         row.staff_report_notes as string | null,
+    proofImages:              (row.proof_images as string[]) ?? [],
     finalDurationMinutes:     row.final_duration_minutes as number | null,
     finalizedBy:              row.finalized_by as string | null,
     finalizedDate:            row.finalized_date as string | null,

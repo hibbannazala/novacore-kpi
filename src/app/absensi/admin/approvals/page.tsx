@@ -8,9 +8,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import ConfirmDialog from "@/components/absensi/ConfirmDialog";
 import PromptDialog from "@/components/absensi/PromptDialog";
 import type { OvertimeRequest, OvertimeTaskReport } from "@/types/absensi";
+import ImageLightboxModal from "@/components/absensi/ImageLightboxModal";
 import {
   Check, X, CalendarDays, FileEdit, Smile, Shield, ArrowRight,
-  Clock, CheckCircle2, ClipboardCheck
+  Clock, CheckCircle2, ClipboardCheck, Image as ImageIcon, Eye
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -73,6 +74,9 @@ export default function AdminApprovalsPage() {
   const [finalMinutes, setFinalMinutes] = useState(0);
   const [finalNotes, setFinalNotes] = useState("");
 
+  // Lightbox Preview Modal State
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+
   // Lock background scroll when adjustingReq or finalizingReq is open
   useEffect(() => {
     const isAnyModalOpen = !!adjustingReq || !!finalizingReq;
@@ -128,6 +132,7 @@ export default function AdminApprovalsPage() {
             reportSubmittedAt: r.report_submitted_at,
             taskReports: r.task_reports,
             staffReportNotes: r.staff_report_notes,
+            proofImages: r.proof_images || [],
             finalDurationMinutes: r.final_duration_minutes,
             finalizedBy: r.finalized_by,
             finalizedDate: r.finalized_date,
@@ -818,6 +823,34 @@ export default function AdminApprovalsPage() {
                       </div>
                     )}
 
+                    {/* Bukti Foto Kerja */}
+                    {req.proofImages && req.proofImages.length > 0 && (
+                      <div className="space-y-1.5 p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)]">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-dim)] flex items-center gap-1.5">
+                          <ImageIcon size={13} className="text-purple-500" /> Foto Bukti Pekerjaan ({req.proofImages.length} Foto):
+                        </span>
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          {req.proofImages.map((imgUrl, imgIdx) => (
+                            <div
+                              key={imgIdx}
+                              onClick={() => setPreviewImageUrl(imgUrl)}
+                              className="relative w-24 h-16 rounded-xl overflow-hidden border border-[var(--ab-border)] bg-black/10 cursor-pointer hover:opacity-90 hover:scale-105 transition-all group shadow-sm"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={imgUrl}
+                                alt={`Bukti ${imgIdx + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                <Eye size={16} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <button
                       onClick={() => handleOpenFinalizeModal(req)}
                       className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg hover:opacity-95 transition-all flex items-center justify-center gap-2"
@@ -864,6 +897,28 @@ export default function AdminApprovalsPage() {
                         <p className="font-bold text-purple-500">{formatMinutes(req.actualDurationMinutes || 0)}</p>
                       </div>
                     </div>
+
+                    {/* Bukti Foto Finalized */}
+                    {req.proofImages && req.proofImages.length > 0 && (
+                      <div className="space-y-1 pt-1">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Foto Bukti:</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {req.proofImages.map((imgUrl, imgIdx) => (
+                            <div
+                              key={imgIdx}
+                              onClick={() => setPreviewImageUrl(imgUrl)}
+                              className="relative w-14 h-10 rounded-lg overflow-hidden border border-[var(--ab-border)] bg-black/10 cursor-pointer hover:scale-105 transition-transform group"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={imgUrl} alt="Bukti" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                <Eye size={12} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {req.finalNotes && (
                       <p className="text-xs italic text-[var(--ab-text-dim)] px-1">
@@ -1012,6 +1067,34 @@ export default function AdminApprovalsPage() {
               </div>
             </div>
 
+            {/* Proof Images in Finalize Modal */}
+            {finalizingReq.proofImages && finalizingReq.proofImages.length > 0 && (
+              <div className="space-y-1.5 p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)]">
+                <span className="text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-dim)] flex items-center gap-1.5">
+                  <ImageIcon size={13} className="text-purple-500" /> Foto Bukti Pekerjaan ({finalizingReq.proofImages.length}):
+                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {finalizingReq.proofImages.map((imgUrl, imgIdx) => (
+                    <div
+                      key={imgIdx}
+                      onClick={() => setPreviewImageUrl(imgUrl)}
+                      className="relative w-20 h-14 rounded-xl overflow-hidden border border-[var(--ab-border)] bg-black/10 cursor-pointer hover:opacity-90 hover:scale-105 transition-all group shadow-sm"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={imgUrl}
+                        alt={`Bukti ${imgIdx + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                        <Eye size={14} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Input Final Durasi */}
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest block">
@@ -1097,6 +1180,12 @@ export default function AdminApprovalsPage() {
         type={confirmCfg?.type ?? "warning"}
         onConfirm={confirmCfg?.onConfirm ?? (() => {})}
         onCancel={() => setConfirmCfg(null)}
+      />
+
+      {/* Image Preview Lightbox */}
+      <ImageLightboxModal
+        imageUrl={previewImageUrl}
+        onClose={() => setPreviewImageUrl(null)}
       />
     </div>
   );

@@ -1,14 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { OvertimeRequest, OvertimeTask, OvertimeTaskReport } from "@/types/absensi";
 import ConfirmDialog from "@/components/absensi/ConfirmDialog";
+import ImageLightboxModal from "@/components/absensi/ImageLightboxModal";
+import { compressImage, formatBytes } from "@/lib/imageCompression";
 import {
   Clock, Plus, Trash2, CheckCircle2, AlertCircle, CalendarDays,
-  FileText, Send, Loader2, Sparkles, Check, X, ShieldAlert, History
+  FileText, Send, Loader2, Sparkles, Check, X, ShieldAlert, History,
+  Camera, Image as ImageIcon, Eye
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -71,6 +74,20 @@ export function OvertimeStaffSection() {
   const [taskReports, setTaskReports] = useState<OvertimeTaskReport[]>([]);
   const [reportNotes, setReportNotes] = useState("");
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+
+  // Proof Images state for Report Modal
+  const [existingProofImages, setExistingProofImages] = useState<string[]>([]);
+  const [newProofFiles, setNewProofFiles] = useState<{
+    file: File;
+    previewUrl: string;
+    originalSize: number;
+    compressedSize: number;
+  }[]>([]);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Lightbox Preview Modal State
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   // Lock background scroll when report modal is open
   useEffect(() => {
@@ -264,20 +281,92 @@ export function OvertimeStaffSection() {
     setReportingReq(req);
     const now = new Date();
     const currentHM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    setActualEndTime(req.approvedEndTime || currentHM);
+    setActualEndTime(req.actualEndTime || req.approvedEndTime || currentHM);
     
-    setTaskReports(
-      req.tasks.map(t => ({
-        id: t.id,
-        task: t.task,
-        target: t.target,
-        actualResult: "",
-        progress: 100,
-        status: "completed",
-        note: ""
-      }))
-    );
-    setReportNotes("");
+    if (req.taskReports && req.taskReports.length > 0) {
+      setTaskReports(req.taskReports);
+    } else {
+      setTaskReports(
+        req.tasks.map(t => ({
+          id: t.id,
+          task: t.task,
+          target: t.target,
+          actualResult: "",
+          progress: 100,
+          status: "completed",
+          note: ""
+        }))
+      );
+    }
+    setReportNotes(req.staffReportNotes || "");
+    setExistingProofImages(req.proofImages || []);
+    setNewProofFiles([]);
+  };
+
+  // Proof Images Handlers
+  const handleSelectProofImages = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const remainingSlots = 2 - (existingProofImages.length + newProofFiles.length);
+    if (remainingSlots <= 0) {
+      toast.error("Maksimal 2 foto bukti lembur.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    const filesToProcess = Array.from(files).slice(0, remainingSlots);
+    setIsCompressing(true);
+    const toastId = toast.loading("Mengompresi foto...");
+
+    try {
+      const processed: {
+        file: File;
+        previewUrl: string;
+        originalSize: number;
+        compressedSize: number;
+      }[] = [];
+
+      for (const file of filesToProcess) {
+        const originalSize = file.size;
+        const compressedFile = await compressImage(file, {
+          maxSizeMB: 0.15, // max ~150KB
+          maxWidthOrHeight: 800,
+        });
+        const compressedSize = compressedFile.size;
+        const previewUrl = URL.createObjectURL(compressedFile);
+
+        processed.push({
+          file: compressedFile,
+          previewUrl,
+          originalSize,
+          compressedSize,
+        });
+      }
+
+      setNewProofFiles(prev => [...prev, ...processed]);
+      toast.success(
+        `Foto berhasil dikompresi (${formatBytes(processed[0]?.compressedSize || 0)})`,
+        { id: toastId }
+      );
+    } catch (err: any) {
+      toast.error("Gagal mengompresi foto: " + (err.message || "Unknown error"), { id: toastId });
+    } finally {
+      setIsCompressing(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const removeExistingImage = (idxToRemove: number) => {
+    setExistingProofImages(prev => prev.filter((_, idx) => idx !== idxToRemove));
+  };
+
+  const removeNewFile = (idxToRemove: number) => {
+    setNewProofFiles(prev => {
+      const item = prev[idxToRemove];
+      if (item) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter((_, idx) => idx !== idxToRemove);
+    });
   };
 
   // Submit Overtime Report
@@ -289,9 +378,33 @@ export function OvertimeStaffSection() {
     const actualDur = calcDurationMinutes(actualStart, actualEndTime);
 
     setIsSubmittingReport(true);
-    const tid = toast.loading("Mengirim laporan kerja lembur...");
+    const tid = toast.loading("Mengunggah bukti & mengirim laporan...");
     try {
       const supabase = createClient();
+
+      // Upload newly added files to Supabase Storage
+      const uploadedUrls: string[] = [];
+      for (let i = 0; i < newProofFiles.length; i++) {
+        const item = newProofFiles[i];
+        const fileName = `${user.id}/${reportingReq.id}_${Date.now()}_${i}.jpg`;
+        const { error: upErr } = await supabase.storage
+          .from("overtime_proofs")
+          .upload(fileName, item.file, {
+            contentType: "image/jpeg",
+            upsert: true,
+          });
+
+        if (upErr) throw upErr;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from("overtime_proofs")
+          .getPublicUrl(fileName);
+
+        uploadedUrls.push(publicUrl);
+      }
+
+      const finalProofImages = [...existingProofImages, ...uploadedUrls];
+
       const { error } = await supabase
         .from("overtime_requests" as any)
         .update({
@@ -301,6 +414,7 @@ export function OvertimeStaffSection() {
           report_submitted_at: new Date().toISOString(),
           task_reports: taskReports,
           staff_report_notes: reportNotes.trim() || null,
+          proof_images: finalProofImages,
           status: "reported",
         })
         .eq("id", reportingReq.id);
@@ -309,6 +423,7 @@ export function OvertimeStaffSection() {
 
       toast.success("Laporan lembur berhasil disubmit ke HR!", { id: tid });
       setReportingReq(null);
+      setNewProofFiles([]);
       fetchOvertimes();
     } catch (err: any) {
       toast.error("Gagal submit laporan: " + err.message, { id: tid });
@@ -656,11 +771,20 @@ export function OvertimeStaffSection() {
                   )}
 
                   {req.status === "reported" && (
-                    <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-700 dark:text-purple-300 flex items-start gap-2">
-                      <CheckCircle2 size={16} className="text-purple-500 shrink-0 mt-0.5" />
-                      <p className="text-[11px] font-bold leading-relaxed">
-                        Laporan hasil kerja lembur Anda telah terkirim (Jam Selesai Riil: {req.actualEndTime}). Menunggu validasi akhir HR untuk penetapan durasi final pada Slip Gaji.
-                      </p>
+                    <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-700 dark:text-purple-300 space-y-2.5">
+                      <div className="flex items-start gap-2">
+                        <CheckCircle2 size={16} className="text-purple-500 shrink-0 mt-0.5" />
+                        <p className="text-[11px] font-bold leading-relaxed">
+                          Laporan hasil kerja lembur Anda telah terkirim (Jam Selesai Riil: {req.actualEndTime}). Menunggu validasi akhir HR untuk penetapan durasi final pada Slip Gaji.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenReportModal(req)}
+                        className="w-full py-2 bg-purple-600/15 hover:bg-purple-600/25 text-purple-600 dark:text-purple-400 font-black text-[11px] uppercase tracking-wider rounded-xl transition-all border border-purple-500/30 flex items-center justify-center gap-2"
+                      >
+                        <FileText size={13} /> Edit Laporan & Bukti Foto
+                      </button>
                     </div>
                   )}
 
@@ -758,6 +882,34 @@ export function OvertimeStaffSection() {
                               Hasil: <span className="text-[var(--ab-text-main)]">{tr.actualResult}</span>
                             </p>
                           )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Proof Images if exists */}
+                {req.proofImages && req.proofImages.length > 0 && (
+                  <div className="space-y-2 pt-1">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-dim)] flex items-center gap-1.5">
+                      <ImageIcon size={13} className="text-purple-500" /> Foto Bukti Kerja ({req.proofImages.length} Foto):
+                    </span>
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      {req.proofImages.map((imgUrl, imgIdx) => (
+                        <div
+                          key={imgIdx}
+                          onClick={() => setPreviewImageUrl(imgUrl)}
+                          className="relative w-24 h-16 rounded-xl overflow-hidden border border-[var(--ab-border)] bg-black/10 cursor-pointer hover:opacity-90 hover:scale-105 transition-all group shadow-sm"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={imgUrl}
+                            alt={`Bukti ${imgIdx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                            <Eye size={16} />
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -904,6 +1056,123 @@ export function OvertimeStaffSection() {
               />
             </div>
 
+            {/* Upload Bukti Gambar (Maks 2 Foto) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest flex items-center gap-1.5">
+                  <Camera size={13} className="text-purple-500" /> Foto Bukti Pekerjaan (Maks. 2 Foto)
+                </label>
+                <span className="text-[9px] font-black uppercase tracking-wider text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  Otomatis Dikompresi
+                </span>
+              </div>
+
+              {/* Grid Thumbnail Preview */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Existing Images */}
+                {existingProofImages.map((url, idx) => (
+                  <div
+                    key={`existing-${idx}`}
+                    className="relative group rounded-2xl overflow-hidden border border-[var(--ab-border)] bg-black/20 aspect-video flex items-center justify-center shadow-sm"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt={`Bukti ${idx + 1}`} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewImageUrl(url)}
+                        className="p-1.5 bg-white/20 hover:bg-white/40 text-white rounded-lg backdrop-blur-sm transition-all"
+                        title="Perbesar"
+                      >
+                        <Eye size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeExistingImage(idx)}
+                        className="p-1.5 bg-rose-500/80 hover:bg-rose-500 text-white rounded-lg backdrop-blur-sm transition-all"
+                        title="Hapus"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 text-[8px] font-black uppercase rounded bg-black/60 text-white backdrop-blur-sm">
+                      Foto {idx + 1}
+                    </span>
+                  </div>
+                ))}
+
+                {/* Newly Added Compressed Images */}
+                {newProofFiles.map((item, idx) => (
+                  <div
+                    key={`new-${idx}`}
+                    className="relative group rounded-2xl overflow-hidden border border-[var(--ab-border)] bg-black/20 aspect-video flex items-center justify-center shadow-sm"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={item.previewUrl} alt={`Foto Baru ${idx + 1}`} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewImageUrl(item.previewUrl)}
+                        className="p-1.5 bg-white/20 hover:bg-white/40 text-white rounded-lg backdrop-blur-sm transition-all"
+                        title="Perbesar"
+                      >
+                        <Eye size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeNewFile(idx)}
+                        className="p-1.5 bg-rose-500/80 hover:bg-rose-500 text-white rounded-lg backdrop-blur-sm transition-all"
+                        title="Hapus"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 text-[8px] font-black uppercase rounded bg-emerald-600/80 text-white backdrop-blur-sm">
+                      {formatBytes(item.compressedSize)}
+                    </span>
+                  </div>
+                ))}
+
+                {/* Upload Trigger Button (jika belum mencapai 2 gambar) */}
+                {existingProofImages.length + newProofFiles.length < 2 && (
+                  <button
+                    type="button"
+                    disabled={isCompressing}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-[var(--ab-border)] hover:border-purple-500/50 rounded-2xl aspect-video flex flex-col items-center justify-center gap-1.5 p-3 text-[var(--ab-text-dim)] hover:text-purple-500 hover:bg-purple-500/5 transition-all group cursor-pointer"
+                  >
+                    {isCompressing ? (
+                      <>
+                        <Loader2 size={20} className="animate-spin text-purple-500" />
+                        <span className="text-[10px] font-bold">Mengompresi...</span>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-8 h-8 rounded-full bg-purple-500/10 text-purple-500 flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <Camera size={16} />
+                        </div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-center">
+                          + Unggah Foto
+                        </span>
+                        <span className="text-[8px] text-[var(--ab-text-dim)] font-bold">
+                          Selfie / Bukti Kerja
+                        </span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleSelectProofImages}
+                accept="image/*"
+                multiple
+                className="hidden"
+              />
+            </div>
+
             <div className="flex flex-col-reverse sm:flex-row gap-2.5 pt-2">
               <button
                 type="button"
@@ -915,7 +1184,7 @@ export function OvertimeStaffSection() {
               <button
                 type="button"
                 onClick={handleSubmitReport}
-                disabled={isSubmittingReport}
+                disabled={isSubmittingReport || isCompressing}
                 className="w-full sm:flex-1 py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg hover:opacity-95 active:scale-95 transition-all"
               >
                 {isSubmittingReport ? "Mengirim..." : "Kirim Laporan"}
@@ -925,6 +1194,12 @@ export function OvertimeStaffSection() {
         </div>,
         document.body
       )}
+
+      {/* Image Preview Lightbox */}
+      <ImageLightboxModal
+        imageUrl={previewImageUrl}
+        onClose={() => setPreviewImageUrl(null)}
+      />
     </div>
   );
 }
