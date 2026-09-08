@@ -274,7 +274,12 @@ export default function AdminSettingsPage() {
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="font-black text-xs text-[var(--ab-text-main)] uppercase">{o.name}</div>
-                    <div className="text-[10px] text-[var(--ab-text-dim)]">{o.lat}, {o.lng} &bull; R: {o.radius}m</div>
+                    <div className="text-[10px] text-[var(--ab-text-dim)] flex items-center gap-1">
+                      <a href={`https://www.google.com/maps/search/?api=1&query=${o.lat},${o.lng}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline hover:text-blue-600 transition">
+                        {o.lat}, {o.lng}
+                      </a>
+                      <span>&bull; R: {o.radius}m</span>
+                    </div>
                   </div>
                   <button onClick={() => deleteOfficeLocation(o.id, o.name)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={14}/></button>
                 </div>
