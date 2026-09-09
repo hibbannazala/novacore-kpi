@@ -106,10 +106,21 @@ export default function OvertimeFinalizeModal({
         (overtime.hourlyBaseRate && overtime.hourlyBaseRate > 0)
           ? overtime.hourlyBaseRate
           : calculated.hourlyBaseRate;
+      const fPay = overtime.firstHourPay && overtime.firstHourPay > 0 ? overtime.firstHourPay : calculated.firstHourRate;
+      const sRate = overtime.subsequentHourRate && overtime.subsequentHourRate > 0 ? overtime.subsequentHourRate : calculated.subsequentHourRate;
+
       setHourlyBaseRate(baseRate);
-      setFirstHourPay(overtime.firstHourPay && overtime.firstHourPay > 0 ? overtime.firstHourPay : calculated.firstHourRate);
-      setSubsequentHourRate(overtime.subsequentHourRate && overtime.subsequentHourRate > 0 ? overtime.subsequentHourRate : calculated.subsequentHourRate);
-      setTotalPayOverride(overtime.totalOvertimePay ?? null);
+      setFirstHourPay(fPay);
+      setSubsequentHourRate(sRate);
+
+      // Only preserve override if it was explicitly flagged as manual override
+      const savedSubHoursDecimal = Math.max(0, (defaultMins / 60) - 1);
+      const activeFPay = defaultMins > 0 ? fPay : 0;
+      const expectedCalc = activeFPay + Math.round(savedSubHoursDecimal * sRate);
+      const wasManualOverride = overtime.calculationBreakdown?.isOverride === true ||
+        (typeof overtime.totalOvertimePay === "number" && Math.abs(overtime.totalOvertimePay - expectedCalc) > 5);
+
+      setTotalPayOverride(wasManualOverride ? overtime.totalOvertimePay! : null);
     } else {
       // Fresh finalize or previously zero: automatically prefill with calculated benchmark
       setHourlyBaseRate(calculated.hourlyBaseRate);
@@ -303,7 +314,10 @@ export default function OvertimeFinalizeModal({
           <div className="flex items-center gap-1 bg-[var(--ab-bg-surface)] p-1 rounded-xl border border-[var(--ab-border)] shrink-0 self-end sm:self-center">
             <button
               type="button"
-              onClick={() => setDayType("weekday")}
+              onClick={() => {
+                setDayType("weekday");
+                setTotalPayOverride(null);
+              }}
               className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase transition-all ${
                 dayType === "weekday"
                   ? "bg-amber-500 text-white shadow-sm"
@@ -314,7 +328,10 @@ export default function OvertimeFinalizeModal({
             </button>
             <button
               type="button"
-              onClick={() => setDayType("weekend")}
+              onClick={() => {
+                setDayType("weekend");
+                setTotalPayOverride(null);
+              }}
               className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase transition-all ${
                 dayType === "weekend"
                   ? "bg-purple-600 text-white shadow-sm"
@@ -325,7 +342,10 @@ export default function OvertimeFinalizeModal({
             </button>
             <button
               type="button"
-              onClick={() => setDayType("holiday")}
+              onClick={() => {
+                setDayType("holiday");
+                setTotalPayOverride(null);
+              }}
               className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase transition-all ${
                 dayType === "holiday"
                   ? "bg-rose-600 text-white shadow-sm"
@@ -396,7 +416,10 @@ export default function OvertimeFinalizeModal({
                   min="0"
                   max="24"
                   value={finalHours}
-                  onChange={(e) => setFinalHours(Math.max(0, parseInt(e.target.value) || 0))}
+                  onChange={(e) => {
+                    setFinalHours(Math.max(0, parseInt(e.target.value) || 0));
+                    setTotalPayOverride(null);
+                  }}
                   className="ab-input text-center text-sm font-black py-1.5 w-full bg-[var(--ab-bg-surface)] font-mono"
                 />
                 <span className="text-xs font-bold text-[var(--ab-text-dim)] pr-1">Jam</span>
@@ -408,7 +431,10 @@ export default function OvertimeFinalizeModal({
                   max="59"
                   step="5"
                   value={finalMinutes}
-                  onChange={(e) => setFinalMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                  onChange={(e) => {
+                    setFinalMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)));
+                    setTotalPayOverride(null);
+                  }}
                   className="ab-input text-center text-sm font-black py-1.5 w-full bg-[var(--ab-bg-surface)] font-mono"
                 />
                 <span className="text-xs font-bold text-[var(--ab-text-dim)] pr-1">Menit</span>
