@@ -149,12 +149,15 @@ export default function OvertimeFinalizeModal({
   const y = parseInt(yStr, 10) || new Date().getFullYear();
   const m = parseInt(mStr, 10) || new Date().getMonth() + 1;
   const workingDays = countWorkingDaysInMonth(y, m);
+  const standardCalculated = calculateOvertimeRates(baseSalary, workingDays, 9);
+  const standardFirstHourPay = totalDurationMinutes > 0 ? standardCalculated.firstHourRate : 0;
+  const standardSubsequentPay = Math.round(subsequentHoursDecimal * standardCalculated.subsequentHourRate);
+  const standardTotalPay = standardFirstHourPay + standardSubsequentPay;
 
   const resetToFormula = () => {
-    const calculated = calculateOvertimeRates(baseSalary, workingDays, 9);
-    setHourlyBaseRate(calculated.hourlyBaseRate);
-    setFirstHourPay(calculated.firstHourRate);
-    setSubsequentHourRate(calculated.subsequentHourRate);
+    setHourlyBaseRate(standardCalculated.hourlyBaseRate);
+    setFirstHourPay(standardCalculated.firstHourRate);
+    setSubsequentHourRate(standardCalculated.subsequentHourRate);
     setTotalPayOverride(null);
     toast.success("Berhasil menghitung ulang tarif berdasarkan Gaji Pokok!");
   };
@@ -427,6 +430,26 @@ export default function OvertimeFinalizeModal({
                   placeholder="0"
                 />
               </div>
+              {/* Indicator if different from salary benchmark */}
+              {baseSalary > 0 && firstHourPay !== standardCalculated.firstHourRate && (
+                <div className="pt-1 text-[10px] font-bold">
+                  {firstHourPay < standardCalculated.firstHourRate ? (
+                    <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1.5 flex-wrap">
+                      <span>⚠️ Nominal sesuai gaji perjamnya = {formatRp(standardCalculated.firstHourRate)}</span>
+                      <span className="text-[8.5px] px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30">
+                        (Anda set {formatRp(standardCalculated.firstHourRate - firstHourPay)} lebih rendah)
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 flex-wrap">
+                      <span>✨ Nominal sesuai gaji perjamnya = {formatRp(standardCalculated.firstHourRate)}</span>
+                      <span className="text-[8.5px] px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30">
+                        (Anda set {formatRp(firstHourPay - standardCalculated.firstHourRate)} lebih tinggi)
+                      </span>
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Komponen Jam Berikutnya */}
@@ -458,6 +481,26 @@ export default function OvertimeFinalizeModal({
               <p className="text-[9.5px] font-medium text-[var(--ab-text-dim)] italic pt-0.5">
                 Hitungan: {subsequentHoursDecimal.toFixed(1)} jam × {formatRp(subsequentHourRate)} = {formatRp(subsequentPayCalculated)}
               </p>
+              {/* Indicator if different from salary benchmark */}
+              {baseSalary > 0 && subsequentHourRate !== standardCalculated.subsequentHourRate && (
+                <div className="pt-0.5 text-[10px] font-bold">
+                  {subsequentHourRate < standardCalculated.subsequentHourRate ? (
+                    <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1.5 flex-wrap">
+                      <span>⚠️ Nominal sesuai gaji perjamnya = {formatRp(standardCalculated.subsequentHourRate)} / jam</span>
+                      <span className="text-[8.5px] px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30">
+                        (Anda set {formatRp(standardCalculated.subsequentHourRate - subsequentHourRate)} lebih rendah)
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 flex-wrap">
+                      <span>✨ Nominal sesuai gaji perjamnya = {formatRp(standardCalculated.subsequentHourRate)} / jam</span>
+                      <span className="text-[8.5px] px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30">
+                        (Anda set {formatRp(subsequentHourRate - standardCalculated.subsequentHourRate)} lebih tinggi)
+                      </span>
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Total Final Nominal */}
@@ -491,6 +534,26 @@ export default function OvertimeFinalizeModal({
                   ? "✏️ Anda meng-override total secara manual."
                   : `Total = 1 Jam Pertama (${formatRp(activeFirstHourPay)}) + Sisa Jam (${formatRp(subsequentPayCalculated)})`}
               </p>
+              {/* Indicator if final total differs from standard salary formula */}
+              {baseSalary > 0 && finalTotalPay !== standardTotalPay && (
+                <div className="pt-0.5 text-[10px] font-bold">
+                  {finalTotalPay < standardTotalPay ? (
+                    <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1.5 flex-wrap">
+                      <span>⚠️ Total sesuai hitungan gaji = {formatRp(standardTotalPay)}</span>
+                      <span className="text-[8.5px] px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30">
+                        (Total {formatRp(standardTotalPay - finalTotalPay)} lebih rendah dari standar)
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 flex-wrap">
+                      <span>✨ Total sesuai hitungan gaji = {formatRp(standardTotalPay)}</span>
+                      <span className="text-[8.5px] px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30">
+                        (Total {formatRp(finalTotalPay - standardTotalPay)} lebih tinggi dari standar)
+                      </span>
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
