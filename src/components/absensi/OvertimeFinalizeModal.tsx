@@ -23,6 +23,7 @@ import {
   Info,
   DollarSign,
   User,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -91,20 +92,26 @@ export default function OvertimeFinalizeModal({
     const workingDays = countWorkingDaysInMonth(y, m);
 
     const calculated = calculateOvertimeRates(baseSalary, workingDays, 9);
-    const baseRate = overtime.hourlyBaseRate ?? calculated.hourlyBaseRate;
-    setHourlyBaseRate(baseRate);
 
-    // 4. Determine initial 1st hour and subsequent hour rates
-    if (overtime.totalOvertimePay !== null && overtime.totalOvertimePay !== undefined) {
-      // If already finalized and saved previously, load saved values
-      setFirstHourPay(overtime.firstHourPay ?? calculated.firstHourRate);
-      setSubsequentHourRate(overtime.subsequentHourRate ?? calculated.subsequentHourRate);
-      setTotalPayOverride(overtime.totalOvertimePay);
+    // Check if this overtime request was previously finalized with legitimate > 0 pay
+    const hasLegitimateSavedPay =
+      overtime.status === "finalized" &&
+      typeof overtime.totalOvertimePay === "number" &&
+      overtime.totalOvertimePay > 0;
+
+    if (hasLegitimateSavedPay) {
+      const baseRate =
+        (overtime.hourlyBaseRate && overtime.hourlyBaseRate > 0)
+          ? overtime.hourlyBaseRate
+          : calculated.hourlyBaseRate;
+      setHourlyBaseRate(baseRate);
+      setFirstHourPay(overtime.firstHourPay && overtime.firstHourPay > 0 ? overtime.firstHourPay : calculated.firstHourRate);
+      setSubsequentHourRate(overtime.subsequentHourRate && overtime.subsequentHourRate > 0 ? overtime.subsequentHourRate : calculated.subsequentHourRate);
+      setTotalPayOverride(overtime.totalOvertimePay ?? null);
     } else {
-      // Fresh finalize: use calculated benchmark
-      // If weekend, default first hour can still be x1.5 or x2, let's use calculated.firstHourRate
-      const initialFirstPay = calculated.firstHourRate;
-      setFirstHourPay(initialFirstPay);
+      // Fresh finalize or previously zero: automatically prefill with calculated benchmark
+      setHourlyBaseRate(calculated.hourlyBaseRate);
+      setFirstHourPay(calculated.firstHourRate);
       setSubsequentHourRate(calculated.subsequentHourRate);
       setTotalPayOverride(null);
     }
@@ -142,6 +149,15 @@ export default function OvertimeFinalizeModal({
   const y = parseInt(yStr, 10) || new Date().getFullYear();
   const m = parseInt(mStr, 10) || new Date().getMonth() + 1;
   const workingDays = countWorkingDaysInMonth(y, m);
+
+  const resetToFormula = () => {
+    const calculated = calculateOvertimeRates(baseSalary, workingDays, 9);
+    setHourlyBaseRate(calculated.hourlyBaseRate);
+    setFirstHourPay(calculated.firstHourRate);
+    setSubsequentHourRate(calculated.subsequentHourRate);
+    setTotalPayOverride(null);
+    toast.success("Berhasil menghitung ulang tarif berdasarkan Gaji Pokok!");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -304,13 +320,24 @@ export default function OvertimeFinalizeModal({
 
         {/* Reminder Box: Acuan Gaji Pokok */}
         <div className="p-3.5 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] text-xs space-y-2">
-          <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-[var(--ab-text-dim)]">
+          <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-[var(--ab-text-dim)] flex-wrap gap-2">
             <span className="flex items-center gap-1">
               <Info size={13} className="text-blue-500" /> Acuan Rumus Sistem (Reminder)
             </span>
-            <span className="text-blue-500 font-mono">
-              {workingDays} Hari Kerja • 9 Jam/Hari
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-blue-500 font-mono">
+                {workingDays} Hari Kerja • 9 Jam/Hari
+              </span>
+              <button
+                type="button"
+                onClick={resetToFormula}
+                className="px-2 py-0.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 font-black text-[9px] uppercase tracking-wider flex items-center gap-1 border border-amber-500/30 transition-colors"
+                title="Hitung ulang otomatis tarif berdasarkan gaji pokok"
+              >
+                <RefreshCw size={11} />
+                Hitung Ulang Rumus
+              </button>
+            </div>
           </div>
 
           <div className="p-2.5 bg-[var(--ab-bg-surface)] rounded-xl border border-[var(--ab-border)] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
