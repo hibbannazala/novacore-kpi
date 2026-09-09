@@ -159,20 +159,16 @@ export default function HrPayrollPage() {
       supabase.from("payroll_deduction_types").select("*").order("name"),
       supabase.from("payroll_addition_types").select("*").order("name"),
       supabase.from("overtime_requests" as any)
-        .select(`
-          *,
-          users (
-            id,
-            name,
-            position,
-            departments ( name )
-          )
-        `)
+        .select("*")
         .eq("status", "finalized")
         .gte("overtime_date", startDate)
         .lte("overtime_date", endDate)
         .order("overtime_date", { ascending: true })
     ]);
+
+    if (overtimeRes.error) {
+      console.error("Error fetching overtime_requests in payroll:", overtimeRes.error);
+    }
 
     const users = (usersRes.data ?? []) as any[];
     const settings = (settingsRes.data ?? []) as PayrollStaffSetting[];
@@ -293,24 +289,35 @@ export default function HrPayrollPage() {
         isCapped: s.isCapped,
       }));
 
-      const finalOvertimeNotes = existing?.overtime_notes && existing.overtime_notes.trim() !== ""
-        ? existing.overtime_notes
-        : otInfo.defaultNotes;
+      // If system has finalized sessions, prioritize system overtime pay and breakdown
+      const finalOvertimePay = systemOvertimePay > 0
+        ? systemOvertimePay
+        : (existing?.overtime_pay ?? autoCalculatedPay);
+
+      const finalOvertimeDetail = otInfo.sessions.length > 0
+        ? overtimeDetailItems
+        : (existing?.overtime_detail ?? []);
+
+      const isOldGenericNote = existing?.overtime_notes
+        ? existing.overtime_notes.toLowerCase().includes("200k") || existing.overtime_notes.toLowerCase().includes("lembur /jam") || existing.overtime_notes.trim() === ""
+        : true;
+
+      const finalOvertimeNotes = otInfo.sessions.length > 0 && isOldGenericNote
+        ? otInfo.defaultNotes
+        : (existing?.overtime_notes ?? otInfo.defaultNotes);
       
       const payrollBase = {
         id: existing?.id,
         base_salary: existing?.base_salary ?? setting?.default_base_salary ?? 0,
         mobility_allowance: existing?.mobility_allowance ?? setting?.default_mobility_allowance ?? 0,
         performance_bonus: existing?.performance_bonus ?? 0,
-        overtime_pay: existing?.overtime_pay !== undefined ? existing.overtime_pay : autoCalculatedPay,
+        overtime_pay: finalOvertimePay,
         overtime_rate: overtimeRate,
         system_overtime_minutes: systemOvertimeMins,
         payroll_overtime_minutes: payrollMins,
         system_overtime_days: systemOvertimeDays,
         overtime_notes: finalOvertimeNotes,
-        overtime_detail: existing?.overtime_detail && existing.overtime_detail.length > 0
-          ? existing.overtime_detail
-          : overtimeDetailItems,
+        overtime_detail: finalOvertimeDetail,
         additions_detail: existing?.additions_detail ?? [],
         deductions: existing?.deductions ?? 0,
         deductions_detail: existing?.deductions_detail ?? [],
@@ -588,7 +595,51 @@ export default function HrPayrollPage() {
                               Sistem: {row.overtimeSessions?.length || 0} Sesi ({row.payroll.system_overtime_days || 0} Hari) • {Math.floor((row.payroll.system_overtime_minutes || 0) / 60)}j {(row.payroll.system_overtime_minutes || 0) % 60}m
                             </span>
                           </label>
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {!isPublished && (row.overtimeSessions?.length || 0) > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const totalSessPay = (row.overtimeSessions || []).reduce((sum, s) => sum + s.pay, 0);
+                                  const sessions = row.overtimeSessions || [];
+                                  let generated = "";
+                                  if (sessions.length === 1) {
+                                    generated = `Lembur 1 sesi (${row.overtimeDateRange}: ${sessions[0].hoursFormatted} - ${formatRp(sessions[0].pay)})`;
+                                  } else if (sessions.length > 1) {
+                                    generated = `Lembur ${sessions.length} sesi (${row.overtimeDateRange}):\n` +
+                                      sessions.map(s => `• ${format(new Date(s.date + "T00:00:00"), "dd MMM yyyy", { locale: localeId })} (${s.hoursFormatted}) = ${formatRp(s.pay)}`).join("\n");
+                                  }
+                                  
+                                  const detailItems = sessions.map(s => ({
+                                    id: s.id,
+                                    date: s.date,
+                                    durationMinutes: s.durationMinutes,
+                                    hoursFormatted: s.hoursFormatted,
+                                    pay: s.pay,
+                                    dayType: s.dayType,
+                                    maxPayCap: s.maxPayCap,
+                                    isCapped: s.isCapped,
+                                  }));
+
+                                  setRows(prev => prev.map(r => r.id === row.id ? {
+                                    ...r,
+                                    payroll: {
+                                      ...r.payroll,
+                                      overtime_pay: totalSessPay,
+                                      overtime_notes: generated,
+                                      overtime_detail: detailItems,
+                                      _dirty: true
+                                    }
+                                  } : r));
+                                  toast.success(`Berhasil menyinkronkan ${sessions.length} sesi lembur (${formatRp(totalSessPay)}) ke payroll ${row.name}!`);
+                                }}
+                                className="text-[9.5px] font-black uppercase tracking-wider text-amber-900 hover:text-amber-950 flex items-center gap-1 bg-amber-200/80 hover:bg-amber-300 px-2 py-1 rounded-lg border border-amber-300 transition-colors shadow-xs"
+                                title="Paksa sinkronkan nominal & rincian dari sesi lembur yang sah"
+                              >
+                                <RefreshCw size={11} />
+                                Sinkronkan Ulang Sesi
+                              </button>
+                            )}
                             <a
                               href="/absensi/admin/overtime"
                               target="_blank"
