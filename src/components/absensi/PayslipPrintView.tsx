@@ -2,6 +2,7 @@
 
 import React, { forwardRef } from 'react';
 import { Printer } from 'lucide-react';
+import type { PayrollOvertimeDetailItem } from '@/types';
 
 interface PayslipPrintViewProps {
   employeeName: string;
@@ -22,6 +23,7 @@ interface PayslipPrintViewProps {
   deductionsDetail?: Array<{name: string, amount: number, note?: string}> | null;
   additionsDetail?: Array<{name: string, amount: number, note?: string}> | null;
   overtimeNotes?: string | null;
+  overtimeDetail?: PayrollOvertimeDetailItem[] | null;
 }
 
 const MONTHS = [
@@ -59,7 +61,8 @@ export const PayslipPrintView = forwardRef<HTMLDivElement, PayslipPrintViewProps
   snapshotCompany,
   deductionsDetail,
   additionsDetail,
-  overtimeNotes
+  overtimeNotes,
+  overtimeDetail,
 }, ref) => {
   const formatCurrency = (amount: number) => {
     return 'Rp ' + amount.toLocaleString('id-ID');
@@ -73,6 +76,30 @@ export const PayslipPrintView = forwardRef<HTMLDivElement, PayslipPrintViewProps
   // Handle 1-12 based month index (most common for 'month' prop), fallback to string if out of bounds
   const monthIndex = month >= 1 && month <= 12 ? month - 1 : month;
   const monthName = MONTHS[monthIndex] || month;
+
+  // Overtime sessions processing
+  const sortedSessions = (overtimeDetail || []).slice().sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  const hasMultipleSessions = sortedSessions.length > 1;
+  const totalOvertimeMins = sortedSessions.reduce((sum, s) => sum + (s.durationMinutes || 0), 0);
+  const totalOtHours = Math.floor(totalOvertimeMins / 60);
+  const totalOtRemainingMins = totalOvertimeMins % 60;
+  const totalOtHoursStr = `${totalOtHours} Jam ${totalOtRemainingMins > 0 ? `${totalOtRemainingMins} Menit` : ""}`.trim();
+
+  const formatSessionDate = (dateStr: string) => {
+    try {
+      const parts = dateStr.split("-");
+      if (parts.length === 3) {
+        const d = parseInt(parts[2], 10);
+        const m = parseInt(parts[1], 10);
+        const y = parts[0];
+        const mName = MONTHS[m - 1] || parts[1];
+        return `${d} ${mName} ${y}`;
+      }
+      return dateStr;
+    } catch {
+      return dateStr;
+    }
+  };
 
   return (
     <div className="w-full flex flex-col items-center ab-animate-fadeIn">
@@ -184,10 +211,70 @@ export const PayslipPrintView = forwardRef<HTMLDivElement, PayslipPrintViewProps
             </tr>
             <tr>
               <td className="border border-gray-400 p-3">
-                <span className="font-semibold block">Upah Lembur</span>
-                {overtimeNotes && <div className="text-sm text-gray-600 italic mt-1 whitespace-pre-wrap leading-tight">{overtimeNotes}</div>}
+                <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                  <span className="font-semibold block">Upah Lembur</span>
+                  {hasMultipleSessions && (
+                    <span className="text-[11px] text-gray-500 font-medium">
+                      Periode: {formatSessionDate(sortedSessions[0].date)} s/d {formatSessionDate(sortedSessions[sortedSessions.length - 1].date)} ({sortedSessions.length} Sesi)
+                    </span>
+                  )}
+                </div>
+
+                {sortedSessions.length > 0 ? (
+                  <div className="ml-2 mt-2 space-y-1.5">
+                    {sortedSessions.map((ot, idx) => {
+                      const mins = ot.durationMinutes || 0;
+                      const h = Math.floor(mins / 60);
+                      const m = mins % 60;
+                      const durationStr = ot.hoursFormatted || `${h} Jam ${m > 0 ? `${m} Menit` : ""}`.trim();
+
+                      return (
+                        <div key={idx} className="flex justify-between items-center text-xs text-gray-700 pr-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-medium">• {formatSessionDate(ot.date)}:</span>
+                            <span className="text-gray-600 font-mono text-[11px] bg-gray-100 px-1 py-0.5 rounded">
+                              {durationStr}
+                            </span>
+                            {ot.dayType === "weekend" && (
+                              <span className="text-[9px] text-purple-700 bg-purple-50 px-1 rounded border border-purple-200 font-medium">
+                                Weekend
+                              </span>
+                            )}
+                            {ot.dayType === "holiday" && (
+                              <span className="text-[9px] text-rose-700 bg-rose-50 px-1 rounded border border-rose-200 font-medium">
+                                Libur
+                              </span>
+                            )}
+                          </div>
+                          <span className="font-mono text-gray-800 font-medium">
+                            {formatCurrency(ot.pay || 0)}
+                          </span>
+                        </div>
+                      );
+                    })}
+
+                    {/* Total Duration Footer */}
+                    <div className="pt-1 mt-1 border-t border-dashed border-gray-300 flex justify-between items-center text-[11px] text-gray-500">
+                      <span>Total Durasi: {totalOtHoursStr}</span>
+                    </div>
+
+                    {overtimeNotes && (
+                      <div className="text-[11px] text-gray-500 italic mt-1 whitespace-pre-wrap leading-tight">
+                        Catatan: {overtimeNotes}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  overtimeNotes && (
+                    <div className="text-sm text-gray-600 italic mt-1 whitespace-pre-wrap leading-tight">
+                      {overtimeNotes}
+                    </div>
+                  )
+                )}
               </td>
-              <td className="border border-gray-400 p-3 text-right">{formatCurrency(overtimePay)}</td>
+              <td className="border border-gray-400 p-3 text-right font-semibold">
+                {formatCurrency(overtimePay)}
+              </td>
             </tr>
             {/* Multi-addition handling */}
             {additionsDetail && additionsDetail.length > 0 && (

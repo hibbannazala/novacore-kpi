@@ -193,6 +193,7 @@ export default function MyPayrollPage() {
                   performanceBonus={previewPayroll.performance_bonus}
                   overtimePay={previewPayroll.overtime_pay}
                   overtimeNotes={previewPayroll.overtime_notes}
+                  overtimeDetail={previewPayroll.overtime_detail}
                   additionsDetail={previewPayroll.additions_detail}
                   deductions={previewPayroll.deductions}
                   deductionNotes={previewPayroll.deduction_notes}

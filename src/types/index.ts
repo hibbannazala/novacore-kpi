@@ -395,10 +395,24 @@ export interface Payroll {
   deductions_detail?: Array<{name: string, amount: number, note?: string}> | null;
   additions_detail?: Array<{name: string, amount: number, note?: string}> | null;
   overtime_notes?: string | null;
+  overtime_detail?: PayrollOvertimeDetailItem[] | null;
   system_overtime_minutes?: number | null;
   payroll_overtime_minutes?: number | null;
   overtime_rate?: number | null;
   system_overtime_days?: number | null;
+}
+
+export interface PayrollOvertimeDetailItem {
+  id?: string;
+  date: string; // YYYY-MM-DD
+  durationMinutes: number;
+  hoursFormatted?: string;
+  pay: number;
+  dayType?: "weekday" | "weekend" | "holiday";
+  maxPayCap?: number | null;
+  isCapped?: boolean;
+  tasks?: Array<{ id: string; task: string; target?: string }>;
+  note?: string;
 }
 
 export interface DeductionType {

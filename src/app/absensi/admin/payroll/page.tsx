@@ -6,14 +6,30 @@ import { format, subMonths, addMonths } from "date-fns";
 import { id as localeId } from "date-fns/locale";
 import {
   ChevronLeft, ChevronRight, Save, Send, Loader2,
-  FileText, CheckCircle2, Eye, Trash2, Search, X, Filter, ChevronDown, User as UserIcon, Plus
+  FileText, CheckCircle2, Eye, Trash2, Search, X, Filter, ChevronDown, User as UserIcon, Plus,
+  Pencil, CalendarDays, RefreshCw
 } from "lucide-react";
 import { toast } from "sonner";
 import { createPortal } from "react-dom";
-import type { Payroll, PayrollStaffSetting, DeductionType, AdditionType } from "@/types";
+import OvertimeFinalizeModal from "@/components/absensi/OvertimeFinalizeModal";
+import type { OvertimeRequest } from "@/types/absensi";
+import { rowToOvertimeRequest } from "@/types/absensi";
+import type { Payroll, PayrollStaffSetting, DeductionType, AdditionType, PayrollOvertimeDetailItem } from "@/types";
 
 const MONTH_NAMES = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 const COMPANY_COLORS: Record<string, string> = { TNT: "#00897B", Hype: "#E53935", Nova: "#1E88E5" };
+
+export interface OvertimeSessionItem {
+  raw: OvertimeRequest;
+  id: string;
+  date: string;
+  durationMinutes: number;
+  hoursFormatted: string;
+  pay: number;
+  dayType?: "weekday" | "weekend" | "holiday";
+  isCapped?: boolean;
+  maxPayCap?: number | null;
+}
 
 interface StaffRow {
   id: string;
@@ -22,6 +38,8 @@ interface StaffRow {
   departmentName: string | null;
   setting: PayrollStaffSetting | null;
   payroll: Partial<Payroll> & { _dirty?: boolean };
+  overtimeSessions?: OvertimeSessionItem[];
+  overtimeDateRange?: string | null;
 }
 
 export default function HrPayrollPage() {
@@ -43,6 +61,10 @@ export default function HrPayrollPage() {
   const [additionTypes, setAdditionTypes] = useState<AdditionType[]>([]);
   const [addingAdditionFor, setAddingAdditionFor] = useState<string | null>(null);
   const [newCustomAddition, setNewCustomAddition] = useState("");
+  const [editingOvertimeReq, setEditingOvertimeReq] = useState<{
+    request: OvertimeRequest;
+    baseSalary: number;
+  } | null>(null);
 
   const month = currentDate.getMonth() + 1;
   const year = currentDate.getFullYear();
@@ -60,6 +82,22 @@ export default function HrPayrollPage() {
     }
   }, [rows, month, year]);
 
+  async function upsertPayroll(payload: any, id?: string) {
+    let res = id
+      ? await supabase.from("payrolls").update(payload).eq("id", id)
+      : await supabase.from("payrolls").insert(payload);
+
+    if (res.error && (res.error.message?.includes("overtime_detail") || res.error.code === "PGRST204")) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.overtime_detail;
+      res = id
+        ? await supabase.from("payrolls").update(fallbackPayload).eq("id", id)
+        : await supabase.from("payrolls").insert(fallbackPayload);
+    }
+    if (res.error) throw res.error;
+    return res;
+  }
+
   // Autosave to DB after 60s of inactivity
   useEffect(() => {
     const dirtyRows = rows.filter(r => r.payroll._dirty);
@@ -76,6 +114,7 @@ export default function HrPayrollPage() {
           performance_bonus: row.payroll.performance_bonus || 0,
           overtime_pay: row.payroll.overtime_pay || 0,
           overtime_notes: row.payroll.overtime_notes || "",
+          overtime_detail: row.payroll.overtime_detail || [],
           additions_detail: row.payroll.additions_detail || [],
           deductions: row.payroll.deductions || 0,
           deductions_detail: row.payroll.deductions_detail || [],
@@ -83,11 +122,7 @@ export default function HrPayrollPage() {
           status: "draft",
         };
         
-        if (row.payroll.id) {
-          return supabase.from("payrolls").update(payload).eq("id", row.payroll.id);
-        } else {
-          return supabase.from("payrolls").insert(payload);
-        }
+        return upsertPayroll(payload, row.payroll.id);
       });
       
       try {
@@ -124,29 +159,95 @@ export default function HrPayrollPage() {
       supabase.from("payroll_deduction_types").select("*").order("name"),
       supabase.from("payroll_addition_types").select("*").order("name"),
       supabase.from("overtime_requests" as any)
-        .select("user_id, final_duration_minutes, total_overtime_pay, overtime_date")
+        .select(`
+          *,
+          users (
+            id,
+            name,
+            position,
+            departments ( name )
+          )
+        `)
         .eq("status", "finalized")
         .gte("overtime_date", startDate)
         .lte("overtime_date", endDate)
+        .order("overtime_date", { ascending: true })
     ]);
 
     const users = (usersRes.data ?? []) as any[];
     const settings = (settingsRes.data ?? []) as PayrollStaffSetting[];
     const payrolls = (payrollsRes.data ?? []) as Payroll[];
     const overtimesData = (overtimeRes.data ?? []) as any[];
+    const parsedOvertimes: OvertimeRequest[] = overtimesData.map(rowToOvertimeRequest);
+
     setDeductionTypes((deductionTypesRes.data ?? []) as DeductionType[]);
     setAdditionTypes((additionTypesRes.data ?? []) as AdditionType[]);
     
-    // Group monthly overtime stats by user_id
-    const userOvertimeStats: Record<string, { minutes: number; pay: number; days: number }> = {};
-    overtimesData.forEach((ot) => {
-      const uId = ot.user_id;
-      if (!userOvertimeStats[uId]) {
-        userOvertimeStats[uId] = { minutes: 0, pay: 0, days: 0 };
+    // Group monthly overtime sessions by user_id
+    const userOvertimeMap: Record<string, {
+      minutes: number;
+      pay: number;
+      days: number;
+      sessions: OvertimeSessionItem[];
+      dateRange: string | null;
+      defaultNotes: string;
+    }> = {};
+
+    users.forEach((u: any) => {
+      const uOts = parsedOvertimes
+        .filter((o) => o.userId === u.id)
+        .sort((a, b) => a.overtimeDate.localeCompare(b.overtimeDate));
+
+      const totalMins = uOts.reduce((sum, o) => sum + (o.finalDurationMinutes || 0), 0);
+      const totalPay = uOts.reduce((sum, o) => sum + (o.totalOvertimePay || 0), 0);
+      const totalDays = uOts.length;
+
+      const sessions: OvertimeSessionItem[] = uOts.map((o) => {
+        const mins = o.finalDurationMinutes || 0;
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        const hoursFormatted = `${h} Jam ${m > 0 ? `${m} Menit` : ""}`.trim();
+        const isCapped = Boolean(o.calculationBreakdown?.isCapped);
+        const maxPayCap = o.calculationBreakdown?.maxPayCap ?? null;
+
+        return {
+          raw: o,
+          id: o.id,
+          date: o.overtimeDate,
+          durationMinutes: mins,
+          hoursFormatted,
+          pay: o.totalOvertimePay || 0,
+          dayType: o.dayType,
+          isCapped,
+          maxPayCap,
+        };
+      });
+
+      let dateRange: string | null = null;
+      if (sessions.length === 1) {
+        dateRange = format(new Date(sessions[0].date + "T00:00:00"), "dd MMM yyyy", { locale: localeId });
+      } else if (sessions.length > 1) {
+        const startStr = format(new Date(sessions[0].date + "T00:00:00"), "dd MMM yyyy", { locale: localeId });
+        const endStr = format(new Date(sessions[sessions.length - 1].date + "T00:00:00"), "dd MMM yyyy", { locale: localeId });
+        dateRange = `${startStr} s/d ${endStr}`;
       }
-      userOvertimeStats[uId].minutes += (ot.final_duration_minutes || 0);
-      userOvertimeStats[uId].pay += (ot.total_overtime_pay || 0);
-      userOvertimeStats[uId].days += 1;
+
+      let defaultNotes = "";
+      if (sessions.length === 1) {
+        defaultNotes = `Lembur 1 sesi (${dateRange}: ${sessions[0].hoursFormatted} - ${formatRp(sessions[0].pay)})`;
+      } else if (sessions.length > 1) {
+        defaultNotes = `Lembur ${sessions.length} sesi (${dateRange}):\n` +
+          sessions.map(s => `• ${format(new Date(s.date + "T00:00:00"), "dd MMM yyyy", { locale: localeId })} (${s.hoursFormatted}) = ${formatRp(s.pay)}`).join("\n");
+      }
+
+      userOvertimeMap[u.id] = {
+        minutes: totalMins,
+        pay: totalPay,
+        days: totalDays,
+        sessions,
+        dateRange,
+        defaultNotes,
+      };
     });
 
     const draftKey = `payroll_draft_${month}_${year}`;
@@ -159,10 +260,18 @@ export default function HrPayrollPage() {
     const built: StaffRow[] = users.map((u: any) => {
       const setting = settings.find((s) => s.user_id === u.id) || null;
       const existing = payrolls.find((p) => p.user_id === u.id);
-      const otStats = userOvertimeStats[u.id] || { minutes: 0, pay: 0, days: 0 };
-      const systemOvertimeMins = otStats.minutes;
-      const systemOvertimePay = otStats.pay;
-      const systemOvertimeDays = otStats.days;
+      const otInfo = userOvertimeMap[u.id] || {
+        minutes: 0,
+        pay: 0,
+        days: 0,
+        sessions: [],
+        dateRange: null,
+        defaultNotes: "",
+      };
+
+      const systemOvertimeMins = otInfo.minutes;
+      const systemOvertimePay = otInfo.pay;
+      const systemOvertimeDays = otInfo.days;
       const overtimeRate = existing?.overtime_rate ?? 25000;
       const payrollMins = existing?.payroll_overtime_minutes !== undefined && existing?.payroll_overtime_minutes !== null
         ? existing.payroll_overtime_minutes
@@ -172,6 +281,21 @@ export default function HrPayrollPage() {
       const autoCalculatedPay = systemOvertimePay > 0
         ? systemOvertimePay
         : Math.round((payrollMins / 60) * overtimeRate);
+
+      const overtimeDetailItems: PayrollOvertimeDetailItem[] = otInfo.sessions.map((s) => ({
+        id: s.id,
+        date: s.date,
+        durationMinutes: s.durationMinutes,
+        hoursFormatted: s.hoursFormatted,
+        pay: s.pay,
+        dayType: s.dayType,
+        maxPayCap: s.maxPayCap,
+        isCapped: s.isCapped,
+      }));
+
+      const finalOvertimeNotes = existing?.overtime_notes && existing.overtime_notes.trim() !== ""
+        ? existing.overtime_notes
+        : otInfo.defaultNotes;
       
       const payrollBase = {
         id: existing?.id,
@@ -183,7 +307,10 @@ export default function HrPayrollPage() {
         system_overtime_minutes: systemOvertimeMins,
         payroll_overtime_minutes: payrollMins,
         system_overtime_days: systemOvertimeDays,
-        overtime_notes: existing?.overtime_notes ?? "",
+        overtime_notes: finalOvertimeNotes,
+        overtime_detail: existing?.overtime_detail && existing.overtime_detail.length > 0
+          ? existing.overtime_detail
+          : overtimeDetailItems,
         additions_detail: existing?.additions_detail ?? [],
         deductions: existing?.deductions ?? 0,
         deductions_detail: existing?.deductions_detail ?? [],
@@ -203,6 +330,8 @@ export default function HrPayrollPage() {
         departmentName: u.departments?.name ?? null,
         setting,
         payroll,
+        overtimeSessions: otInfo.sessions,
+        overtimeDateRange: otInfo.dateRange,
       };
     });
 
@@ -233,21 +362,15 @@ export default function HrPayrollPage() {
         system_overtime_minutes: row.payroll.system_overtime_minutes || 0,
         payroll_overtime_minutes: row.payroll.payroll_overtime_minutes ?? row.payroll.system_overtime_minutes ?? 0,
         overtime_notes: row.payroll.overtime_notes || "",
+        overtime_detail: row.payroll.overtime_detail || [],
         additions_detail: row.payroll.additions_detail || [],
         deductions: row.payroll.deductions || 0,
         deductions_detail: row.payroll.deductions_detail || [],
-        
         notes: row.payroll.notes || "",
         status: "draft",
       };
 
-      if (row.payroll.id) {
-        const { error } = await supabase.from("payrolls").update(payload as any).eq("id", row.payroll.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("payrolls").insert(payload as any);
-        if (error) throw error;
-      }
+      await upsertPayroll(payload, row.payroll.id);
 
       setRows(prev => prev.map(r => r.id === row.id ? { ...r, payroll: { ...r.payroll, _dirty: false } } : r));
       toast.success(`Draf gaji ${row.name} berhasil disimpan.`, { id: tid });
@@ -273,6 +396,7 @@ export default function HrPayrollPage() {
         system_overtime_minutes: row.payroll.system_overtime_minutes || 0,
         payroll_overtime_minutes: row.payroll.payroll_overtime_minutes ?? row.payroll.system_overtime_minutes ?? 0,
         overtime_notes: row.payroll.overtime_notes || "",
+        overtime_detail: row.payroll.overtime_detail || [],
         additions_detail: row.payroll.additions_detail || [],
         deductions: row.payroll.deductions || 0,
         deductions_detail: row.payroll.deductions_detail || [],
@@ -284,13 +408,7 @@ export default function HrPayrollPage() {
         snapshot_company: row.setting?.company || null,
       };
 
-      if (row.payroll.id) {
-        const { error } = await supabase.from("payrolls").update({ ...payload, status: "published" } as any).eq("id", row.payroll.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("payrolls").insert({ ...payload, status: "published" } as any);
-        if (error) throw error;
-      }
+      await upsertPayroll(payload, row.payroll.id);
 
       toast.success(`Slip gaji ${row.name} berhasil dikirim!`, { id: tid });
       fetchData();
@@ -467,7 +585,7 @@ export default function HrPayrollPage() {
                           <label className="text-[10px] font-black uppercase text-amber-700 tracking-widest flex items-center gap-1.5 flex-wrap">
                             <span>Manajemen Upah Lembur</span>
                             <span className="text-[9px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md font-bold">
-                              Sistem: {row.payroll.system_overtime_days || 0} Hari • {Math.floor((row.payroll.system_overtime_minutes || 0) / 60)}j {(row.payroll.system_overtime_minutes || 0) % 60}m
+                              Sistem: {row.overtimeSessions?.length || 0} Sesi ({row.payroll.system_overtime_days || 0} Hari) • {Math.floor((row.payroll.system_overtime_minutes || 0) / 60)}j {(row.payroll.system_overtime_minutes || 0) % 60}m
                             </span>
                           </label>
                           <div className="flex items-center gap-3">
@@ -477,13 +595,118 @@ export default function HrPayrollPage() {
                               rel="noreferrer"
                               className="text-[10px] font-black uppercase tracking-wider text-amber-700 hover:text-amber-900 flex items-center gap-1 hover:underline"
                             >
-                              Kelola Sesi Lembur ↗
+                              Menu Lembur Lengkap ↗
                             </a>
                             <span className="text-[10px] font-black text-amber-700">
                               Total: {formatRp(row.payroll.overtime_pay || 0)}
                             </span>
                           </div>
                         </div>
+
+                        {/* Rincian Sesi Lembur Sah (Jika Ada) */}
+                        {row.overtimeSessions && row.overtimeSessions.length > 0 ? (
+                          <div className="bg-white/85 dark:bg-slate-900/80 rounded-xl p-3 border border-amber-200/70 space-y-2.5 shadow-xs">
+                            <div className="flex items-center justify-between text-xs border-b border-amber-100 pb-2 flex-wrap gap-2">
+                              <span className="font-bold text-amber-950 dark:text-amber-200 flex items-center gap-1.5">
+                                <CalendarDays size={13} className="text-amber-600 shrink-0" />
+                                <span>Periode: <strong>{row.overtimeDateRange || "-"}</strong> ({row.overtimeSessions.length} Sesi Sah)</span>
+                              </span>
+                              {!isPublished && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const sessions = row.overtimeSessions || [];
+                                    let generated = "";
+                                    if (sessions.length === 1) {
+                                      generated = `Lembur 1 sesi (${row.overtimeDateRange}: ${sessions[0].hoursFormatted} - ${formatRp(sessions[0].pay)})`;
+                                    } else if (sessions.length > 1) {
+                                      generated = `Lembur ${sessions.length} sesi (${row.overtimeDateRange}):\n` +
+                                        sessions.map(s => `• ${format(new Date(s.date + "T00:00:00"), "dd MMM yyyy", { locale: localeId })} (${s.hoursFormatted}) = ${formatRp(s.pay)}`).join("\n");
+                                    }
+                                    updateField(row.id, "overtime_notes", generated);
+                                    toast.success("Catatan slip gaji disinkronkan ulang dari rincian sesi!");
+                                  }}
+                                  className="text-[9.5px] font-black uppercase tracking-wider text-amber-800 hover:text-amber-950 hover:underline flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 transition-colors"
+                                  title="Sinkronkan format catatan slip gaji dengan rincian sesi di atas"
+                                >
+                                  <RefreshCw size={10} />
+                                  Sinkronkan Catatan Slip
+                                </button>
+                              )}
+                            </div>
+
+                            {/* List of Sesi */}
+                            <div className="space-y-1.5">
+                              {row.overtimeSessions.map((session, sIdx) => (
+                                <div
+                                  key={session.id || sIdx}
+                                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-amber-50/40 dark:bg-amber-950/20 p-2 rounded-lg border border-amber-100/70"
+                                >
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-bold text-slate-800 dark:text-slate-200 font-mono">
+                                      {format(new Date(session.date + "T00:00:00"), "dd MMM yyyy", { locale: localeId })}
+                                    </span>
+                                    {session.dayType === "weekend" ? (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-bold border border-purple-200">
+                                        Weekend
+                                      </span>
+                                    ) : session.dayType === "holiday" ? (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-bold border border-rose-200">
+                                        Libur
+                                      </span>
+                                    ) : (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-bold border border-amber-200">
+                                        Weekday
+                                      </span>
+                                    )}
+                                    <span className="text-slate-600 dark:text-slate-300 font-medium">
+                                      Durasi: <strong>{session.hoursFormatted}</strong>
+                                    </span>
+                                    <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                                      {formatRp(session.pay)}
+                                    </span>
+                                    {session.isCapped && (
+                                      <span
+                                        className="text-[8.5px] px-1.5 py-0.5 rounded bg-amber-600 text-white font-bold"
+                                        title={`Dibatasi plafon maksimal Rp ${formatRp(session.maxPayCap || 0)}`}
+                                      >
+                                        Plafon: {formatRp(session.maxPayCap || 0)}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {!isPublished && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setEditingOvertimeReq({
+                                          request: session.raw,
+                                          baseSalary: row.payroll.base_salary || row.setting?.default_base_salary || 0,
+                                        })
+                                      }
+                                      className="self-end sm:self-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-amber-200/90 hover:bg-amber-300 text-amber-950 flex items-center gap-1 transition-all active:scale-95 shrink-0 shadow-xs border border-amber-300"
+                                      title="Edit jam dan nominal sesi lembur ini langsung tanpa berpindah menu"
+                                    >
+                                      <Pencil size={11} />
+                                      <span>Edit Sesi</span>
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="pt-1.5 border-t border-amber-100 flex justify-between items-center text-[10px] text-amber-900 dark:text-amber-200 font-bold">
+                              <span>Total Upah dari Akumulasi Sesi:</span>
+                              <span className="font-mono text-xs text-amber-900 dark:text-amber-100 font-black">
+                                {formatRp((row.overtimeSessions || []).reduce((sum, s) => sum + s.pay, 0))}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-3 rounded-xl bg-white/60 dark:bg-slate-900/50 border border-amber-100 text-xs text-slate-500 italic">
+                            Belum ada sesi lembur yang disahkan pada bulan ini. Anda dapat menginput nominal manual di bawah jika diperlukan.
+                          </div>
+                        )}
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div className="space-y-1">
@@ -507,12 +730,12 @@ export default function HrPayrollPage() {
                             <label className="text-[9px] font-black uppercase text-amber-900 tracking-widest">
                               Catatan Lembur di Slip Gaji
                             </label>
-                            <input
-                              type="text"
+                            <textarea
+                              rows={2}
                               disabled={isPublished}
                               value={row.payroll.overtime_notes || ""}
                               onChange={(e) => updateField(row.id, "overtime_notes", e.target.value)}
-                              className="ab-input text-xs w-full py-2 bg-white"
+                              className="ab-input text-xs w-full py-1.5 px-2.5 bg-white resize-none rounded-xl"
                               placeholder="Contoh: Lembur project 4 sesi di bulan ini..."
                             />
                           </div>
@@ -993,13 +1216,44 @@ export default function HrPayrollPage() {
                       { label: "Gaji Pokok", val: previewRow.payroll.base_salary || 0 },
                       { label: "Allowance", val: previewRow.payroll.mobility_allowance || 0 },
                       { label: "Bonus Performa", val: previewRow.payroll.performance_bonus || 0 },
-                      { label: "Upah Lembur" + (previewRow.payroll.overtime_notes ? `\n(${previewRow.payroll.overtime_notes})` : ""), val: previewRow.payroll.overtime_pay || 0 },
                     ].map((item) => (
                       <tr key={item.label} className="border-b border-slate-100">
                         <td className="py-2 whitespace-pre-wrap leading-tight">{item.label}</td>
                         <td className="py-2 text-right font-mono font-bold">{formatRp(item.val)}</td>
                       </tr>
                     ))}
+
+                    {/* Upah Lembur with Session Breakdown in Preview */}
+                    <tr className="border-b border-slate-100">
+                      <td className="py-2 leading-tight">
+                        <div className="flex items-baseline justify-between pr-2">
+                          <span className="font-semibold block">Upah Lembur</span>
+                          {previewRow.payroll.overtime_detail && previewRow.payroll.overtime_detail.length > 1 && (
+                            <span className="text-[10px] text-slate-500">
+                              ({previewRow.payroll.overtime_detail.length} Sesi Sah)
+                            </span>
+                          )}
+                        </div>
+                        {previewRow.payroll.overtime_detail && previewRow.payroll.overtime_detail.length > 0 ? (
+                          <div className="ml-2 mt-1 space-y-1">
+                            {previewRow.payroll.overtime_detail.map((s, idx) => (
+                              <div key={idx} className="flex justify-between text-xs text-slate-600 pr-2">
+                                <span>• {s.date} ({s.hoursFormatted || `${Math.floor(s.durationMinutes / 60)}j`}):</span>
+                                <span className="font-mono">{formatRp(s.pay)}</span>
+                              </div>
+                            ))}
+                            {previewRow.payroll.overtime_notes && (
+                              <div className="text-[10px] text-slate-500 italic mt-1 whitespace-pre-wrap">{previewRow.payroll.overtime_notes}</div>
+                            )}
+                          </div>
+                        ) : (
+                          previewRow.payroll.overtime_notes && (
+                            <div className="text-xs text-slate-500 italic ml-2 mt-0.5 whitespace-pre-wrap">{previewRow.payroll.overtime_notes}</div>
+                          )
+                        )}
+                      </td>
+                      <td className="py-2 text-right font-mono font-bold">{formatRp(previewRow.payroll.overtime_pay || 0)}</td>
+                    </tr>
                     {previewRow.payroll.additions_detail && previewRow.payroll.additions_detail.length > 0 && (
                       <tr className="border-b border-slate-100">
                         <td className="py-2 leading-tight">
@@ -1057,6 +1311,20 @@ export default function HrPayrollPage() {
           </div>
         </div>,
         document.body
+      )}
+
+      {/* Direct Modal to Edit Overtime Session from Payroll */}
+      {editingOvertimeReq && (
+        <OvertimeFinalizeModal
+          isOpen={!!editingOvertimeReq}
+          onClose={() => setEditingOvertimeReq(null)}
+          overtime={editingOvertimeReq.request}
+          baseSalary={editingOvertimeReq.baseSalary}
+          onSuccess={() => {
+            fetchData();
+            setEditingOvertimeReq(null);
+          }}
+        />
       )}
     </div>
   );

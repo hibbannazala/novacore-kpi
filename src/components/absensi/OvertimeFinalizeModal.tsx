@@ -24,6 +24,7 @@ import {
   DollarSign,
   User,
   RefreshCw,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -56,6 +57,7 @@ export default function OvertimeFinalizeModal({
   const [firstHourPay, setFirstHourPay] = useState(0);
   const [subsequentHourRate, setSubsequentHourRate] = useState(0);
   const [totalPayOverride, setTotalPayOverride] = useState<number | null>(null);
+  const [maxPayCap, setMaxPayCap] = useState<number | null>(null);
   const [finalNotes, setFinalNotes] = useState("");
 
   useEffect(() => {
@@ -116,6 +118,9 @@ export default function OvertimeFinalizeModal({
       setTotalPayOverride(null);
     }
 
+    const savedCap = overtime.calculationBreakdown?.maxPayCap ?? null;
+    setMaxPayCap(typeof savedCap === "number" && savedCap > 0 ? savedCap : null);
+
     setFinalNotes(overtime.finalNotes || "");
   }, [isOpen, overtime, baseSalary]);
 
@@ -141,8 +146,14 @@ export default function OvertimeFinalizeModal({
 
   // If total duration is 0, total is 0. If duration is less than 1 hour, first hour pro-rated or full
   const activeFirstHourPay = totalDurationMinutes > 0 ? firstHourPay : 0;
-  const calculatedTotalPay = activeFirstHourPay + subsequentPayCalculated;
-  const finalTotalPay = totalPayOverride !== null ? totalPayOverride : calculatedTotalPay;
+  const uncappedCalculatedPay = activeFirstHourPay + subsequentPayCalculated;
+
+  // Plafon / Budget Cap logic
+  const isCapActive = maxPayCap !== null && maxPayCap > 0;
+  const isOverCap = isCapActive && uncappedCalculatedPay > maxPayCap;
+  const cappedCalculatedPay = isOverCap ? maxPayCap : uncappedCalculatedPay;
+
+  const finalTotalPay = totalPayOverride !== null ? totalPayOverride : cappedCalculatedPay;
 
   // Working days context
   const [yStr, mStr] = (overtime.overtimeDate || "").split("-");
@@ -159,6 +170,7 @@ export default function OvertimeFinalizeModal({
     setFirstHourPay(standardCalculated.firstHourRate);
     setSubsequentHourRate(standardCalculated.subsequentHourRate);
     setTotalPayOverride(null);
+    setMaxPayCap(null);
     toast.success("Berhasil menghitung ulang tarif berdasarkan Gaji Pokok!");
   };
 
@@ -199,6 +211,10 @@ export default function OvertimeFinalizeModal({
           subsequentHours: subsequentHoursDecimal,
           subsequentHourRate,
           subsequentPay: subsequentPayCalculated,
+          uncappedTotalPay: uncappedCalculatedPay,
+          maxPayCap: isCapActive ? maxPayCap : null,
+          isCapped: isOverCap,
+          budgetSaved: isOverCap ? uncappedCalculatedPay - maxPayCap : 0,
           totalOvertimePay: finalTotalPay,
           isOverride: totalPayOverride !== null,
         },
@@ -532,6 +548,8 @@ export default function OvertimeFinalizeModal({
               <p className="text-[9px] font-bold text-[var(--ab-text-dim)]">
                 {totalPayOverride !== null
                   ? "✏️ Anda meng-override total secara manual."
+                  : isOverCap
+                  ? `⚠️ Dibatasi oleh Plafon Maksimal (${formatRp(maxPayCap)}) dari hitungan normal (${formatRp(uncappedCalculatedPay)})`
                   : `Total = 1 Jam Pertama (${formatRp(activeFirstHourPay)}) + Sisa Jam (${formatRp(subsequentPayCalculated)})`}
               </p>
               {/* Indicator if final total differs from standard salary formula */}
@@ -551,6 +569,62 @@ export default function OvertimeFinalizeModal({
                         (Total {formatRp(finalTotalPay - standardTotalPay)} lebih tinggi dari standar)
                       </span>
                     </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Plafon Maksimal Lembur Sesi Ini (Budget Cap) */}
+            <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl space-y-1.5">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                  <ShieldAlert size={13} className="text-amber-500" />
+                  Batas Maksimal Upah Sesi Ini (Plafon / Budget Cap)
+                </span>
+                {maxPayCap !== null && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMaxPayCap(null);
+                      setTotalPayOverride(null);
+                    }}
+                    className="text-[9px] font-bold text-amber-600 hover:underline"
+                  >
+                    Hapus Plafon
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-[var(--ab-text-dim)]">Rp</span>
+                <input
+                  type="number"
+                  value={maxPayCap ?? ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setMaxPayCap(val === "" ? null : Math.max(0, parseInt(val) || 0));
+                    setTotalPayOverride(null);
+                  }}
+                  className="ab-input text-xs font-mono font-bold py-1.5 px-3 w-full bg-[var(--ab-bg-surface)]"
+                  placeholder="Opsional (contoh: 100000 agar biaya operasional kantor tidak membengkak)"
+                />
+              </div>
+              <p className="text-[9px] text-[var(--ab-text-dim)]">
+                Kebijakan operasional: batasi nominal maksimal sesi ini jika kalkulasi jam kerja melebihi alokasi anggaran kantor.
+              </p>
+              {/* Live Feedback Indicator */}
+              {isCapActive && (
+                <div className="pt-0.5 text-[10px] font-bold">
+                  {isOverCap ? (
+                    <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300 bg-amber-500/15 p-1.5 rounded-lg border border-amber-500/30">
+                      <span>⚠️ <strong>Plafon Aktif:</strong> Upah di-cap maksimal {formatRp(maxPayCap)}</span>
+                      <span className="text-[8.5px] px-1.5 py-0.5 rounded bg-amber-600 text-white ml-auto">
+                        Hemat {formatRp(uncappedCalculatedPay - maxPayCap)}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                      <span>✓ Nominal hitungan ({formatRp(uncappedCalculatedPay)}) masih di bawah batas plafon maksimal.</span>
+                    </div>
                   )}
                 </div>
               )}
