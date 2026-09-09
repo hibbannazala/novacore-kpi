@@ -210,54 +210,59 @@ export const PayslipPrintView = forwardRef<HTMLDivElement, PayslipPrintViewProps
               <td className="border border-gray-400 p-3 text-right">{formatCurrency(performanceBonus)}</td>
             </tr>
             <tr>
-              <td className="border border-gray-400 p-3">
-                <div className="flex items-baseline justify-between gap-2 flex-wrap">
-                  <span className="font-semibold block">Upah Lembur</span>
-                  {hasMultipleSessions && (
-                    <span className="text-[11px] text-gray-500 font-medium">
-                      Periode: {formatSessionDate(sortedSessions[0].date)} s/d {formatSessionDate(sortedSessions[sortedSessions.length - 1].date)} ({sortedSessions.length} Sesi)
-                    </span>
-                  )}
-                </div>
-
+              <td colSpan={2} className="border border-gray-400 p-3">
+                <span className="font-semibold block mb-2">Upah Lembur</span>
                 {sortedSessions.length > 0 ? (
-                  <div className="ml-2 mt-2 space-y-1.5">
-                    {sortedSessions.map((ot, idx) => {
-                      const mins = ot.durationMinutes || 0;
-                      const h = Math.floor(mins / 60);
-                      const m = mins % 60;
-                      const durationStr = ot.hoursFormatted || `${h} Jam ${m > 0 ? `${m} Menit` : ""}`.trim();
+                  <div className="space-y-2">
+                    <table className="w-full text-xs border-collapse border border-gray-300">
+                      <thead>
+                        <tr className="bg-gray-100 text-gray-800">
+                          <th className="border border-gray-300 px-2 py-1.5 text-left font-bold">Tanggal Lembur</th>
+                          <th className="border border-gray-300 px-2 py-1.5 text-center font-bold">Total Jam Lembur</th>
+                          <th className="border border-gray-300 px-2 py-1.5 text-right font-bold">Nominal Total Lembur</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedSessions.map((ot, idx) => {
+                          const mins = ot.durationMinutes || 0;
+                          const h = Math.floor(mins / 60);
+                          const m = mins % 60;
+                          const durationStr = ot.hoursFormatted || `${h} Jam ${m > 0 ? `${m} Menit` : ""}`.trim();
 
-                      return (
-                        <div key={idx} className="flex justify-between items-center text-xs text-gray-700 pr-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-medium">• {formatSessionDate(ot.date)}:</span>
-                            <span className="text-gray-600 font-mono text-[11px] bg-gray-100 px-1 py-0.5 rounded">
-                              {durationStr}
-                            </span>
-                            {ot.dayType === "weekend" && (
-                              <span className="text-[9px] text-purple-700 bg-purple-50 px-1 rounded border border-purple-200 font-medium">
-                                Weekend
-                              </span>
-                            )}
-                            {ot.dayType === "holiday" && (
-                              <span className="text-[9px] text-rose-700 bg-rose-50 px-1 rounded border border-rose-200 font-medium">
-                                Libur
-                              </span>
-                            )}
-                          </div>
-                          <span className="font-mono text-gray-800 font-medium">
-                            {formatCurrency(ot.pay || 0)}
-                          </span>
-                        </div>
-                      );
-                    })}
-
-                    {/* Total Duration Footer */}
-                    <div className="pt-1 mt-1 border-t border-dashed border-gray-300 flex justify-between items-center text-[11px] text-gray-500">
-                      <span>Total Durasi: {totalOtHoursStr}</span>
-                    </div>
-
+                          return (
+                            <tr key={idx}>
+                              <td className="border border-gray-300 px-2 py-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span>{formatSessionDate(ot.date)}</span>
+                                  {ot.dayType === "weekend" && (
+                                    <span className="text-[9px] text-purple-700 bg-purple-50 px-1 rounded border border-purple-200 font-medium">
+                                      Weekend
+                                    </span>
+                                  )}
+                                  {ot.dayType === "holiday" && (
+                                    <span className="text-[9px] text-rose-700 bg-rose-50 px-1 rounded border border-rose-200 font-medium">
+                                      Libur
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="border border-gray-300 px-2 py-1.5 text-center font-mono">{durationStr}</td>
+                              <td className="border border-gray-300 px-2 py-1.5 text-right font-mono font-medium">{formatCurrency(ot.pay || 0)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-gray-100 font-bold">
+                          <td colSpan={2} className="border border-gray-300 px-2 py-1.5 text-right font-bold text-gray-800">
+                            Total Upah Lembur
+                          </td>
+                          <td className="border border-gray-300 px-2 py-1.5 text-right font-mono font-bold text-gray-900">
+                            {formatCurrency(overtimePay)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
                     {overtimeNotes && (
                       <div className="text-[11px] text-gray-500 italic mt-1 whitespace-pre-wrap leading-tight">
                         Catatan: {overtimeNotes}
@@ -265,15 +270,17 @@ export const PayslipPrintView = forwardRef<HTMLDivElement, PayslipPrintViewProps
                     )}
                   </div>
                 ) : (
-                  overtimeNotes && (
-                    <div className="text-sm text-gray-600 italic mt-1 whitespace-pre-wrap leading-tight">
-                      {overtimeNotes}
+                  <div className="flex justify-between items-center">
+                    <div>
+                      {overtimeNotes && (
+                        <div className="text-xs text-gray-600 italic whitespace-pre-wrap leading-tight">
+                          Catatan: {overtimeNotes}
+                        </div>
+                      )}
                     </div>
-                  )
+                    <span className="font-semibold text-right">{formatCurrency(overtimePay)}</span>
+                  </div>
                 )}
-              </td>
-              <td className="border border-gray-400 p-3 text-right font-semibold">
-                {formatCurrency(overtimePay)}
               </td>
             </tr>
             {/* Multi-addition handling */}

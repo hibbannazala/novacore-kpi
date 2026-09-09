@@ -1274,36 +1274,76 @@ export default function HrPayrollPage() {
                       </tr>
                     ))}
 
-                    {/* Upah Lembur with Session Breakdown in Preview */}
+                    {/* Upah Lembur with Session Table in Preview */}
                     <tr className="border-b border-slate-100">
-                      <td className="py-2 leading-tight">
-                        <div className="flex items-baseline justify-between pr-2">
-                          <span className="font-semibold block">Upah Lembur</span>
-                          {previewRow.payroll.overtime_detail && previewRow.payroll.overtime_detail.length > 1 && (
-                            <span className="text-[10px] text-slate-500">
-                              ({previewRow.payroll.overtime_detail.length} Sesi Sah)
-                            </span>
-                          )}
-                        </div>
+                      <td colSpan={2} className="py-2 leading-tight">
+                        <span className="font-semibold block mb-1.5">Upah Lembur</span>
                         {previewRow.payroll.overtime_detail && previewRow.payroll.overtime_detail.length > 0 ? (
-                          <div className="ml-2 mt-1 space-y-1">
-                            {previewRow.payroll.overtime_detail.map((s, idx) => (
-                              <div key={idx} className="flex justify-between text-xs text-slate-600 pr-2">
-                                <span>• {s.date} ({s.hoursFormatted || `${Math.floor(s.durationMinutes / 60)}j`}):</span>
-                                <span className="font-mono">{formatRp(s.pay)}</span>
-                              </div>
-                            ))}
+                          <div className="space-y-1.5">
+                            <table className="w-full text-xs border-collapse border border-slate-200">
+                              <thead>
+                                <tr className="bg-slate-100 text-slate-700">
+                                  <th className="border border-slate-200 px-2 py-1 text-left font-bold">Tanggal Lembur</th>
+                                  <th className="border border-slate-200 px-2 py-1 text-center font-bold">Total Jam Lembur</th>
+                                  <th className="border border-slate-200 px-2 py-1 text-right font-bold">Nominal Total Lembur</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {previewRow.payroll.overtime_detail.map((s, idx) => {
+                                  const mins = s.durationMinutes || 0;
+                                  const h = Math.floor(mins / 60);
+                                  const m = mins % 60;
+                                  const durationStr = s.hoursFormatted || `${h} Jam ${m > 0 ? `${m} Menit` : ""}`.trim();
+
+                                  return (
+                                    <tr key={idx}>
+                                      <td className="border border-slate-200 px-2 py-1">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span>{format(new Date(s.date + "T00:00:00"), "dd MMM yyyy", { locale: localeId })}</span>
+                                          {s.dayType === "weekend" && (
+                                            <span className="text-[9px] text-purple-700 bg-purple-50 px-1 rounded border border-purple-200 font-medium">
+                                              Weekend
+                                            </span>
+                                          )}
+                                          {s.dayType === "holiday" && (
+                                            <span className="text-[9px] text-rose-700 bg-rose-50 px-1 rounded border border-rose-200 font-medium">
+                                              Libur
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="border border-slate-200 px-2 py-1 text-center font-mono">{durationStr}</td>
+                                      <td className="border border-slate-200 px-2 py-1 text-right font-mono font-medium">{formatRp(s.pay || 0)}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-slate-100 font-bold">
+                                  <td colSpan={2} className="border border-slate-200 px-2 py-1 text-right font-bold text-slate-800">
+                                    Total Upah Lembur
+                                  </td>
+                                  <td className="border border-slate-200 px-2 py-1 text-right font-mono font-bold text-slate-900">
+                                    {formatRp(previewRow.payroll.overtime_pay || 0)}
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
                             {previewRow.payroll.overtime_notes && (
                               <div className="text-[10px] text-slate-500 italic mt-1 whitespace-pre-wrap">{previewRow.payroll.overtime_notes}</div>
                             )}
                           </div>
                         ) : (
-                          previewRow.payroll.overtime_notes && (
-                            <div className="text-xs text-slate-500 italic ml-2 mt-0.5 whitespace-pre-wrap">{previewRow.payroll.overtime_notes}</div>
-                          )
+                          <div className="flex justify-between items-center">
+                            <div>
+                              {previewRow.payroll.overtime_notes && (
+                                <div className="text-xs text-slate-500 italic whitespace-pre-wrap">{previewRow.payroll.overtime_notes}</div>
+                              )}
+                            </div>
+                            <span className="font-bold font-mono">{formatRp(previewRow.payroll.overtime_pay || 0)}</span>
+                          </div>
                         )}
                       </td>
-                      <td className="py-2 text-right font-mono font-bold">{formatRp(previewRow.payroll.overtime_pay || 0)}</td>
                     </tr>
                     {previewRow.payroll.additions_detail && previewRow.payroll.additions_detail.length > 0 && (
                       <tr className="border-b border-slate-100">
