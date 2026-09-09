@@ -232,6 +232,17 @@ export interface OvertimeRequest {
   finalizedDate: string | null;
   finalNotes: string | null;
 
+  // Pay Calculation & Rates
+  isHoliday?: boolean;
+  dayType?: "weekday" | "weekend" | "holiday";
+  hourlyBaseRate?: number | null;
+  firstHourRate?: number | null;
+  firstHourPay?: number | null;
+  subsequentHourRate?: number | null;
+  subsequentHourPay?: number | null;
+  totalOvertimePay?: number | null;
+  calculationBreakdown?: Record<string, any> | null;
+
   createdAt: string;
   updatedAt: string;
 
@@ -273,6 +284,15 @@ export function rowToOvertimeRequest(row: Record<string, unknown>): OvertimeRequ
     finalizedBy:              row.finalized_by as string | null,
     finalizedDate:            row.finalized_date as string | null,
     finalNotes:               row.final_notes as string | null,
+    isHoliday:                (row.is_holiday as boolean) ?? false,
+    dayType:                  (row.day_type as "weekday" | "weekend" | "holiday") ?? "weekday",
+    hourlyBaseRate:           (row.hourly_base_rate as number) ?? null,
+    firstHourRate:            (row.first_hour_rate as number) ?? null,
+    firstHourPay:             (row.first_hour_pay as number) ?? null,
+    subsequentHourRate:       (row.subsequent_hour_rate as number) ?? null,
+    subsequentHourPay:        (row.subsequent_hour_pay as number) ?? null,
+    totalOvertimePay:         (row.total_overtime_pay as number) ?? null,
+    calculationBreakdown:     (row.calculation_breakdown as Record<string, any>) ?? null,
     createdAt:                row.created_at as string,
     updatedAt:                row.updated_at as string,
     userName:                 u?.name as string | undefined,

@@ -7,6 +7,7 @@ import {
   formatDurationDetail,
   formatScheduleRange,
   getOvertimeStepState,
+  formatRp,
 } from "@/lib/overtimeHelpers";
 import {
   X,
@@ -22,6 +23,7 @@ import {
   User,
   Building2,
   Award,
+  DollarSign,
 } from "lucide-react";
 
 interface OvertimeDetailModalProps {
@@ -29,6 +31,7 @@ interface OvertimeDetailModalProps {
   onClose: () => void;
   overtime: OvertimeRequest | null;
   onPreviewImage?: (url: string) => void;
+  showPay?: boolean;
 }
 
 export default function OvertimeDetailModal({
@@ -36,6 +39,7 @@ export default function OvertimeDetailModal({
   onClose,
   overtime,
   onPreviewImage,
+  showPay = false,
 }: OvertimeDetailModalProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -515,6 +519,24 @@ export default function OvertimeDetailModal({
                     Masuk Slip Gaji
                   </span>
                 </div>
+
+                {/* Admin Only Pay Breakdown */}
+                {showPay && overtime.totalOvertimePay !== null && overtime.totalOvertimePay !== undefined && (
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl space-y-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                        Upah Lembur Disahkan:
+                      </span>
+                      <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                        {formatRp(overtime.totalOvertimePay)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-[var(--ab-text-dim)]">
+                      <span>1 Jam Pertama: {formatRp(overtime.firstHourPay)}</span>
+                      <span>Sisa Jam: {formatRp(overtime.subsequentHourPay)}</span>
+                    </div>
+                  </div>
+                )}
 
                 {overtime.finalNotes && (
                   <div className="p-3 bg-[var(--ab-bg-surface)] rounded-xl border border-[var(--ab-border)]">

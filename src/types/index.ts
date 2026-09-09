@@ -398,6 +398,7 @@ export interface Payroll {
   system_overtime_minutes?: number | null;
   payroll_overtime_minutes?: number | null;
   overtime_rate?: number | null;
+  system_overtime_days?: number | null;
 }
 
 export interface DeductionType {

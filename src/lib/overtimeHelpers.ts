@@ -74,3 +74,61 @@ export function getOvertimeStepState(stepNumber: 1 | 2 | 3 | 4, status: string) 
 
   return { state: "upcoming", label: "" };
 }
+
+/**
+ * Checks if a YYYY-MM-DD date falls on a Weekend (Saturday or Sunday)
+ */
+export function isWeekend(dateStr: string): boolean {
+  if (!dateStr) return false;
+  // Parse date safely
+  const [y, m, d] = dateStr.split("-").map(Number);
+  if (!y || !m || !d) return false;
+  const date = new Date(y, m - 1, d);
+  const day = date.getDay();
+  return day === 0 || day === 6; // 0 = Sunday, 6 = Saturday
+}
+
+/**
+ * Counts total working days (Monday - Friday) in a given month and year
+ */
+export function countWorkingDaysInMonth(year: number, month: number): number {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  let workingDays = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dayOfWeek = new Date(year, month - 1, d).getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      workingDays++;
+    }
+  }
+  return Math.max(1, workingDays);
+}
+
+/**
+ * Formats a number as Indonesian Rupiah currency string
+ */
+export function formatRp(amount: number | null | undefined): string {
+  if (amount === null || amount === undefined || isNaN(amount)) return "Rp 0";
+  return `Rp ${Math.round(amount).toLocaleString("id-ID")}`;
+}
+
+/**
+ * Calculates hourly base rate and default multipliers:
+ * Formula: Base Salary / Working Days in Month / Hours Per Day (default 9)
+ */
+export function calculateOvertimeRates(baseSalary: number, workingDays: number, hoursPerDay: number = 9) {
+  const safeSalary = Math.max(0, baseSalary || 0);
+  const safeDays = Math.max(1, workingDays || 22);
+  const safeHours = Math.max(1, hoursPerDay || 9);
+
+  const hourlyBaseRate = Math.round(safeSalary / safeDays / safeHours);
+  const firstHourRate = Math.round(hourlyBaseRate * 1.5);
+  const subsequentHourRate = hourlyBaseRate;
+
+  return {
+    hourlyBaseRate,
+    firstHourRate,
+    subsequentHourRate,
+    workingDays: safeDays,
+    hoursPerDay: safeHours,
+  };
+}

@@ -479,14 +479,10 @@ export default function AdminApprovalsPage() {
           <CalendarDays size={16} /> Persetujuan Cuti & Izin ({pendingReqs.length})
         </button>
         <button
-          onClick={() => setActiveMainTab("overtime")}
-          className={`flex-1 py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
-            activeMainTab === "overtime"
-              ? "bg-amber-500 text-white shadow-lg shadow-amber-500/30"
-              : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
-          }`}
+          onClick={() => router.push("/absensi/admin/overtime")}
+          className="flex-1 py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30"
         >
-          <Clock size={16} /> Persetujuan & Verifikasi Lembur ({overtimes.filter(o => o.status === "pending" || o.status === "reported").length})
+          <Clock size={16} /> Manajemen Lembur (Halaman Khusus) <ArrowRight size={14} />
         </button>
       </div>
 
