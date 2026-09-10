@@ -531,10 +531,18 @@ export default function OvertimeDetailModal({
                         {formatRp(overtime.totalOvertimePay)}
                       </span>
                     </div>
-                    <div className="flex justify-between text-[10px] text-[var(--ab-text-dim)]">
-                      <span>1 Jam Pertama: {formatRp(overtime.firstHourPay)}</span>
-                      <span>Sisa Jam: {formatRp(overtime.subsequentHourPay)}</span>
-                    </div>
+                    {overtime.calculationBreakdown?.depnakerFormula ? (
+                      <div className="flex flex-col text-[10px] text-[var(--ab-text-dim)] pt-1">
+                        <span>Basis Gaji: {formatRp(overtime.calculationBreakdown?.baseSalary)}</span>
+                        <span>Upah Sejam: {formatRp(overtime.hourlyBaseRate)}</span>
+                        <span>Rumus: UU Cipta Kerja (Multiplier {overtime.dayType === 'weekday' ? 'Hari Kerja' : 'Hari Libur'})</span>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between text-[10px] text-[var(--ab-text-dim)] pt-1">
+                        <span>1 Jam Pertama: {formatRp(overtime.firstHourPay)}</span>
+                        <span>Sisa Jam: {formatRp(overtime.subsequentHourPay)}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 

@@ -45,7 +45,7 @@ export const navByRole: Record<Exclude<KpiRole, "developer">, NavItem[]> = {
     { label: "Dashboard", href: "/dashboard/tim", icon: LayoutDashboard },
     { label: "Check In / Out", href: "/dashboard/tim", icon: Clock, group: "Kehadiran" },
     { label: "Kalender Kehadiran", href: "/absensi/team", icon: CalendarDays, group: "Kehadiran" },
-    { label: "Cuti & Izin", href: "/absensi/requests", icon: FilePen, group: "Kehadiran" },
+    { label: "Cuti & Lembur", href: "/absensi/requests", icon: FilePen, group: "Kehadiran" },
     { label: "Surat & Dokumen", href: "/absensi/letters", icon: Mail, group: "Kehadiran" },
     { label: "KPI Dashboard", href: "/dashboard/tim/kpi", icon: Target, group: "Penugasan" },
     { label: "Tasks Harian", href: "/dashboard/tim/input", icon: ClipboardList, group: "Penugasan" },
@@ -55,7 +55,7 @@ export const navByRole: Record<Exclude<KpiRole, "developer">, NavItem[]> = {
   head: [
     { label: "Dashboard", href: "/dashboard/head", icon: LayoutDashboard },
     { label: "Check In / Out", href: "/dashboard/tim", icon: Clock, group: "Pribadi" },
-    { label: "Cuti & Izin", href: "/absensi/requests", icon: FilePen, group: "Pribadi" },
+    { label: "Cuti & Lembur", href: "/absensi/requests", icon: FilePen, group: "Pribadi" },
     { label: "Surat & Dokumen", href: "/absensi/letters", icon: Mail, group: "Pribadi" },
     { label: "KPI Saya", href: "/dashboard/tim/kpi", icon: Target, group: "Pribadi" },
     { label: "Input Harian", href: "/dashboard/tim/input", icon: ClipboardList, group: "Pribadi" },
@@ -71,7 +71,7 @@ export const navByRole: Record<Exclude<KpiRole, "developer">, NavItem[]> = {
   hr: [
     { label: "Dashboard", href: "/dashboard/hr", icon: LayoutDashboard },
     { label: "Check In / Out", href: "/dashboard/tim", icon: Clock, group: "Pribadi" },
-    { label: "Cuti & Izin", href: "/absensi/requests", icon: FilePen, group: "Pribadi" },
+    { label: "Cuti & Lembur", href: "/absensi/requests", icon: FilePen, group: "Pribadi" },
     { label: "Surat & Dokumen", href: "/absensi/letters", icon: Mail, group: "Pribadi" },
     { label: "KPI Saya", href: "/dashboard/tim/kpi", icon: Target, group: "Pribadi" },
     { label: "Input Harian", href: "/dashboard/tim/input", icon: ClipboardList, group: "Pribadi" },
@@ -94,7 +94,7 @@ export const navByRole: Record<Exclude<KpiRole, "developer">, NavItem[]> = {
   executive: [
     { label: "Dashboard", href: "/dashboard/executive", icon: LayoutDashboard },
     { label: "Check In / Out", href: "/dashboard/tim", icon: Clock, group: "Pribadi" },
-    { label: "Cuti & Izin", href: "/absensi/requests", icon: FilePen, group: "Pribadi" },
+    { label: "Cuti & Lembur", href: "/absensi/requests", icon: FilePen, group: "Pribadi" },
     { label: "Surat & Dokumen", href: "/absensi/letters", icon: Mail, group: "Pribadi" },
     { label: "KPI Saya", href: "/dashboard/tim/kpi", icon: Target, group: "Pribadi" },
     { label: "Input Harian", href: "/dashboard/tim/input", icon: ClipboardList, group: "Pribadi" },

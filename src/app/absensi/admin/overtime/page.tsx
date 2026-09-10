@@ -779,12 +779,22 @@ export default function AdminOvertimePage() {
                                       {formatRp(session.totalOvertimePay)}
                                     </span>
                                   </div>
-                                  <div className="flex items-center justify-between text-[10px] text-[var(--ab-text-dim)] pt-0.5">
-                                    <span>1 Jam: {formatRp(session.firstHourPay)}</span>
-                                    <span>
-                                      Sisa: {formatRp(session.subsequentHourPay)} (@ {formatRp(session.subsequentHourRate)}/j)
-                                    </span>
-                                  </div>
+                                  {session.calculationBreakdown?.depnakerFormula ? (
+                                    <div className="flex flex-col text-[10px] text-[var(--ab-text-dim)] pt-0.5 space-y-0.5">
+                                      <div className="flex justify-between">
+                                        <span>Gaji: {formatRp(session.calculationBreakdown?.baseSalary)}</span>
+                                        <span>/jam: {formatRp(session.hourlyBaseRate)}</span>
+                                      </div>
+                                      <span className="text-[9px]">UU Cipta Kerja (Multiplier {session.dayType === 'weekday' ? 'Hari Kerja' : 'Hari Libur'})</span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-between text-[10px] text-[var(--ab-text-dim)] pt-0.5">
+                                      <span>1 Jam: {formatRp(session.firstHourPay)}</span>
+                                      <span>
+                                        Sisa: {formatRp(session.subsequentHourPay)} (@ {formatRp(session.subsequentHourRate)}/j)
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>

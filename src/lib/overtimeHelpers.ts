@@ -115,20 +115,39 @@ export function formatRp(amount: number | null | undefined): string {
  * Calculates hourly base rate and default multipliers:
  * Formula: Base Salary / Working Days in Month / Hours Per Day (default 9)
  */
-export function calculateOvertimeRates(baseSalary: number, workingDays: number, hoursPerDay: number = 9) {
+export function calculateOvertimeRates(baseSalary: number) {
   const safeSalary = Math.max(0, baseSalary || 0);
-  const safeDays = Math.max(1, workingDays || 22);
-  const safeHours = Math.max(1, hoursPerDay || 9);
-
-  const hourlyBaseRate = Math.round(safeSalary / safeDays / safeHours);
-  const firstHourRate = Math.round(hourlyBaseRate * 1.5);
-  const subsequentHourRate = hourlyBaseRate;
+  const hourlyBaseRate = Math.round((1 / 173) * safeSalary);
 
   return {
-    hourlyBaseRate,
-    firstHourRate,
-    subsequentHourRate,
-    workingDays: safeDays,
-    hoursPerDay: safeHours,
+    hourlyBaseRate
   };
+}
+
+export function calculateOvertimePayDepnaker(
+  durationMinutes: number,
+  hourlyBaseRate: number,
+  dayType: "weekday" | "weekend" | "holiday"
+) {
+  const hoursDecimal = Math.max(0, durationMinutes / 60);
+  let multiplier = 0;
+
+  if (dayType === "weekday") {
+    if (hoursDecimal <= 1) {
+      multiplier = hoursDecimal * 1.5;
+    } else {
+      multiplier = 1.5 + (hoursDecimal - 1) * 2.0;
+    }
+  } else {
+    // weekend or holiday
+    if (hoursDecimal <= 8) {
+      multiplier = hoursDecimal * 2.0;
+    } else if (hoursDecimal <= 9) {
+      multiplier = 8 * 2.0 + (hoursDecimal - 8) * 3.0;
+    } else {
+      multiplier = 8 * 2.0 + 1 * 3.0 + (hoursDecimal - 9) * 4.0;
+    }
+  }
+
+  return Math.round(hourlyBaseRate * multiplier);
 }

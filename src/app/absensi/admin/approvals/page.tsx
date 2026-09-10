@@ -60,6 +60,7 @@ export default function AdminApprovalsPage() {
   // Cuti States
   const [pendingReqs, setPendingReqs] = useState<PendingRequest[]>([]);
   const [cancelReqs, setCancelReqs] = useState<PendingRequest[]>([]);
+  const [historyReqs, setHistoryReqs] = useState<PendingRequest[]>([]);
   const [pendingStaffCount, setPendingStaffCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [confirmCfg, setConfirmCfg] = useState<ConfirmCfg>(null);
@@ -228,13 +229,41 @@ export default function AdminApprovalsPage() {
       setPendingStaffCount(count ?? 0);
     };
 
-    Promise.all([fetchPending(), fetchCancel(), fetchPendingStaff(), fetchOvertime()]);
+    const fetchHistory = async () => {
+      const { data } = await supabase
+        .from("leave_requests")
+        .select("*, users(id, name, email, departments(name))")
+        .in("status", ["approved", "rejected"])
+        .order("created_at", { ascending: false });
+
+      setHistoryReqs(
+        (data ?? []).map((r) => {
+          const u = r.users as any;
+          return {
+            id: r.id as string,
+            userId: r.user_id as string,
+            userName: u?.name ?? "Unknown",
+            departmentName: u?.departments?.name ?? "Umum",
+            type: r.type as string,
+            dates: (r.dates as string[]) ?? [],
+            reason: (r.reason as string) ?? "",
+            createdAt: r.created_at as string,
+            status: r.status as string,
+            deductedSick: (r.deducted_sick as number) ?? 0,
+            deductedLeave: (r.deducted_leave as number) ?? 0,
+          };
+        })
+      );
+    };
+
+    Promise.all([fetchPending(), fetchCancel(), fetchHistory(), fetchPendingStaff(), fetchOvertime()]);
 
     const ch = supabase
       .channel("admin_approvals")
       .on("postgres_changes", { event: "*", schema: "public", table: "leave_requests" }, () => {
         fetchPending();
         fetchCancel();
+        fetchHistory();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "overtime_requests" }, fetchOvertime)
       .on("postgres_changes", { event: "*", schema: "public", table: "users" }, fetchPendingStaff)
@@ -450,12 +479,19 @@ export default function AdminApprovalsPage() {
     return acc;
   }, {} as Record<string, PendingRequest[]>);
 
+  const groupedHistory = historyReqs.reduce((acc, req) => {
+    const dept = req.departmentName || "Umum";
+    if (!acc[dept]) acc[dept] = [];
+    acc[dept].push(req);
+    return acc;
+  }, {} as Record<string, PendingRequest[]>);
+
   return (
     <div className="space-y-6 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-black text-[var(--ab-text-main)] uppercase tracking-tight">
-            Persetujuan Cuti & Izin
+            Manajemen Cuti
           </h1>
           {pendingReqs.length > 0 && (
             <div className="bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 px-4 py-1.5 rounded-full text-[10px] font-black border border-orange-100 dark:border-orange-800 flex items-center gap-2 animate-pulse">
@@ -466,25 +502,7 @@ export default function AdminApprovalsPage() {
         </div>
       </div>
 
-      {/* Main Mode Tabs */}
-      <div className="flex bg-[var(--ab-bg-surface)] p-2 rounded-2xl border border-[var(--ab-border)] shadow-md">
-        <button
-          onClick={() => setActiveMainTab("leave")}
-          className={`flex-1 py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
-            activeMainTab === "leave"
-              ? "bg-[var(--ab-primary)] text-white shadow-lg"
-              : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
-          }`}
-        >
-          <CalendarDays size={16} /> Persetujuan Cuti & Izin ({pendingReqs.length})
-        </button>
-        <button
-          onClick={() => router.push("/absensi/admin/overtime")}
-          className="flex-1 py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30"
-        >
-          <Clock size={16} /> Manajemen Lembur (Halaman Khusus) <ArrowRight size={14} />
-        </button>
-      </div>
+
 
       {/* Pending Staff Banner */}
       {!isLoading && pendingStaffCount > 0 && (
@@ -682,11 +700,76 @@ export default function AdminApprovalsPage() {
               </div>
             </div>
           )}
+          {/* History Requests */}
+          {historyReqs.length > 0 && (
+            <div className="space-y-4 mt-8">
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-black text-[var(--ab-text-main)] uppercase tracking-tight">Riwayat Pengajuan Cuti (Disetujui/Ditolak)</h2>
+              </div>
+              <div className="space-y-8">
+                {Object.entries(groupedHistory).map(([deptName, reqs]) => (
+                  <div key={deptName} className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-[var(--ab-text-dim)] w-2 h-6 rounded-full"></div>
+                      <h3 className="text-lg font-black text-[var(--ab-text-main)] uppercase tracking-tight">{deptName}</h3>
+                      <span className="bg-[var(--ab-bg-main)] px-2 py-1 rounded-full text-[10px] font-black text-[var(--ab-text-dim)] border border-[var(--ab-border)]">
+                        {reqs.length} Riwayat
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {reqs.map((req) => (
+                        <div
+                          key={req.id}
+                          className="bg-[var(--ab-bg-surface)] p-5 rounded-[32px] border border-[var(--ab-border)] shadow-sm flex flex-col justify-between gap-4 relative overflow-hidden opacity-80 hover:opacity-100 transition-opacity"
+                        >
+                          <div className="space-y-4 relative z-10">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${typeStyle(req.type)}`}>
+                                    {typeLabel(req.type)}
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest ${req.status === 'approved' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                                    {req.status === 'approved' ? 'Disetujui' : 'Ditolak'}
+                                  </span>
+                                  <span className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest flex items-center gap-1">
+                                    <Clock size={10} />
+                                    {new Date(req.createdAt).toLocaleString("id-ID", {
+                                      day: "2-digit",
+                                      month: "2-digit",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit"
+                                    }).replace(/\./g, ":")}
+                                  </span>
+                                </div>
+                                <h4 className="font-black text-[var(--ab-text-main)] text-base tracking-tight">{req.userName}</h4>
+                              </div>
+                            </div>
+                            <div className="space-y-3">
+                              <div className="flex items-start gap-2 text-[10px] font-bold text-[var(--ab-text-dim)] bg-[var(--ab-bg-main)] p-3 rounded-2xl border border-[var(--ab-border)]">
+                                <CalendarDays size={12} className="mt-0.5 shrink-0" style={{ color: "var(--ab-primary)" }} />
+                                <span className="leading-relaxed">{req.dates.join(", ")}</span>
+                              </div>
+                              <div className="flex flex-col gap-1 text-[10px] font-medium text-[var(--ab-text-dim)] italic px-2 border-l-2 border-[var(--ab-border)] ml-1 pl-3">
+                                <span className="font-black uppercase text-[8px] tracking-widest opacity-60 not-italic">Alasan</span>
+                                <span className="line-clamp-2">&ldquo;{req.reason}&rdquo;</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* TAB 2: OVERTIME MANAGEMENT */}
-      {activeMainTab === "overtime" && (
+      {false && (
         <div className="space-y-6">
           {/* Widget Info Tim Lembur Hari Ini / Tanggal Terpilih */}
           <div className="p-4 sm:p-5 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-purple-500/10 rounded-3xl border border-amber-500/20 shadow-sm space-y-3">

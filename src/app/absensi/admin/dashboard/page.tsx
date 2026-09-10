@@ -48,7 +48,7 @@ interface ActiveUser {
   isHidden: boolean;
 }
 
-interface ExcusedEntry { id: string; type: string; reason: string; }
+interface ExcusedEntry { id: string; type: string; reason: string; createdAt: string; dates: string[]; }
 
 interface DisplayRow {
   id: string;
@@ -60,6 +60,8 @@ interface DisplayRow {
   isExcused: boolean;
   excusedType?: string;
   excusedReason?: string;
+  excusedCreatedAt?: string;
+  excusedDates?: string[];
   isMissed: boolean;
 }
 
@@ -159,7 +161,7 @@ export default function AdminDashboardPage() {
         .select("id, name, email, is_hidden, departments(name)")
         .eq("absensi_status", "active"),
       supabase.from("leave_requests")
-        .select("user_id, type, reason")
+        .select("user_id, type, reason, created_at, dates")
         .eq("status", "approved")
         .contains("dates", [filterDate]),
       supabase.from("users")
@@ -179,7 +181,7 @@ export default function AdminDashboardPage() {
     const uMap = new Map(uList.map((u) => [u.id, u]));
 
     setExcused(
-      (reqsRes.data ?? []).map((r) => ({ id: r.user_id as string, type: r.type as string, reason: (r.reason as string) ?? "" }))
+      (reqsRes.data ?? []).map((r) => ({ id: r.user_id as string, type: r.type as string, reason: (r.reason as string) ?? "", createdAt: r.created_at as string, dates: r.dates as string[] }))
     );
 
     setLogs(
@@ -291,7 +293,7 @@ export default function AdminDashboardPage() {
     const excusedIds = new Set(excused.map((e) => e.id));
     const presentIds = new Set(logs.map((l) => l.userId));
     const logMap = new Map(logs.map((l) => [l.userId, l]));
-    const excusedMap = new Map(excused.map((e) => [e.id, { type: e.type, reason: e.reason }]));
+    const excusedMap = new Map(excused.map((e) => [e.id, { type: e.type, reason: e.reason, createdAt: e.createdAt, dates: e.dates }]));
 
     let rows: DisplayRow[] = [];
 
@@ -299,7 +301,7 @@ export default function AdminDashboardPage() {
       rows = activeUsers.map((u) => ({
         id: u.id, userId: u.id, name: u.name, email: u.email, dept: u.dept,
         log: logMap.get(u.id) ?? null,
-        isExcused: excusedIds.has(u.id), excusedType: excusedMap.get(u.id)?.type, excusedReason: excusedMap.get(u.id)?.reason,
+        isExcused: excusedIds.has(u.id), excusedType: excusedMap.get(u.id)?.type, excusedReason: excusedMap.get(u.id)?.reason, excusedCreatedAt: excusedMap.get(u.id)?.createdAt, excusedDates: excusedMap.get(u.id)?.dates,
         isMissed: !presentIds.has(u.id) && !excusedIds.has(u.id),
       }));
     } else if (activeFilter === "present") {
@@ -316,7 +318,7 @@ export default function AdminDashboardPage() {
     } else if (activeFilter === "leave") {
       rows = activeUsers.filter((u) => excusedIds.has(u.id)).map((u) => ({
         id: u.id, userId: u.id, name: u.name, email: u.email, dept: u.dept,
-        log: null, isExcused: true, excusedType: excusedMap.get(u.id)?.type, excusedReason: excusedMap.get(u.id)?.reason, isMissed: false,
+        log: null, isExcused: true, excusedType: excusedMap.get(u.id)?.type, excusedReason: excusedMap.get(u.id)?.reason, excusedCreatedAt: excusedMap.get(u.id)?.createdAt, excusedDates: excusedMap.get(u.id)?.dates, isMissed: false,
       }));
     } else if (activeFilter === "missed") {
       rows = activeUsers.filter((u) => !presentIds.has(u.id) && !excusedIds.has(u.id)).map((u) => ({
@@ -1114,6 +1116,27 @@ export default function AdminDashboardPage() {
                         </span>
                       </div>
                       <p className="text-sm font-bold text-[var(--ab-text-main)] italic">&ldquo;{selectedRow.excusedReason || "Admin Override"}&rdquo;</p>
+                      
+                      {selectedRow.excusedCreatedAt && (
+                        <div className="pt-3 mt-3 border-t border-amber-200/50 dark:border-amber-800/50 space-y-2">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-amber-600/70 dark:text-amber-500/70">Waktu Pengajuan</span>
+                            <span className="text-xs font-bold text-amber-900 dark:text-amber-100">
+                              {new Date(selectedRow.excusedCreatedAt).toLocaleString("id-ID", {
+                                day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit"
+                              }).replace(/\./g, ":")}
+                            </span>
+                          </div>
+                          {selectedRow.excusedDates && selectedRow.excusedDates.length > 0 && (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-amber-600/70 dark:text-amber-500/70">Tanggal Cuti</span>
+                              <span className="text-xs font-bold text-amber-900 dark:text-amber-100">
+                                {selectedRow.excusedDates.join(", ")}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 
