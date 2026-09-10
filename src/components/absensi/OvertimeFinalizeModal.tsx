@@ -468,6 +468,7 @@ export default function OvertimeFinalizeModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
