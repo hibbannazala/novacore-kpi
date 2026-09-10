@@ -299,7 +299,7 @@ export function OvertimeStaffSection() {
     const maxMinutes = isHoliday ? 12 * 60 : 4 * 60;
     
     if (durationMinutes > maxMinutes) {
-      toast.error(`Durasi maksimal lembur untuk ${isHoliday ? 'Hari Libur adalah 12 Jam' : 'Hari Kerja adalah 4 Jam'} (UU Cipta Kerja).`);
+      toast.error(`Durasi maksimal lembur untuk ${isHoliday ? 'Hari Libur adalah 12 Jam' : 'Hari Kerja adalah 4 Jam'}.`);
       return;
     }
 
