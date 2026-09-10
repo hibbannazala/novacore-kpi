@@ -553,8 +553,15 @@ export default function AdminApprovalsPage() {
                                 <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${typeStyle(req.type)}`}>
                                   {typeLabel(req.type)}
                                 </span>
-                                <span className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest">
-                                  {new Date(req.createdAt).toLocaleDateString("id-ID")}
+                                <span className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest flex items-center gap-1">
+                                  <Clock size={10} />
+                                  {new Date(req.createdAt).toLocaleString("id-ID", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit"
+                                  }).replace(/\./g, ":")}
                                 </span>
                               </div>
                               <h4 className="font-black text-[var(--ab-text-main)] text-base tracking-tight">{req.userName}</h4>
@@ -628,8 +635,15 @@ export default function AdminApprovalsPage() {
                                   <span className="px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400">
                                     Batal Cuti
                                   </span>
-                                  <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">
-                                    {new Date(req.createdAt).toLocaleDateString("id-ID")}
+                                  <span className="text-[8px] font-black text-red-400 uppercase tracking-widest flex items-center gap-1">
+                                    <Clock size={10} />
+                                    {new Date(req.createdAt).toLocaleString("id-ID", {
+                                      day: "2-digit",
+                                      month: "2-digit",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit"
+                                    }).replace(/\./g, ":")}
                                   </span>
                                 </div>
                                 <h4 className="font-black text-red-900 dark:text-red-100 text-base tracking-tight">{req.userName}</h4>

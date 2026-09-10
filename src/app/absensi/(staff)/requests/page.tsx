@@ -617,9 +617,23 @@ function RequestCard({ req, isMine, onCancel }: { req: any; isMine: boolean; onC
       {/* Name and Department */}
       <div className="mb-4 flex flex-col border-b border-[var(--ab-border)] pb-3">
         <span className="text-[14px] font-black text-[var(--ab-text-main)]">{req.users?.name ?? "Unknown"}</span>
-        <span className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest mt-1">
-          {req.users?.departments?.name ?? "Umum"}
-        </span>
+        <div className="flex justify-between items-center mt-1">
+          <span className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
+            {req.users?.departments?.name ?? "Umum"}
+          </span>
+          {req.created_at && (
+            <span className="text-[9px] font-bold text-[var(--ab-text-dim)]/80 uppercase tracking-widest flex items-center gap-1">
+              <Clock size={10} />
+              {new Date(req.created_at).toLocaleString("id-ID", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+              }).replace(/\./g, ":")}
+            </span>
+          )}
+        </div>
       </div>
       <div className="flex flex-wrap gap-2 mb-4">
         {req.dates?.map((d: string) => (
