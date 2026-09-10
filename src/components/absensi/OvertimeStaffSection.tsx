@@ -13,6 +13,7 @@ import {
   formatDurationDetail,
   formatScheduleRange,
   getOvertimeStepState,
+  isWeekend
 } from "@/lib/overtimeHelpers";
 import {
   Clock, Plus, Trash2, CheckCircle2, AlertCircle, CalendarDays,
@@ -293,6 +294,14 @@ export function OvertimeStaffSection() {
     if (durationMinutes <= 0) { toast.error("Jam selesai harus lebih besar dari jam mulai."); return; }
     const validTasks = tasks.filter(t => t.task.trim() !== "");
     if (validTasks.length === 0) { toast.error("Isi minimal 1 rencana tugas lembur."); return; }
+
+    const isHoliday = isWeekend(overtimeDate);
+    const maxMinutes = isHoliday ? 12 * 60 : 4 * 60;
+    
+    if (durationMinutes > maxMinutes) {
+      toast.error(`Durasi maksimal lembur untuk ${isHoliday ? 'Hari Libur adalah 12 Jam' : 'Hari Kerja adalah 4 Jam'} (UU Cipta Kerja).`);
+      return;
+    }
 
     setShowConfirm(false);
     setIsSubmitting(true);
