@@ -14,7 +14,8 @@ import CountUp from "@/components/absensi/CountUp";
 import {
   Fingerprint, Laptop, Umbrella, Stethoscope,
   Clock, CheckCircle2, AlertCircle, MapPin,
-  Lock, Info, X,
+  Lock, Info, X, Navigation, Compass, MapPinOff,
+  AlertTriangle, RotateCw,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -141,15 +142,21 @@ export function AttendanceWidget() {
     }
   }, [allowedLocations, settings]);
 
+  // ─ Live GPS Tracking State ─────────────────────────────────────────────────
+  type LiveGpsStatus = "detecting" | "inside" | "outside" | "blocked" | "unavailable";
+  const [liveGpsStatus, setLiveGpsStatus] = useState<LiveGpsStatus>("detecting");
+  const [liveLoc, setLiveLoc] = useState<{ lat: number; lng: number } | null>(null);
+  const [liveDist, setLiveDist] = useState<number | null>(null);
+  const [liveOffice, setLiveOffice] = useState<string | null>(null);
+  const [isLiveSyncing, setIsLiveSyncing] = useState(false);
+  const [showConfirmBlockedModal, setShowConfirmBlockedModal] = useState(false);
+  const [showConfirmOutsideModal, setShowConfirmOutsideModal] = useState(false);
+
   const [pendingLocation, setPendingLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [pendingDistance, setPendingDistance] = useState(0);
   const [showCheckoutConfirm, setShowCheckoutConfirm] = useState(false);
   const [showEarlyPrompt, setShowEarlyPrompt] = useState(false);
-  const [showRadiusWarning, setShowRadiusWarning] = useState(false);
   const [showLateReasonPrompt, setShowLateReasonPrompt] = useState(false);
-  const [showGpsPrePrompt, setShowGpsPrePrompt] = useState(false);
-  const [syncRetryCount, setSyncRetryCount] = useState(0);
-  const [pendingDistance, setPendingDistance] = useState(0);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [selectedView, setSelectedView] = useState<SummaryView>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -174,21 +181,143 @@ export function AttendanceWidget() {
   const today = getToday();
   const isHoliday = holidayDates.includes(today);
 
-  // ─ Location permission ───────────────────────────────────────────────────────
+  // ─ Location permission & Live Tracking ──────────────────────────────────────
+  const syncLocation = useCallback(async (isUserTriggered = false) => {
+    if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
+      setLiveGpsStatus("unavailable");
+      if (isUserTriggered) toast.error("Browser Anda tidak mendukung fitur lokasi GPS.");
+      return;
+    }
+
+    setIsLiveSyncing(true);
+    if (isUserTriggered) toast.loading("Mendeteksi sinyal GPS...", { id: "gps-sync" });
+
+    let activeLocs = allowedLocationsRef.current;
+    if (activeLocs.length === 0 && user?.departmentId) {
+      activeLocs = await fetchLocs();
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setIsLiveSyncing(false);
+        if (isUserTriggered) toast.dismiss("gps-sync");
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setLiveLoc(loc);
+        setLocationPerm("granted");
+
+        const nearest = getNearestLocation(loc, activeLocs);
+        if (nearest.noLocationError) {
+          setLiveGpsStatus("unavailable");
+          if (isUserTriggered) toast.error("Lokasi kantor untuk divisi Anda belum diatur Admin.");
+          return;
+        }
+
+        if (nearest && isFinite(nearest.dist)) {
+          const rounded = Math.round(nearest.dist);
+          setLiveDist(rounded);
+          setLiveOffice(nearest.office?.name || "Kantor");
+
+          if (nearest.dist <= nearest.radius) {
+            setLiveGpsStatus("inside");
+            if (isUserTriggered) toast.success(`Lokasi Terverifikasi: Dalam Area (${nearest.office?.name || "Kantor"} - ${rounded}m)`);
+          } else {
+            setLiveGpsStatus("outside");
+            if (isUserTriggered) toast.error(`Di Luar Area: ${rounded}m dari ${nearest.office?.name || "Kantor"}`);
+          }
+        }
+      },
+      (err) => {
+        setIsLiveSyncing(false);
+        if (isUserTriggered) toast.dismiss("gps-sync");
+        if (err.code === 1) {
+          setLocationPerm("denied");
+          setLiveGpsStatus("blocked");
+          if (isUserTriggered) setShowLocationGuide(true);
+        } else {
+          setLiveGpsStatus("unavailable");
+          if (isUserTriggered) toast.error("Sinyal GPS tidak dapat membaca koordinat. Pastikan GPS HP Anda aktif.");
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  }, [user?.departmentId, fetchLocs, getNearestLocation]);
+
   const checkPerm = useCallback(async () => {
     if (typeof navigator === "undefined" || !navigator.permissions?.query) return;
     try {
       const res = await navigator.permissions.query({ name: "geolocation" });
       setLocationPerm(res.state as LocationPerm);
-      res.onchange = () => setLocationPerm(res.state as LocationPerm);
+      if (res.state === "denied") {
+        setLiveGpsStatus("blocked");
+      }
+      res.onchange = () => {
+        setLocationPerm(res.state as LocationPerm);
+        if (res.state === "denied") {
+          setLiveGpsStatus("blocked");
+        } else if (res.state === "granted") {
+          syncLocation(false);
+        }
+      };
     } catch {}
-  }, []);
+  }, [syncLocation]);
 
   useEffect(() => {
     requestAnimationFrame(() => checkPerm());
     window.addEventListener("focus", checkPerm);
     return () => window.removeEventListener("focus", checkPerm);
   }, [checkPerm]);
+
+  // Continuous background GPS tracking until check-in
+  useEffect(() => {
+    if (!attendance) {
+      syncLocation(false);
+
+      if (typeof navigator !== "undefined" && "geolocation" in navigator) {
+        const watchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            setLiveLoc(loc);
+            setLocationPerm("granted");
+            const nearest = getNearestLocation(loc, allowedLocationsRef.current);
+            if (nearest && !nearest.noLocationError && isFinite(nearest.dist)) {
+              const rounded = Math.round(nearest.dist);
+              setLiveDist(rounded);
+              setLiveOffice(nearest.office?.name || "Kantor");
+              if (nearest.dist <= nearest.radius) {
+                setLiveGpsStatus("inside");
+              } else {
+                setLiveGpsStatus("outside");
+              }
+            }
+          },
+          (err) => {
+            if (err.code === 1) setLiveGpsStatus("blocked");
+            else setLiveGpsStatus("unavailable");
+          },
+          { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+        );
+
+        return () => navigator.geolocation.clearWatch(watchId);
+      }
+    }
+  }, [attendance, syncLocation, getNearestLocation]);
+
+  // Immediate status re-evaluation once allowed locations load
+  useEffect(() => {
+    if (liveLoc) {
+      const nearest = getNearestLocation(liveLoc);
+      if (nearest && !nearest.noLocationError && isFinite(nearest.dist)) {
+        const rounded = Math.round(nearest.dist);
+        setLiveDist(rounded);
+        setLiveOffice(nearest.office?.name || "Kantor");
+        if (nearest.dist <= nearest.radius) {
+          setLiveGpsStatus("inside");
+        } else {
+          setLiveGpsStatus("outside");
+        }
+      }
+    }
+  }, [allowedLocations, settings, liveLoc, getNearestLocation]);
 
   // ─ Realtime summary ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -359,24 +488,28 @@ export function AttendanceWidget() {
     }
     setIsProcessing(false);
     setPendingLocation(null);
-    setShowRadiusWarning(false);
+    setShowConfirmOutsideModal(false);
+    setShowConfirmBlockedModal(false);
     setShowLateReasonPrompt(false);
   };
 
   const processCheckIn = async (
-    confirmedLocation: { lat: number; lng: number } | null = null,
+    confirmedLocation: { lat: number; lng: number } | null | undefined = undefined,
     lateReason = ""
   ) => {
-    if (isProcessing && !confirmedLocation && !lateReason) return;
-    if (!("geolocation" in navigator) && !confirmedLocation) {
-      toast.error("Browser Anda tidak mendukung GPS.");
+    if (isProcessing && confirmedLocation === undefined && !lateReason) return;
+
+    // Direct check-in with explicit location or late reason
+    if (confirmedLocation !== undefined || lateReason) {
+      setIsProcessing(true);
+      const locToUse = confirmedLocation !== undefined ? confirmedLocation : pendingLocation;
+      const result = await doCheckIn(locToUse, lateReason);
+      finalizeCheckIn(result);
       return;
     }
 
-    if (confirmedLocation || lateReason) {
-      setIsProcessing(true);
-      const result = await doCheckIn(confirmedLocation ?? pendingLocation, lateReason);
-      finalizeCheckIn(result);
+    if (!("geolocation" in navigator)) {
+      toast.error("Browser Anda tidak mendukung GPS.");
       return;
     }
 
@@ -386,6 +519,9 @@ export function AttendanceWidget() {
       async (pos) => {
         toast.dismiss(toastId);
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setLiveLoc(loc);
+        setLocationPerm("granted");
+
         let activeLocs = allowedLocationsRef.current;
         if (activeLocs.length === 0 && user?.departmentId) {
           activeLocs = await fetchLocs();
@@ -396,14 +532,21 @@ export function AttendanceWidget() {
           setIsProcessing(false);
           return;
         }
+
+        const rounded = Math.round(nearest.dist);
+        setLiveDist(rounded);
+        setLiveOffice(nearest.office?.name || "Kantor");
+
         if (nearest.dist > nearest.radius) {
+          setLiveGpsStatus("outside");
           setPendingLocation(loc);
-          setPendingDistance(Math.round(nearest.dist));
-          setSyncRetryCount(0);
-          setShowRadiusWarning(true);
+          setPendingDistance(rounded);
+          setShowConfirmOutsideModal(true);
           setIsProcessing(false);
           return;
         }
+
+        setLiveGpsStatus("inside");
         const result = await doCheckIn(loc);
         if ("requireLateReason" in result) setPendingLocation(loc);
         finalizeCheckIn(result);
@@ -411,19 +554,19 @@ export function AttendanceWidget() {
       async (err) => {
         toast.dismiss(toastId);
         if (err.code === 1) {
-          // Permission denied
+          // Permission denied - NEVER auto submit!
           setLocationPerm("denied");
-          const result = await doCheckIn(null);
-          if ("requireLateReason" in result) setPendingLocation(null);
-          finalizeCheckIn(result);
-          if (!("requireLateReason" in result)) setShowLocationGuide(true);
+          setLiveGpsStatus("blocked");
+          setIsProcessing(false);
+          setShowConfirmBlockedModal(true);
         } else if (err.code === 2) {
           // Position unavailable
-          toast.error("GPS tidak tersedia. Pastikan GPS aktif lalu coba lagi.", { duration: 5000 });
+          setLiveGpsStatus("unavailable");
+          toast.error("GPS tidak tersedia. Pastikan GPS HP aktif lalu coba lagi.", { duration: 5000 });
           setIsProcessing(false);
         } else if (err.code === 3) {
           // Timeout
-          toast.error("GPS timeout. Koneksi lambat atau sinyal GPS lemah. Coba lagi.", { duration: 5000 });
+          toast.error("GPS timeout. Sinyal GPS lemah atau koneksi lambat. Coba lagi.", { duration: 5000 });
           setIsProcessing(false);
         } else {
           toast.error("Gagal mendapatkan lokasi GPS. Pastikan izin lokasi aktif.");
@@ -451,7 +594,6 @@ export function AttendanceWidget() {
   };
 
   const onAbsenClick = () => {
-    console.log("onAbsenClick triggered! isProcessing:", isProcessing, "attendance:", attendance, "isHoliday:", isHoliday);
     if (isProcessing) return;
     
     // Safety timeout in case it gets stuck
@@ -460,11 +602,19 @@ export function AttendanceWidget() {
     }, 15000);
 
     if (!attendance) {
-      console.log("Showing GPS pre-prompt modal");
-      // Show pre-permission prompt first before triggering browser GPS
-      setShowGpsPrePrompt(true);
+      if (liveGpsStatus === "inside" && liveLoc) {
+        // Direct seamless check-in with verified coordinates
+        processCheckIn(liveLoc);
+      } else if (liveGpsStatus === "outside" && liveLoc) {
+        setPendingLocation(liveLoc);
+        setPendingDistance(liveDist || 0);
+        setShowConfirmOutsideModal(true);
+      } else if (liveGpsStatus === "blocked" || locationPerm === "denied") {
+        setShowConfirmBlockedModal(true);
+      } else {
+        processCheckIn();
+      }
     } else if (!attendance.checkOut) {
-      console.log("Showing checkout confirm modal");
       const [eH, eM] = (settings.workEnd || "18:00").split(":").map(Number);
       const endLim = new Date(); endLim.setHours(eH, eM, 0, 0);
       if (new Date() < endLim) {
@@ -472,19 +622,6 @@ export function AttendanceWidget() {
       } else {
         setShowCheckoutConfirm(true);
       }
-    }
-  };
-
-  const onGpsPrePromptConfirm = (withGps: boolean) => {
-    setShowGpsPrePrompt(false);
-    if (withGps) {
-      processCheckIn();
-    } else {
-      // Check-in without GPS
-      setIsProcessing(true);
-      doCheckIn(null).then((result) => {
-        finalizeCheckIn(result);
-      });
     }
   };
 
@@ -673,6 +810,168 @@ export function AttendanceWidget() {
           </div>
         </div>
 
+        {/* Live GPS Status & Radar (Active before check-in) */}
+        {!attendance && (
+          <div className="mb-2">
+            {liveGpsStatus === "inside" && (
+              <div className="p-4 rounded-2xl border bg-emerald-500/10 border-emerald-500/30 dark:bg-emerald-950/20 dark:border-emerald-700/40 flex items-center justify-between gap-3 transition-all shadow-sm">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500 text-white shrink-0 shadow-md shadow-emerald-500/20">
+                    <Compass size={20} className="animate-spin" style={{ animationDuration: "6s" }} />
+                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 border-2 border-white rounded-full animate-ping" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[9px] font-black tracking-widest uppercase text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                        ✓ Dalam Area
+                      </span>
+                      <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold truncate">
+                        {liveOffice || "Kantor"}
+                      </span>
+                    </div>
+                    <p className="text-xs font-black text-slate-800 dark:text-slate-100 flex items-center gap-1">
+                      <span>Jarak: ±{liveDist ?? 0}m</span>
+                      <span className="text-[10px] text-slate-400 font-normal">| Siap Mulai Shift</span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => syncLocation(true)}
+                  disabled={isLiveSyncing}
+                  title="Sinkronkan ulang GPS"
+                  className="p-2.5 rounded-xl bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-emerald-600 border border-slate-200 dark:border-slate-700 shadow-sm active:scale-95 transition-all shrink-0"
+                >
+                  <RotateCw size={14} className={isLiveSyncing ? "animate-spin text-emerald-600" : ""} />
+                </button>
+              </div>
+            )}
+
+            {liveGpsStatus === "outside" && (
+              <div className="p-4 rounded-2xl border bg-amber-500/10 border-amber-500/30 dark:bg-amber-950/20 dark:border-amber-700/40 flex items-center justify-between gap-3 transition-all shadow-sm">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500 text-white shrink-0 shadow-md shadow-amber-500/20">
+                    <MapPin size={20} />
+                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-400 border-2 border-white rounded-full animate-ping" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[9px] font-black tracking-widest uppercase text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">
+                        Di Luar Area
+                      </span>
+                      <span className="text-[10px] text-amber-700 dark:text-amber-300 font-bold truncate">
+                        {liveOffice || "Kantor"}
+                      </span>
+                    </div>
+                    <p className="text-xs font-black text-slate-800 dark:text-slate-100">
+                      Jarak: ±{liveDist ?? 0}m dari kantor
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => syncLocation(true)}
+                  disabled={isLiveSyncing}
+                  title="Sinkronkan ulang GPS"
+                  className="px-3 py-2 rounded-xl bg-amber-500 text-white font-black text-[10px] uppercase tracking-wider shadow-sm hover:bg-amber-600 active:scale-95 transition-all shrink-0 flex items-center gap-1.5"
+                >
+                  <RotateCw size={12} className={isLiveSyncing ? "animate-spin" : ""} />
+                  <span>{isLiveSyncing ? "Sync..." : "Sinkronkan"}</span>
+                </button>
+              </div>
+            )}
+
+            {liveGpsStatus === "blocked" && (
+              <div className="p-4 rounded-2xl border bg-rose-500/10 border-rose-500/30 dark:bg-rose-950/20 dark:border-rose-700/40 flex items-center justify-between gap-3 transition-all shadow-sm">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500 text-white shrink-0 shadow-md shadow-rose-500/20">
+                    <MapPinOff size={20} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[9px] font-black tracking-widest uppercase text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full">
+                        Akses Terblokir
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                      Izin GPS Ditolak Browser
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={() => setShowLocationGuide(true)}
+                    className="px-2.5 py-2 rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-bold text-[10px] hover:bg-slate-50 active:scale-95 transition-all"
+                  >
+                    Bantuan 🔒
+                  </button>
+                  <button
+                    onClick={() => syncLocation(true)}
+                    disabled={isLiveSyncing}
+                    className="px-3 py-2 rounded-xl bg-rose-600 text-white font-black text-[10px] uppercase tracking-wider shadow-sm hover:bg-rose-700 active:scale-95 transition-all flex items-center gap-1.5"
+                  >
+                    <RotateCw size={12} className={isLiveSyncing ? "animate-spin" : ""} />
+                    <span>{isLiveSyncing ? "..." : "Sinkronkan"}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {liveGpsStatus === "detecting" && (
+              <div className="p-4 rounded-2xl border bg-blue-500/10 border-blue-500/30 dark:bg-blue-950/20 dark:border-blue-700/40 flex items-center justify-between gap-3 transition-all shadow-sm">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500 text-white shrink-0 shadow-md shadow-blue-500/20">
+                    <RotateCw size={20} className="animate-spin" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[9px] font-black tracking-widest uppercase text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">
+                      Mendeteksi GPS...
+                    </span>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5">
+                      Mengunci koordinat lokasi Anda
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => syncLocation(true)}
+                  disabled={isLiveSyncing}
+                  className="px-3 py-2 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase tracking-wider shadow-sm hover:bg-blue-700 active:scale-95 transition-all shrink-0"
+                >
+                  Paksa Sync
+                </button>
+              </div>
+            )}
+
+            {liveGpsStatus === "unavailable" && (
+              <div className="p-4 rounded-2xl border bg-slate-500/10 border-slate-500/30 dark:bg-slate-800/40 dark:border-slate-700/40 flex items-center justify-between gap-3 transition-all shadow-sm">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-slate-500 text-white shrink-0">
+                    <AlertTriangle size={20} />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[9px] font-black tracking-widest uppercase text-slate-600 dark:text-slate-400 bg-slate-500/10 px-2 py-0.5 rounded-full">
+                      Sinyal GPS Lemah / Mati
+                    </span>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5">
+                      Aktifkan Lokasi di HP Anda
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => syncLocation(true)}
+                  disabled={isLiveSyncing}
+                  className="px-3 py-2 rounded-xl bg-slate-700 text-white font-black text-[10px] uppercase tracking-wider shadow-sm hover:bg-slate-800 active:scale-95 transition-all shrink-0 flex items-center gap-1.5"
+                >
+                  <RotateCw size={12} className={isLiveSyncing ? "animate-spin" : ""} />
+                  <span>{isLiveSyncing ? "..." : "Coba Lagi"}</span>
+                </button>
+              </div>
+            )}
+
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium text-center mt-2 px-2">
+              💡 Pastikan badge hijau <strong className="text-emerald-500 font-bold">&quot;Dalam Area&quot;</strong> terlihat sebelum menekan Mulai Shift.
+            </p>
+          </div>
+        )}
+
         <div className="relative flex justify-center py-6 px-2">
           <button
             onClick={onAbsenClick}
@@ -748,87 +1047,153 @@ export function AttendanceWidget() {
 
       {/* Quota Cards removed from widget to be placed globally */}
 
-      {/* GPS Pre-Permission Modal */}
-      {showGpsPrePrompt && (
-          <div className="ab-confirm-overlay fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 99999, background: "rgba(2, 8, 23, 0.65)", backdropFilter: "blur(8px)" }} onClick={(e) => { if (e.target === e.currentTarget) setShowGpsPrePrompt(false); }}>
-            <div className="w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
-              <div className="p-8 text-center">
-                <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-blue-50 dark:border-blue-800">
-                  <MapPin size={32} className="text-blue-600 animate-bounce" />
+      {/* Confirm Blocked Modal */}
+      {showConfirmBlockedModal && (
+        <div
+          className="ab-confirm-overlay fixed inset-0 flex items-center justify-center p-4"
+          style={{ zIndex: 99999, background: "rgba(2, 8, 23, 0.65)", backdropFilter: "blur(8px)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowConfirmBlockedModal(false); }}
+        >
+          <div className="w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
+            <div className="p-7 text-center">
+              <div className="w-16 h-16 bg-rose-100 dark:bg-rose-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-rose-50 dark:border-rose-800/50">
+                <MapPinOff size={28} className="text-rose-600 dark:text-rose-400" />
+              </div>
+              <h3 className="text-xl font-black text-[var(--ab-text-main)] uppercase tracking-tight mb-2">
+                Akses Lokasi Diblokir
+              </h3>
+              <p className="text-xs text-[var(--ab-text-dim)] font-medium leading-relaxed mb-4">
+                Browser Anda memblokir izin lokasi GPS. Jika Anda melanjutkan presensi sekarang, status akan tercatat sebagai <strong className="text-rose-600 font-bold">&quot;Lokasi Keblokir&quot;</strong>.
+              </p>
+
+              {/* Instructions Box */}
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-2xl p-4 mb-5 text-left space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                  Cara Mengaktifkan Kembali:
+                </p>
+                <div className="text-[11px] text-slate-700 dark:text-slate-300 space-y-1.5 font-medium">
+                  <p className="flex items-center gap-2">
+                    <span>1.</span> Klik ikon <strong>{isIOS ? '"AA"' : 'Gembok 🔒'}</strong> di sebelah kiri alamat website di atas.
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <span>2.</span> Buka <strong>{isIOS ? 'Website Settings' : 'Permissions / Izin Situs'}</strong>.
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <span>3.</span> Ubah <strong>Lokasi (Location)</strong> ke <strong>&quot;Allow / Izinkan&quot;</strong>.
+                  </p>
                 </div>
-                <h3 className="text-2xl font-black text-[var(--ab-text-main)] uppercase tracking-tight mb-3">
-                  Izin Lokasi GPS
-                </h3>
-                {locationPerm === "denied" ? (
-                  <>
-                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-3xl p-5 mb-6">
-                      <p className="text-sm font-bold text-amber-700 dark:text-amber-300 leading-relaxed mb-4">
-                        ⚠️ Izin lokasi sudah pernah diblokir di browser Anda. Browser tidak bisa menampilkan pop-up izin lagi secara otomatis.
-                      </p>
-                      <div className="space-y-3 text-left">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-2">
-                          Cara Mengaktifkan Ulang:
-                        </p>
-                        {[
-                          { icon: <Lock size={14} className="text-blue-500" />, text: `Klik ikon ${isIOS ? '"AA"' : 'Gembok 🔒'} di sebelah alamat URL browser.` },
-                          { icon: <Info size={14} className="text-green-500" />, text: `Pilih ${isIOS ? '"Website Settings"' : '"Permissions" atau "Site Settings"'}.` },
-                          { icon: <MapPin size={14} className="text-orange-500" />, text: 'Ubah status "Location" menjadi "Allow / Izinkan".' },
-                        ].map((step, i) => (
-                          <div key={i} className="flex items-start gap-3">
-                            <div className="bg-white dark:bg-slate-800 p-2 rounded-xl border border-[var(--ab-border)] shrink-0">
-                              {step.icon}
-                            </div>
-                            <p className="text-xs font-bold text-[var(--ab-text-main)]">{step.text}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => window.location.reload()}
-                        className="flex-1 bg-blue-600 text-white py-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg hover:bg-blue-700 transition-all active:scale-95"
-                      >
-                        🔄 Refresh Setelah Reset
-                      </button>
-                      <button
-                        onClick={() => onGpsPrePromptConfirm(false)}
-                        className="flex-1 bg-[var(--ab-bg-main)] text-[var(--ab-text-main)] py-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] border border-[var(--ab-border)] hover:bg-[var(--ab-bg-surface)] transition-all active:scale-95"
-                      >
-                        Absen Tanpa GPS
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm text-[var(--ab-text-dim)] font-medium leading-relaxed mb-3">
-                      Sistem membutuhkan akses lokasi GPS untuk memvalidasi area kantor Anda.
-                    </p>
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-3xl p-5 mb-6">
-                      <p className="text-xs font-bold text-blue-700 dark:text-blue-300 leading-relaxed">
-                        💡 Setelah klik tombol di bawah, browser akan menampilkan pop-up izin lokasi. <strong>Pastikan klik &quot;Izinkan&quot; / &quot;Allow&quot;</strong> agar lokasi Anda terdeteksi.
-                      </p>
-                    </div>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => onGpsPrePromptConfirm(true)}
-                        className="flex-1 text-white py-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg transition-all active:scale-95"
-                        style={{ background: "var(--ab-primary)" }}
-                      >
-                        ✅ Izinkan & Check-In
-                      </button>
-                      <button
-                        onClick={() => onGpsPrePromptConfirm(false)}
-                        className="flex-1 bg-[var(--ab-bg-main)] text-[var(--ab-text-main)] py-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] border border-[var(--ab-border)] hover:bg-[var(--ab-bg-surface)] transition-all active:scale-95"
-                      >
-                        Tanpa GPS
-                      </button>
-                    </div>
-                  </>
-                )}
+              </div>
+
+              <div className="space-y-2.5">
+                <button
+                  onClick={() => syncLocation(true)}
+                  disabled={isLiveSyncing}
+                  className="w-full bg-blue-600 text-white py-3.5 rounded-2xl font-black uppercase tracking-wider text-[11px] shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <RotateCw size={14} className={isLiveSyncing ? "animate-spin" : ""} />
+                  {isLiveSyncing ? "Menghubungkan GPS..." : "🛰️ Coba Sinkronkan Sekarang"}
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowConfirmBlockedModal(false);
+                    setShowLocationGuide(true);
+                  }}
+                  className="w-full bg-[var(--ab-bg-main)] text-[var(--ab-text-main)] py-3 rounded-2xl font-bold text-[11px] border border-[var(--ab-border)] hover:bg-[var(--ab-bg-surface)] active:scale-95 transition-all"
+                >
+                  📖 Lihat Panduan Lengkap Browser
+                </button>
+
+                <div className="pt-2 border-t border-[var(--ab-border)] flex gap-2">
+                  <button
+                    onClick={() => {
+                      setShowConfirmBlockedModal(false);
+                      setIsProcessing(true);
+                      doCheckIn(null).then(finalizeCheckIn);
+                    }}
+                    className="flex-1 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 py-3 rounded-2xl font-black uppercase tracking-wider text-[10px] hover:bg-rose-100 active:scale-95 transition-all"
+                  >
+                    ⚠️ Tetap Lanjutkan (Tanpa GPS)
+                  </button>
+                  <button
+                    onClick={() => setShowConfirmBlockedModal(false)}
+                    className="flex-1 bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] py-3 rounded-2xl font-bold text-[10px] border border-[var(--ab-border)] active:scale-95 transition-all"
+                  >
+                    Batal
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* Confirm Outside Modal */}
+      {showConfirmOutsideModal && (
+        <div
+          className="ab-confirm-overlay fixed inset-0 flex items-center justify-center p-4"
+          style={{ zIndex: 99999, background: "rgba(2, 8, 23, 0.65)", backdropFilter: "blur(8px)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowConfirmOutsideModal(false); }}
+        >
+          <div className="w-full max-w-md rounded-[40px] shadow-2xl overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
+            <div className="p-7 text-center">
+              <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-amber-50 dark:border-amber-800/50">
+                <MapPin size={28} className="text-amber-600 dark:text-amber-400" />
+              </div>
+              <h3 className="text-xl font-black text-[var(--ab-text-main)] uppercase tracking-tight mb-2">
+                Di Luar Area Kantor
+              </h3>
+              <p className="text-xs text-[var(--ab-text-dim)] font-medium leading-relaxed mb-4">
+                Koordinat Anda terdeteksi berjarak <strong className="text-amber-600 font-bold">{pendingDistance || liveDist || 0} meter</strong> dari <strong>{liveOffice || "kantor"}</strong>.
+              </p>
+
+              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 rounded-2xl p-4 mb-5 text-xs text-blue-700 dark:text-blue-300 font-medium">
+                💡 Jika Anda sudah sampai di kantor, sinyal GPS perangkat mungkin sedang lambat menyesuaikan. Klik sinkronkan ulang untuk update koordinat terbaru.
+              </div>
+
+              <div className="space-y-2.5">
+                <button
+                  onClick={() => syncLocation(true)}
+                  disabled={isLiveSyncing}
+                  className="w-full bg-blue-600 text-white py-3.5 rounded-2xl font-black uppercase tracking-wider text-[11px] shadow-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <RotateCw size={14} className={isLiveSyncing ? "animate-spin" : ""} />
+                  {isLiveSyncing ? "Menyinkronkan..." : "🔄 Sinkronkan Ulang GPS"}
+                </button>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setShowConfirmOutsideModal(false);
+                      setIsProcessing(true);
+                      processCheckIn(pendingLocation || liveLoc);
+                    }}
+                    className="flex-1 bg-amber-500 text-white py-3 rounded-2xl font-black uppercase tracking-wider text-[10px] shadow-md hover:bg-amber-600 active:scale-95 transition-all"
+                  >
+                    ⚡ Tetap Absen (Luar Area)
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowConfirmOutsideModal(false);
+                      router.push("/absensi/requests");
+                    }}
+                    className="flex-1 bg-[var(--ab-bg-main)] text-[var(--ab-text-main)] py-3 rounded-2xl font-bold text-[10px] border border-[var(--ab-border)] hover:bg-[var(--ab-bg-surface)] active:scale-95 transition-all"
+                  >
+                    📝 Ajukan WFA
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setShowConfirmOutsideModal(false)}
+                  className="w-full text-[10px] font-bold text-[var(--ab-text-dim)] py-2 hover:text-slate-600 transition-colors"
+                >
+                  Tutup / Batal
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Location Guide Modal */}
       {showLocationGuide && (
@@ -841,10 +1206,10 @@ export function AttendanceWidget() {
                 <h3 className="text-2xl font-black text-[var(--ab-text-main)] uppercase tracking-tight mb-3">
                   Akses Lokasi Diblokir
                 </h3>
-                <p className="text-sm text-[var(--ab-text-dim)] font-medium leading-relaxed mb-8">
+                <p className="text-sm text-[var(--ab-text-dim)] font-medium leading-relaxed mb-6">
                   Browser Anda memblokir izin lokasi. Presensi wajib menggunakan GPS untuk validasi area kantor.
                 </p>
-                <div className="space-y-4 text-left bg-[var(--ab-bg-main)] p-6 rounded-[35px] border border-[var(--ab-border)] mb-8">
+                <div className="space-y-4 text-left bg-[var(--ab-bg-main)] p-6 rounded-[35px] border border-[var(--ab-border)] mb-6">
                   <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-2">
                     Cara Mengaktifkan Kembali:
                   </p>
@@ -855,7 +1220,7 @@ export function AttendanceWidget() {
                       ) : (
                         <Lock size={14} className="text-blue-500" />
                       ),
-                      text: `Klik ikon ${isIOS ? '"AA"' : "Gembok (Lock)"} di sebelah alamat URL.`,
+                      text: `Klik ikon ${isIOS ? '"AA"' : "Gembok (Lock) 🔒"} di sebelah alamat URL.`,
                     },
                     {
                       icon: <Info size={14} className="text-green-500" />,
@@ -874,16 +1239,26 @@ export function AttendanceWidget() {
                     </div>
                   ))}
                 </div>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="w-full bg-blue-600 text-white py-5 rounded-[25px] font-black uppercase tracking-widest text-xs shadow-xl hover:bg-blue-700 transition-all active:scale-95 mb-6"
-                >
-                  Refresh Halaman Sekarang
-                </button>
-                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-3xl border border-blue-100 dark:border-blue-800">
-                  <p className="text-[10px] font-bold text-blue-700 dark:text-blue-300 leading-relaxed italic">
-                    💡 Masih bingung? Silakan hubungi Admin HR atau tanyakan ke rekan tim.
-                  </p>
+
+                <div className="space-y-3">
+                  <button
+                    onClick={() => {
+                      syncLocation(true);
+                      setShowLocationGuide(false);
+                    }}
+                    disabled={isLiveSyncing}
+                    className="w-full bg-blue-600 text-white py-4 rounded-[22px] font-black uppercase tracking-widest text-[11px] shadow-lg hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <RotateCw size={14} className={isLiveSyncing ? "animate-spin" : ""} />
+                    {isLiveSyncing ? "Mendeteksi..." : "🔄 Coba Sinkronkan Sekarang"}
+                  </button>
+
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="w-full bg-[var(--ab-bg-main)] text-[var(--ab-text-main)] py-3 rounded-[20px] font-bold uppercase tracking-wider text-[10px] border border-[var(--ab-border)] hover:bg-[var(--ab-bg-surface)] transition-all active:scale-95"
+                  >
+                    Refresh Halaman
+                  </button>
                 </div>
               </div>
             </div>
@@ -965,126 +1340,12 @@ export function AttendanceWidget() {
         onConfirm={(reason) => processCheckOut(reason)}
         onCancel={() => setShowEarlyPrompt(false)}
       />
-      {/* Radius Warning Modal with Sync */}
-      {showRadiusWarning && (
-          <div className="ab-confirm-overlay fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 99999, background: "rgba(2, 8, 23, 0.65)", backdropFilter: "blur(8px)" }} onClick={(e) => { if (e.target === e.currentTarget) { setShowRadiusWarning(false); setPendingLocation(null); setSyncRetryCount(0); } }}>
-            <div className="w-full max-w-md rounded-[50px] shadow-2xl overflow-hidden ab-animate-scaleIn border border-[var(--ab-border)]" style={{ background: "var(--ab-bg-surface)" }}>
-              <div className="p-8 text-center">
-                <div className="w-20 h-20 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-orange-50 dark:border-orange-800">
-                  <MapPin size={32} className="text-orange-600" />
-                </div>
-                <h3 className="text-2xl font-black text-[var(--ab-text-main)] uppercase tracking-tight mb-3">
-                  Di Luar Area Kantor
-                </h3>
-                <p className="text-sm text-[var(--ab-text-dim)] font-medium leading-relaxed mb-2">
-                  Lokasi Anda terdeteksi <strong className="text-orange-600">{pendingDistance} meter</strong> dari kantor.
-                </p>
-                <p className="text-xs text-[var(--ab-text-dim)] mb-6">
-                  Radius kantor: {settings.officeRadius || 100} meter
-                </p>
-
-                {/* Sync button - max 2 retries */}
-                {syncRetryCount < 2 ? (
-                  <>
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-3xl p-4 mb-5">
-                      <p className="text-xs font-bold text-blue-700 dark:text-blue-300 leading-relaxed">
-                        💡 Jika Anda yakin sudah di area kantor, coba sinkronkan ulang lokasi GPS. Sinyal GPS kadang meleset.
-                      </p>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        setIsSyncing(true);
-                        const toastId = toast.loading("Sinkronisasi GPS...");
-                        navigator.geolocation.getCurrentPosition(
-                          (pos) => {
-                            toast.dismiss(toastId);
-                            const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                            let activeLocs = allowedLocationsRef.current;
-                            if (activeLocs.length === 0 && user?.departmentId) {
-                              fetchLocs().then(l => {
-                                activeLocs = l;
-                              });
-                            }
-                            const nearest = getNearestLocation(loc, activeLocs);
-                            if (nearest.noLocationError) {
-                              toast.error("Lokasi absen divisi Anda belum diatur oleh Admin.");
-                              setIsSyncing(false);
-                              return;
-                            }
-                            const newCount = syncRetryCount + 1;
-                            setSyncRetryCount(newCount);
-                            setPendingLocation(loc);
-                            setPendingDistance(Math.round(nearest.dist));
-                            if (nearest.dist <= nearest.radius) {
-                              toast.success("Lokasi terdeteksi dalam area kantor!");
-                              setShowRadiusWarning(false);
-                              setSyncRetryCount(0);
-                              setIsProcessing(true);
-                              doCheckIn(loc).then(finalizeCheckIn);
-                            } else {
-                              toast.error(`Masih di luar area (${Math.round(nearest.dist)}m). Sisa percobaan: ${2 - newCount}x`);
-                            }
-                            setIsSyncing(false);
-                          },
-                          () => {
-                            toast.dismiss(toastId);
-                            toast.error("Gagal mendapatkan lokasi GPS.");
-                            setIsSyncing(false);
-                          },
-                          { enableHighAccuracy: true }
-                        );
-                      }}
-                      disabled={isSyncing}
-                      className="w-full text-white py-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg transition-all active:scale-95 mb-3 flex items-center justify-center gap-3 disabled:opacity-60"
-                      style={{ background: "#3b82f6" }}
-                    >
-                      <MapPin size={16} className={isSyncing ? "animate-spin" : ""} />
-                      {isSyncing ? "Menyinkronkan..." : `🔄 Sinkron Lokasi (${2 - syncRetryCount}x tersisa)`}
-                    </button>
-                  </>
-                ) : (
-                  <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-3xl p-4 mb-5">
-                    <p className="text-xs font-bold text-amber-700 dark:text-amber-300 leading-relaxed">
-                      ⚠️ Sudah 2x sinkronisasi tetapi masih di luar area. Anda tetap bisa absen dengan status <strong>&quot;Di Luar Area&quot;</strong>.
-                    </p>
-                  </div>
-                )}
-
-                <div className="flex gap-3 mt-2">
-                  <button
-                    onClick={() => {
-                      setShowRadiusWarning(false);
-                      setSyncRetryCount(0);
-                      setIsProcessing(true);
-                      processCheckIn(pendingLocation);
-                    }}
-                    className="flex-1 text-white py-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg transition-all active:scale-95"
-                    style={{ background: syncRetryCount >= 2 ? "var(--ab-primary)" : "#f97316" }}
-                  >
-                    {syncRetryCount >= 2 ? "✅ Absen Sekarang" : "⚡ Tetap Absen"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowRadiusWarning(false);
-                      setPendingLocation(null);
-                      setSyncRetryCount(0);
-                      router.push("/absensi/requests");
-                    }}
-                    className="flex-1 bg-[var(--ab-bg-main)] text-[var(--ab-text-main)] py-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] border border-[var(--ab-border)] hover:bg-[var(--ab-bg-surface)] transition-all active:scale-95"
-                  >
-                    📝 Ajukan WFA
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       <PromptDialog
         isOpen={showLateReasonPrompt}
         title="Konfirmasi Telat"
         message="Anda terlambat masuk kerja. Silakan isi alasan keterlambatan Anda agar bisa di-review oleh HR:"
         placeholder="Misal: Ban bocor, macet parah, dll..."
-        onConfirm={(reason) => processCheckIn(null, reason)}
+        onConfirm={(reason) => processCheckIn(pendingLocation, reason)}
         onCancel={() => {
           setShowLateReasonPrompt(false);
           setPendingLocation(null);

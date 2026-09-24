@@ -496,12 +496,15 @@ export default function AdminDashboardPage() {
 
   // ─ Export Excel ─────────────────────────────────────────────────────────────
   const handleExportExcel = async () => {
-    const tid = toast.loading("Menyiapkan laporan Excel...");
+    const tid = toast.loading("Menyiapkan laporan Excel profesional...");
     try {
       const supabase = createClient();
       const [attRes, reqsRes] = await Promise.all([
-        supabase.from("attendance").select("user_id, date, type, status, check_in, check_out, late_fine, radius_penalty, late_reason")
-          .gte("date", exportStart).lte("date", exportEnd),
+        supabase
+          .from("attendance")
+          .select("user_id, date, type, status, check_in, check_out, late_fine, radius_penalty, location_status, location_in, late_reason, late_reason_status, notes")
+          .gte("date", exportStart)
+          .lte("date", exportEnd),
         supabase.from("leave_requests").select("user_id, type, dates, reason").eq("status", "approved"),
       ]);
 
@@ -511,52 +514,129 @@ export default function AdminDashboardPage() {
       const todayStr  = today;
       const holSet    = new Set(holidays.map((h) => h.date));
 
-      const workbook   = new ExcelJS.Workbook();
-      const summaryWs  = workbook.addWorksheet("Rekap Kehadiran");
-      const detailWs   = workbook.addWorksheet("Rincian Harian");
+      // Calculate effective working days (weekdays not in holiday list)
+      const effectiveWorkDays = dateRange.filter((d) => {
+        const dow = new Date(d).getDay();
+        return dow !== 0 && dow !== 6 && !holSet.has(d);
+      }).length;
 
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "NovaCore - TNT Kreatif";
+      workbook.created = new Date();
+
+      const summaryWs = workbook.addWorksheet("Rekap Kehadiran");
+      const detailWs  = workbook.addWorksheet("Rincian Harian");
+
+      // --- Palette & Styles ---
+      const headerNavyFill: ExcelJS.Fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF0F172A" }, // Slate 900
+      };
+      const headerDetailFill: ExcelJS.Fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF1E293B" }, // Slate 800
+      };
+      const zebraFill: ExcelJS.Fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFF8FAFC" }, // Slate 50
+      };
+      const totalRowFill: ExcelJS.Fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFF1F5F9" }, // Slate 100
+      };
+      const thinBorder: Partial<ExcelJS.Borders> = {
+        top:    { style: "thin", color: { argb: "FFE2E8F0" } },
+        left:   { style: "thin", color: { argb: "FFE2E8F0" } },
+        bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+        right:  { style: "thin", color: { argb: "FFE2E8F0" } },
+      };
+      const doubleBottomBorder: Partial<ExcelJS.Borders> = {
+        top:    { style: "thin", color: { argb: "FF94A3B8" } },
+        left:   { style: "thin", color: { argb: "FFE2E8F0" } },
+        bottom: { style: "double", color: { argb: "FF0F172A" } },
+        right:  { style: "thin", color: { argb: "FFE2E8F0" } },
+      };
+
+      // ─────────────────────────────────────────────────────────────────────────
+      // SHEET 1: REKAP KEHADIRAN (SUMMARY)
+      // ─────────────────────────────────────────────────────────────────────────
+      // Title Block
+      summaryWs.mergeCells("A1:N1");
+      const sTitle1 = summaryWs.getCell("A1");
+      sTitle1.value = "PT TNT KREATIF INDONESIA";
+      sTitle1.font = { name: "Arial", size: 14, bold: true, color: { argb: "FF0F172A" } };
+      summaryWs.getRow(1).height = 24;
+
+      summaryWs.mergeCells("A2:N2");
+      const sTitle2 = summaryWs.getCell("A2");
+      sTitle2.value = "LAPORAN REKAPITULASI PRESENSI & KEDISIPLINAN KARYAWAN";
+      sTitle2.font = { name: "Arial", size: 11, bold: true, color: { argb: "FF475569" } };
+      summaryWs.getRow(2).height = 20;
+
+      summaryWs.mergeCells("A3:N3");
+      const sTitle3 = summaryWs.getCell("A3");
+      sTitle3.value = `Periode: ${exportStart} s/d ${exportEnd}   |   Hari Kerja Efektif: ${effectiveWorkDays} Hari   |   Dicetak: ${new Date().toLocaleString("id-ID")}`;
+      sTitle3.font = { name: "Arial", size: 9, italic: true, color: { argb: "FF64748B" } };
+      summaryWs.getRow(3).height = 18;
+      summaryWs.getRow(4).height = 8; // Spacer
+
+      // Column definitions
       summaryWs.columns = [
-        { header: "Nama Staf",      key: "name",         width: 25 },
-        { header: "Departemen",     key: "dept",         width: 20 },
-        { header: "Kehadiran Aktif",key: "totalActive",  width: 15 },
-        { header: "WFO",            key: "totalWFO",     width: 10 },
-        { header: "WFA/WFH",        key: "totalWFA",     width: 10 },
-        { header: "Cuti Biasa",     key: "totalLeave",   width: 12 },
-        { header: "Sakit",          key: "totalSick",    width: 10 },
-        { header: "Total Telat",    key: "totalLate",    width: 12 },
-        { header: "Total Alpha",    key: "totalAlpha",   width: 12 },
-        { header: "Catatan Alpha",  key: "alphaNote",    width: 25 },
-        { header: "Total Menit Telat", key: "totalFine",    width: 15 },
-        { header: "Denda Radius",   key: "totalRadius",  width: 15 },
+        { key: "no",          width: 5 },
+        { key: "name",        width: 26 },
+        { key: "dept",        width: 18 },
+        { key: "workDays",    width: 13 },
+        { key: "totalActive", width: 13 },
+        { key: "totalWFO",    width: 11 },
+        { key: "totalWFA",    width: 11 },
+        { key: "totalLeave",  width: 11 },
+        { key: "totalSick",   width: 11 },
+        { key: "totalAlpha",  width: 12 },
+        { key: "totalLate",   width: 13 },
+        { key: "totalFine",   width: 16 },
+        { key: "totalRadius", width: 14 },
+        { key: "attRate",     width: 14 },
       ];
 
-      detailWs.columns = [
-        { header: "Tanggal",            key: "date",     width: 15 },
-        { header: "Nama Staf",          key: "name",     width: 25 },
-        { header: "Divisi",             key: "dept",     width: 20 },
-        { header: "Check In",           key: "checkIn",  width: 12 },
-        { header: "Check Out",          key: "checkOut", width: 12 },
-        { header: "Status",             key: "status",   width: 20 },
-        { header: "Tipe",               key: "type",     width: 10 },
-        { header: "Menit Telat",        key: "lateFine", width: 15 },
-        { header: "Keterangan/Alasan",  key: "reason",   width: 35 },
+      // Headers (Row 5)
+      const summaryHeaders = [
+        "No", "Nama Staf", "Departemen", "Hari Efektif",
+        "Hadir Aktif", "WFO", "WFA", "Cuti", "Sakit",
+        "Alpha", "Total Telat", "Total Menit Telat", "Denda Radius", "% Kehadiran"
       ];
+      const sHeaderRow = summaryWs.getRow(5);
+      sHeaderRow.values = summaryHeaders;
+      sHeaderRow.height = 26;
+      sHeaderRow.eachCell((cell) => {
+        cell.fill = headerNavyFill;
+        cell.font = { name: "Arial", size: 9, bold: true, color: { argb: "FFFFFFFF" } };
+        cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+        cell.border = thinBorder;
+      });
 
       const sorted = [...activeUsers].sort((a, b) => a.name.localeCompare(b.name));
 
-      sorted.forEach((u) => {
+      let sRowIndex = 6;
+      let grandActive = 0, grandWFO = 0, grandWFA = 0, grandLeave = 0, grandSick = 0, grandAlpha = 0, grandLate = 0, grandFine = 0, grandRadius = 0;
+
+      sorted.forEach((u, idx) => {
         const uLogs = attLogs.filter((l) => l.user_id === u.id);
-        const totalWFO   = uLogs.filter((l) => l.type === "WFO").length;
-        const totalWFA   = uLogs.filter((l) => l.type === "WFA").length;
-        const totalLate  = uLogs.filter((l) => l.status === "late" || l.status === "very_late").length;
-        const totalFine  = uLogs.reduce((s, l) => s + ((l.late_fine as number) ?? 0), 0);
+        const totalWFO    = uLogs.filter((l) => l.type === "WFO").length;
+        const totalWFA    = uLogs.filter((l) => l.type === "WFA").length;
+        const totalActive = totalWFO + totalWFA;
+        const totalLate   = uLogs.filter((l) => l.status === "late" || l.status === "very_late").length;
+        const totalFine   = uLogs.reduce((s, l) => s + ((l.late_fine as number) ?? 0), 0);
         const totalRadius = uLogs.reduce((s, l) => s + ((l.radius_penalty as number) ?? 0), 0);
 
         let totalLeave = 0, totalSick = 0;
         reqs.filter((r) => r.user_id === u.id).forEach((r) => {
           const valid = (r.dates as string[]).filter((d) => d >= exportStart && d <= exportEnd);
-          if (r.type === "leave")  totalLeave  += valid.length;
-          if (r.type === "sick")   totalSick   += valid.length;
+          if (r.type === "leave") totalLeave += valid.length;
+          if (r.type === "sick")  totalSick  += valid.length;
         });
 
         const totalAlpha = dateRange.reduce((s, d) => {
@@ -567,46 +647,315 @@ export default function AdminDashboardPage() {
           return hasLog || hasReq ? s : s + 1;
         }, 0);
 
-        summaryWs.addRow({
-          name: u.name, dept: u.dept,
-          totalActive: totalWFO + totalWFA, totalWFO, totalWFA,
-          totalLeave, totalSick, totalLate, totalAlpha,
-          alphaNote: totalAlpha > 0 ? `Alpa ${totalAlpha} hari` : "-",
-          totalFine, totalRadius,
+        const rate = effectiveWorkDays > 0 ? Math.min(100, Math.round((totalActive / effectiveWorkDays) * 100)) : 100;
+
+        grandActive += totalActive;
+        grandWFO    += totalWFO;
+        grandWFA    += totalWFA;
+        grandLeave  += totalLeave;
+        grandSick   += totalSick;
+        grandAlpha  += totalAlpha;
+        grandLate   += totalLate;
+        grandFine   += totalFine;
+        grandRadius += totalRadius;
+
+        const row = summaryWs.addRow({
+          no: idx + 1,
+          name: u.name,
+          dept: u.dept || "Umum",
+          workDays: effectiveWorkDays,
+          totalActive,
+          totalWFO,
+          totalWFA,
+          totalLeave,
+          totalSick,
+          totalAlpha,
+          totalLate,
+          totalFine,
+          totalRadius,
+          attRate: `${rate}%`,
         });
+
+        row.height = 20;
+        const isEven = idx % 2 === 1;
+        row.eachCell((cell, colNumber) => {
+          cell.font = { name: "Arial", size: 9 };
+          cell.border = thinBorder;
+          if (isEven) cell.fill = zebraFill;
+
+          if (colNumber === 1) {
+            cell.alignment = { horizontal: "center", vertical: "middle" };
+          } else if (colNumber === 2 || colNumber === 3) {
+            cell.alignment = { horizontal: "left", vertical: "middle" };
+          } else {
+            cell.alignment = { horizontal: "center", vertical: "middle" };
+          }
+        });
+
+        sRowIndex++;
       });
 
+      // Total Row Summary
+      const totalRow = summaryWs.addRow({
+        no: "",
+        name: "TOTAL KESELURUHAN",
+        dept: "",
+        workDays: "-",
+        totalActive: grandActive,
+        totalWFO: grandWFO,
+        totalWFA: grandWFA,
+        totalLeave: grandLeave,
+        totalSick: grandSick,
+        totalAlpha: grandAlpha,
+        totalLate: grandLate,
+        totalFine: grandFine,
+        totalRadius: grandRadius,
+        attRate: sorted.length > 0 && effectiveWorkDays > 0 ? `${Math.round((grandActive / (sorted.length * effectiveWorkDays)) * 100)}%` : "-",
+      });
+      totalRow.height = 24;
+      totalRow.eachCell((cell, colNumber) => {
+        cell.font = { name: "Arial", size: 9, bold: true, color: { argb: "FF0F172A" } };
+        cell.fill = totalRowFill;
+        cell.border = doubleBottomBorder;
+        if (colNumber === 2) {
+          cell.alignment = { horizontal: "left", vertical: "middle" };
+        } else {
+          cell.alignment = { horizontal: "center", vertical: "middle" };
+        }
+      });
+
+      // Page Setup for Summary Sheet (Print-friendly A4 landscape fit)
+      summaryWs.views = [{ state: "frozen", xSplit: 0, ySplit: 5 }];
+      summaryWs.autoFilter = {
+        from: { row: 5, column: 1 },
+        to:   { row: 5, column: summaryHeaders.length },
+      };
+      summaryWs.pageSetup = {
+        paperSize: 9, // A4
+        orientation: "landscape",
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0, // automatic vertical overflow
+        margins: {
+          left: 0.3, right: 0.3, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2,
+        },
+        printTitlesRow: "5:5", // Header repeats on every printed page
+        horizontalCentered: true,
+      };
+      summaryWs.headerFooter = {
+        oddHeader: `&L&BNOVA CORE SYSTEM - TNT KREATIF&R&IPeriode: ${exportStart} s/d ${exportEnd}`,
+        oddFooter: "&L&IKerahasiaan Internal PT TNT Kreatif Indonesia&RHal &P dari &N",
+      };
+
+      // ─────────────────────────────────────────────────────────────────────────
+      // SHEET 2: RINCIAN HARIAN (DETAIL LOGS)
+      // ─────────────────────────────────────────────────────────────────────────
+      detailWs.mergeCells("A1:L1");
+      const dTitle1 = detailWs.getCell("A1");
+      dTitle1.value = "PT TNT KREATIF INDONESIA";
+      dTitle1.font = { name: "Arial", size: 14, bold: true, color: { argb: "FF0F172A" } };
+      detailWs.getRow(1).height = 24;
+
+      detailWs.mergeCells("A2:L2");
+      const dTitle2 = detailWs.getCell("A2");
+      dTitle2.value = "LOG DETAIL PRESENSI & AKTIVITAS HARIAN";
+      dTitle2.font = { name: "Arial", size: 11, bold: true, color: { argb: "FF475569" } };
+      detailWs.getRow(2).height = 20;
+
+      detailWs.mergeCells("A3:L3");
+      const dTitle3 = detailWs.getCell("A3");
+      dTitle3.value = `Periode: ${exportStart} s/d ${exportEnd}   |   Dicetak: ${new Date().toLocaleString("id-ID")}`;
+      dTitle3.font = { name: "Arial", size: 9, italic: true, color: { argb: "FF64748B" } };
+      detailWs.getRow(3).height = 18;
+      detailWs.getRow(4).height = 8; // Spacer
+
+      detailWs.columns = [
+        { key: "no",         width: 5 },
+        { key: "date",       width: 13 },
+        { key: "name",       width: 25 },
+        { key: "dept",       width: 18 },
+        { key: "type",       width: 10 },
+        { key: "checkIn",    width: 10 },
+        { key: "checkOut",   width: 10 },
+        { key: "status",     width: 18 },
+        { key: "location",   width: 28 },
+        { key: "lateFine",   width: 12 },
+        { key: "lateStatus", width: 16 },
+        { key: "reason",     width: 32 },
+      ];
+
+      const detailHeaders = [
+        "No", "Tanggal", "Nama Staf", "Departemen", "Tipe",
+        "Masuk", "Pulang", "Status Kehadiran", "Lokasi Presensi",
+        "Menit Telat", "Status Alasan", "Keterangan / Alasan"
+      ];
+      const dHeaderRow = detailWs.getRow(5);
+      dHeaderRow.values = detailHeaders;
+      dHeaderRow.height = 26;
+      dHeaderRow.eachCell((cell) => {
+        cell.fill = headerDetailFill;
+        cell.font = { name: "Arial", size: 9, bold: true, color: { argb: "FFFFFFFF" } };
+        cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+        cell.border = thinBorder;
+      });
+
+      let dIdx = 1;
       dateRange.forEach((d) => {
         const dow = new Date(d).getDay();
         const isWeekend = dow === 0 || dow === 6;
         const isHol = holSet.has(d);
         const isFuture = d > todayStr;
+
         sorted.forEach((u) => {
           const log = attLogs.find((l) => l.user_id === u.id && l.date === d);
           const req = reqs.find((r) => r.user_id === u.id && (r.dates as string[]).includes(d));
+
           if (log) {
-            detailWs.addRow({ date: d, name: u.name, dept: u.dept, checkIn: fmt(log.check_in as string | null), checkOut: fmt(log.check_out as string | null), status: (log.status as string).replace("_", " "), type: log.type as string, lateFine: (log.late_fine as number) ?? 0, reason: (log.late_reason as string) || "-" });
+            let locText = log.location_status || "-";
+            const locIn = log.location_in as any;
+            if (locIn && typeof locIn === "object") {
+              const office = locIn.officeName;
+              const dist = locIn.distance;
+              if (office && typeof dist === "number") {
+                locText = `${log.location_status ?? "Terekam"} (${office} - ${dist}m)`;
+              } else if (typeof dist === "number") {
+                locText = `${log.location_status ?? "Terekam"} (${dist}m)`;
+              }
+            }
+
+            let lateStat = "-";
+            if (log.late_reason_status === "accepted") {
+              lateStat = "Disetujui (Batal Denda)";
+            } else if (log.late_reason_status === "rejected") {
+              lateStat = "Ditolak";
+            } else if (log.late_reason_status === "pending") {
+              lateStat = "Menunggu Review";
+            }
+
+            let statusFormatted = (log.status as string || "").replace("_", " ").toUpperCase();
+            if (statusFormatted === "ON TIME") statusFormatted = "Tepat Waktu";
+            else if (statusFormatted === "LATE") statusFormatted = "Terlambat";
+            else if (statusFormatted === "VERY LATE") statusFormatted = "Sangat Terlambat";
+
+            const row = detailWs.addRow({
+              no: dIdx++,
+              date: d,
+              name: u.name,
+              dept: u.dept || "Umum",
+              type: log.type as string,
+              checkIn: fmt(log.check_in as string | null),
+              checkOut: fmt(log.check_out as string | null),
+              status: statusFormatted,
+              location: locText,
+              lateFine: (log.late_fine as number) ?? 0,
+              lateStatus: lateStat,
+              reason: (log.late_reason as string) || (log.notes as string) || "-",
+            });
+            row.height = 20;
+            const isEven = dIdx % 2 === 0;
+            row.eachCell((cell, colNumber) => {
+              cell.font = { name: "Arial", size: 9 };
+              cell.border = thinBorder;
+              if (isEven) cell.fill = zebraFill;
+              if (colNumber === 1 || colNumber === 2 || colNumber === 5 || colNumber === 6 || colNumber === 7 || colNumber === 8 || colNumber === 10 || colNumber === 11) {
+                cell.alignment = { horizontal: "center", vertical: "middle" };
+              } else {
+                cell.alignment = { horizontal: "left", vertical: "middle" };
+              }
+            });
           } else if (req) {
-            const typeLabel = req.type === "leave" ? "Cuti" : req.type === "sick" ? "Sakit" : "WFA";
-            detailWs.addRow({ date: d, name: u.name, dept: u.dept, checkIn: "-", checkOut: "-", status: "Disetujui", type: typeLabel, lateFine: 0, reason: (req.reason as string) || "-" });
+            const typeLabel = req.type === "leave" ? "Cuti Biasa" : req.type === "sick" ? "Cuti Sakit" : "Izin WFA";
+            const row = detailWs.addRow({
+              no: dIdx++,
+              date: d,
+              name: u.name,
+              dept: u.dept || "Umum",
+              type: typeLabel,
+              checkIn: "-",
+              checkOut: "-",
+              status: "Izin Disetujui",
+              location: "-",
+              lateFine: 0,
+              lateStatus: "-",
+              reason: (req.reason as string) || "-",
+            });
+            row.height = 20;
+            const isEven = dIdx % 2 === 0;
+            row.eachCell((cell, colNumber) => {
+              cell.font = { name: "Arial", size: 9 };
+              cell.border = thinBorder;
+              if (isEven) cell.fill = zebraFill;
+              if (colNumber === 1 || colNumber === 2 || colNumber === 5 || colNumber === 6 || colNumber === 7 || colNumber === 8 || colNumber === 10 || colNumber === 11) {
+                cell.alignment = { horizontal: "center", vertical: "middle" };
+              } else {
+                cell.alignment = { horizontal: "left", vertical: "middle" };
+              }
+            });
           } else if (!isWeekend && !isHol && !isFuture) {
-            detailWs.addRow({ date: d, name: u.name, dept: u.dept, checkIn: "-", checkOut: "-", status: "Alpa / Mangkir", type: "-", lateFine: 0, reason: "Alpa" });
+            const row = detailWs.addRow({
+              no: dIdx++,
+              date: d,
+              name: u.name,
+              dept: u.dept || "Umum",
+              type: "-",
+              checkIn: "-",
+              checkOut: "-",
+              status: "Alpa / Mangkir",
+              location: "-",
+              lateFine: 0,
+              lateStatus: "-",
+              reason: "Tidak ada presensi / keterangan",
+            });
+            row.height = 20;
+            const isEven = dIdx % 2 === 0;
+            row.eachCell((cell, colNumber) => {
+              cell.font = { name: "Arial", size: 9 };
+              cell.border = thinBorder;
+              if (isEven) cell.fill = zebraFill;
+              if (colNumber === 1 || colNumber === 2 || colNumber === 5 || colNumber === 6 || colNumber === 7 || colNumber === 8 || colNumber === 10 || colNumber === 11) {
+                cell.alignment = { horizontal: "center", vertical: "middle" };
+              } else {
+                cell.alignment = { horizontal: "left", vertical: "middle" };
+              }
+            });
           }
         });
       });
 
-      summaryWs.getRow(1).font = { bold: true };
-      summaryWs.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
-      detailWs.getRow(1).font  = { bold: true };
-      detailWs.getRow(1).fill  = { type: "pattern", pattern: "solid", fgColor: { argb: "FFBBDEFB" } };
+      // Page Setup for Detail Sheet (Print-friendly A4 landscape fit)
+      detailWs.views = [{ state: "frozen", xSplit: 0, ySplit: 5 }];
+      detailWs.autoFilter = {
+        from: { row: 5, column: 1 },
+        to:   { row: 5, column: detailHeaders.length },
+      };
+      detailWs.pageSetup = {
+        paperSize: 9, // A4
+        orientation: "landscape",
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0, // automatic vertical overflow
+        margins: {
+          left: 0.3, right: 0.3, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2,
+        },
+        printTitlesRow: "5:5",
+        horizontalCentered: true,
+      };
+      detailWs.headerFooter = {
+        oddHeader: `&L&BNOVA CORE SYSTEM - TNT KREATIF&R&IPeriode: ${exportStart} s/d ${exportEnd}`,
+        oddFooter: "&L&IKerahasiaan Internal PT TNT Kreatif Indonesia&RHal &P dari &N",
+      };
 
+      // Generate file buffer and trigger download
       const buffer = await workbook.xlsx.writeBuffer();
       const blob   = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const url    = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url; a.download = `Laporan_Rekap_${exportStart}_sd_${exportEnd}.xlsx`; a.click();
+      a.href = url;
+      a.download = `Laporan_Rekap_Presensi_${exportStart}_sd_${exportEnd}.xlsx`;
+      a.click();
       URL.revokeObjectURL(url);
-      toast.success("Laporan berhasil didownload!", { id: tid });
+
+      toast.success("Laporan Excel profesional berhasil didownload!", { id: tid });
       setShowExport(false);
     } catch (err: unknown) {
       toast.error("Gagal ekspor: " + (err instanceof Error ? err.message : "Unknown"), { id: tid });
