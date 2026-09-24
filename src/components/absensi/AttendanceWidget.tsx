@@ -398,7 +398,25 @@ export function AttendanceWidget() {
       }
     }
 
-    let locationStatus = "Lokasi Keblokir";
+    // Check if user has an approved WFA request for today
+    let isApprovedWfa = false;
+    try {
+      const { data: wfaReq } = await supabase
+        .from("leave_requests")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("status", "approved")
+        .eq("type", "wfa")
+        .contains("dates", [getToday()])
+        .limit(1);
+      if (wfaReq && wfaReq.length > 0) {
+        isApprovedWfa = true;
+      }
+    } catch {
+      // ignore
+    }
+
+    let locationStatus = isApprovedWfa ? "Dalam Area (WFA)" : "Lokasi Keblokir";
     let radiusPenalty = 0;
     let locationToSave: any = location;
     if (location) {
@@ -411,7 +429,10 @@ export function AttendanceWidget() {
       const isFiniteDist = isFinite(nearest.dist);
       const roundedDist = isFiniteDist ? Math.round(nearest.dist) : null;
 
-      if (isFiniteDist && nearest.dist <= nearest.radius) {
+      if (isApprovedWfa) {
+        locationStatus = "Dalam Area (WFA)";
+        radiusPenalty = 0;
+      } else if (isFiniteDist && nearest.dist <= nearest.radius) {
         locationStatus = "Dalam Area";
         radiusPenalty = 0;
       } else {
@@ -435,7 +456,7 @@ export function AttendanceWidget() {
       date: getToday(),
       check_in: getNowTime(),
       status: arrStat,
-      type: "WFO",
+      type: isApprovedWfa ? "WFA" : "WFO",
       location_in: locationToSave,
       location_status: locationStatus,
       late_fine: lateFine,

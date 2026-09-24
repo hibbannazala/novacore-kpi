@@ -625,28 +625,53 @@ export default function AdminDashboardPage() {
 
       sorted.forEach((u, idx) => {
         const uLogs = attLogs.filter((l) => l.user_id === u.id);
-        const totalWFO    = uLogs.filter((l) => l.type === "WFO").length;
-        const totalWFA    = uLogs.filter((l) => l.type === "WFA").length;
-        const totalActive = totalWFO + totalWFA;
-        const totalLate   = uLogs.filter((l) => l.status === "late" || l.status === "very_late").length;
-        const totalFine   = uLogs.reduce((s, l) => s + ((l.late_fine as number) ?? 0), 0);
-        const totalRadius = uLogs.reduce((s, l) => s + ((l.radius_penalty as number) ?? 0), 0);
+        const uReqs = reqs.filter((r) => r.user_id === u.id);
 
-        let totalLeave = 0, totalSick = 0;
-        reqs.filter((r) => r.user_id === u.id).forEach((r) => {
-          const valid = (r.dates as string[]).filter((d) => d >= exportStart && d <= exportEnd);
-          if (r.type === "leave") totalLeave += valid.length;
-          if (r.type === "sick")  totalSick  += valid.length;
+        let totalWFO = 0;
+        let totalWFA = 0;
+        let totalLeave = 0;
+        let totalSick = 0;
+        let totalAlpha = 0;
+        let totalLate = 0;
+        let totalFine = 0;
+        let totalRadius = 0;
+
+        dateRange.forEach((d) => {
+          const dow = new Date(d).getDay();
+          const isWeekend = dow === 0 || dow === 6;
+          const isHol = holSet.has(d);
+          const isFuture = d > todayStr;
+
+          const log = uLogs.find((l) => l.date === d);
+          const req = uReqs.find((r) => (r.dates as string[]).includes(d));
+          const isWfaApproved = req?.type === "wfa";
+
+          if (log) {
+            const isWfa = log.type === "WFA" || isWfaApproved;
+            if (isWfa) {
+              totalWFA += 1;
+            } else {
+              totalWFO += 1;
+              totalRadius += ((log.radius_penalty as number) ?? 0);
+            }
+            if (log.status === "late" || log.status === "very_late") {
+              totalLate += 1;
+            }
+            totalFine += ((log.late_fine as number) ?? 0);
+          } else if (req) {
+            if (req.type === "wfa") {
+              totalWFA += 1;
+            } else if (req.type === "leave") {
+              totalLeave += 1;
+            } else if (req.type === "sick") {
+              totalSick += 1;
+            }
+          } else if (!isWeekend && !isHol && !isFuture) {
+            totalAlpha += 1;
+          }
         });
 
-        const totalAlpha = dateRange.reduce((s, d) => {
-          const dow = new Date(d).getDay();
-          if (dow === 0 || dow === 6 || holSet.has(d) || d > todayStr) return s;
-          const hasLog = uLogs.some((l) => l.date === d);
-          const hasReq = reqs.some((r) => r.user_id === u.id && (r.dates as string[]).includes(d));
-          return hasLog || hasReq ? s : s + 1;
-        }, 0);
-
+        const totalActive = totalWFO + totalWFA;
         const rate = effectiveWorkDays > 0 ? Math.min(100, Math.round((totalActive / effectiveWorkDays) * 100)) : 100;
 
         grandActive += totalActive;
@@ -809,11 +834,15 @@ export default function AdminDashboardPage() {
         sorted.forEach((u) => {
           const log = attLogs.find((l) => l.user_id === u.id && l.date === d);
           const req = reqs.find((r) => r.user_id === u.id && (r.dates as string[]).includes(d));
+          const isWfaApproved = req?.type === "wfa";
 
           if (log) {
+            const isWfa = log.type === "WFA" || isWfaApproved;
             let locText = log.location_status || "-";
             const locIn = log.location_in as any;
-            if (locIn && typeof locIn === "object") {
+            if (isWfa) {
+              locText = log.location_status ? `${log.location_status} (WFA)` : "WFA Disetujui";
+            } else if (locIn && typeof locIn === "object") {
               const office = locIn.officeName;
               const dist = locIn.distance;
               if (office && typeof dist === "number") {
@@ -842,14 +871,14 @@ export default function AdminDashboardPage() {
               date: d,
               name: u.name,
               dept: u.dept || "Umum",
-              type: log.type as string,
+              type: isWfa ? "WFA" : (log.type as string),
               checkIn: fmt(log.check_in as string | null),
               checkOut: fmt(log.check_out as string | null),
               status: statusFormatted,
               location: locText,
               lateFine: (log.late_fine as number) ?? 0,
               lateStatus: lateStat,
-              reason: (log.late_reason as string) || (log.notes as string) || "-",
+              reason: (log.late_reason as string) || (log.notes as string) || (isWfaApproved ? (req?.reason as string) : "-"),
             });
             row.height = 20;
             const isEven = dIdx % 2 === 0;
@@ -865,6 +894,7 @@ export default function AdminDashboardPage() {
             });
           } else if (req) {
             const typeLabel = req.type === "leave" ? "Cuti Biasa" : req.type === "sick" ? "Cuti Sakit" : "Izin WFA";
+            const statusLabel = req.type === "wfa" ? "WFA (Disetujui)" : "Izin Disetujui";
             const row = detailWs.addRow({
               no: dIdx++,
               date: d,
@@ -873,7 +903,7 @@ export default function AdminDashboardPage() {
               type: typeLabel,
               checkIn: "-",
               checkOut: "-",
-              status: "Izin Disetujui",
+              status: statusLabel,
               location: "-",
               lateFine: 0,
               lateStatus: "-",

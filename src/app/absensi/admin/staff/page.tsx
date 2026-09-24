@@ -278,41 +278,58 @@ export default function AdminStaffPage() {
     try {
       const startStr = `${selectedPeriod}-01`;
       const endStr   = `${selectedPeriod}-31`;
-      const { data: logs, error } = await supabase
-        .from("attendance")
-        .select("date, type, status, check_in, check_out, late_fine, radius_penalty, late_reason_status")
-        .eq("user_id", u.id)
-        .gte("date", startStr)
-        .lte("date", endStr)
-        .order("date");
-      if (error) throw error;
-      if (!logs || logs.length === 0) {
-        toast.error(`Tidak ada absen untuk ${u.name} pada ${selectedPeriod}`, { id: tid });
+      const [logsRes, reqsRes] = await Promise.all([
+        supabase
+          .from("attendance")
+          .select("date, type, status, check_in, check_out, late_fine, radius_penalty, late_reason_status")
+          .eq("user_id", u.id)
+          .gte("date", startStr)
+          .lte("date", endStr)
+          .order("date"),
+        supabase
+          .from("leave_requests")
+          .select("type, dates, reason")
+          .eq("user_id", u.id)
+          .eq("status", "approved"),
+      ]);
+
+      if (logsRes.error) throw logsRes.error;
+      const logs = logsRes.data ?? [];
+      const reqs = reqsRes.data ?? [];
+
+      if (logs.length === 0 && reqs.length === 0) {
+        toast.error(`Tidak ada data presensi/izin untuk ${u.name} pada ${selectedPeriod}`, { id: tid });
         return;
       }
+
       const workbook  = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Slip Absen");
       worksheet.columns = [
         { header: "Tanggal",      key: "date",              width: 15 },
-        { header: "Tipe",         key: "type",              width: 10 },
-        { header: "Status",       key: "status",            width: 15 },
+        { header: "Tipe",         key: "type",              width: 12 },
+        { header: "Status",       key: "status",            width: 18 },
         { header: "Check In",     key: "checkIn",           width: 12 },
         { header: "Check Out",    key: "checkOut",          width: 12 },
         { header: "Menit Telat",  key: "lateFine",          width: 15 },
         { header: "Denda Radius", key: "radiusPenalty",     width: 15 },
         { header: "Status Alasan",key: "lateReasonStatus",  width: 15 },
       ];
+
       for (const l of logs) {
         const lrsRaw = l.late_reason_status as string | null;
         const lrsLabel = lrsRaw === "accepted" ? "Diterima" : lrsRaw === "rejected" ? "Ditolak" : lrsRaw === "pending" ? "Menunggu" : "-";
+        const isWfaApproved = reqs.some(r => r.type === "wfa" && (r.dates as string[]).includes(l.date));
+        const finalType = (l.type === "WFA" || isWfaApproved) ? "WFA" : (l.type as string) ?? "-";
+        const finalRadius = isWfaApproved ? 0 : ((l.radius_penalty as number) ?? 0);
+
         worksheet.addRow({
           date:             l.date as string,
-          type:             (l.type as string) ?? "-",
+          type:             finalType,
           status:           ((l.status as string) ?? "-").replace("_", " ").toUpperCase(),
           checkIn:          (l.check_in as string | null) ?? "-",
           checkOut:         (l.check_out as string | null) ?? "-",
           lateFine:         parseLateMinutes((l.late_fine as number) ?? 0),
-          radiusPenalty:    (l.radius_penalty as number) ?? 0,
+          radiusPenalty:    finalRadius,
           lateReasonStatus: lrsLabel,
         });
       }
