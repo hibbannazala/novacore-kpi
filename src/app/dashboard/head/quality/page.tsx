@@ -51,6 +51,10 @@ export default function HeadQualityPage() {
   const [expandedDepts, setExpandedDepts] = useState<Set<string>>(new Set());
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
 
+  const isPastMonth =
+    selectedYear < now.getFullYear() ||
+    (selectedYear === now.getFullYear() && selectedMonthNum < now.getMonth() + 1);
+
   useEffect(() => {
     if (!user || managedDepartments.length === 0 || users.length === 0) return;
     async function load() {
@@ -75,11 +79,14 @@ export default function HeadQualityPage() {
         return;
       }
 
+      const statusFilter = isPastMonth ? ["active", "completed"] : ["active"];
+
       const { data: aRows } = await supabase
         .from("kpi_assignments")
         .select("*, kpis(id, title, type, unit, monthly_target, departments(name)), monthly_scores(*)")
         .eq("year", selectedYear)
-        .eq("status", "active")
+        .eq("month", selectedMonthNum)
+        .in("status", statusFilter)
         .in("user_id", teamUserIds);
 
       const items: QualityItem[] = [];
@@ -101,6 +108,11 @@ export default function HeadQualityPage() {
           };
         });
 
+        const ms = monthlyScores[scoreKey];
+        const actualTotal = ms ? ms.actualTotal : (row.actual_total ?? 0);
+        const achievementPct = ms ? ms.achievementPercentage : (row.achievement_percentage ?? 0);
+        const note = ms?.qualityNotes ?? row.quality_notes ?? row.notes ?? "";
+
         const assignment: KpiAssignment = {
           id: row.id,
           kpiId: row.kpi_id,
@@ -109,11 +121,11 @@ export default function HeadQualityPage() {
           kpiType: kpiRow.type as any,
           status: row.status,
           monthlyTarget: row.monthly_target ?? 0,
-          actualTotal: row.actual_total ?? 0,
-          achievementPercentage: row.achievement_percentage ?? 0,
-          performanceCategory: getPerformanceCategory(row.achievement_percentage ?? 0) as any,
+          actualTotal: actualTotal,
+          achievementPercentage: achievementPct,
+          performanceCategory: getPerformanceCategory(achievementPct) as any,
           weight: row.weight ?? 0,
-          notes: row.notes ?? "",
+          notes: note,
           year: row.year,
           month: row.month,
           currentDailyTarget: 0,
@@ -127,7 +139,7 @@ export default function HeadQualityPage() {
           completedAt: null,
           createdAt: row.created_at,
           updatedAt: row.updated_at,
-          qualityNotes: row.quality_notes ?? "",
+          qualityNotes: note,
           monthlyScores: Object.keys(monthlyScores).length > 0 ? monthlyScores : undefined,
         };
 
@@ -150,8 +162,6 @@ export default function HeadQualityPage() {
 
         items.push({ assignment, kpi });
 
-        const ms = monthlyScores[scoreKey];
-        const note = ms?.qualityNotes ?? assignment.qualityNotes ?? "";
         if (note) initNotes[row.id] = note;
       });
 
@@ -160,7 +170,7 @@ export default function HeadQualityPage() {
       setIsLoading(false);
     }
     load();
-  }, [user, users, managedDepartments.join(","), selectedYear]);
+  }, [user, users, managedDepartments.join(","), selectedYear, selectedMonthNum, isPastMonth]);
 
   const grouped = useMemo(() => {
     const userMap: Record<string, string> = {};
@@ -231,6 +241,7 @@ export default function HeadQualityPage() {
         actual_total: value,
         achievement_percentage: pct,
         quality_notes: notes,
+        notes: notes,
       } as any).eq("id", assignmentId);
 
       setInputValues((prev) => ({ ...prev, [assignmentId]: "" }));
@@ -241,7 +252,7 @@ export default function HeadQualityPage() {
             ...(q.assignment.monthlyScores ?? {}),
             [scoreKey]: { actualTotal: value, achievementPercentage: pct, performanceCategory: category as any, qualityNotes: notes },
           };
-          return { ...q, assignment: { ...q.assignment, actualTotal: value, achievementPercentage: pct, performanceCategory: category as any, qualityNotes: notes, monthlyScores: updatedMonthlyScores } };
+          return { ...q, assignment: { ...q.assignment, actualTotal: value, achievementPercentage: pct, performanceCategory: category as any, qualityNotes: notes, notes: notes, monthlyScores: updatedMonthlyScores } };
         })
       );
     } finally {
@@ -296,6 +307,12 @@ export default function HeadQualityPage() {
           className="h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring self-start"
         />
       </div>
+
+      {isPastMonth && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300">
+          Menampilkan data evaluasi kualitas & lead tim <strong>{monthName(selectedMonthNum)} {selectedYear}</strong>. Anda dapat menginput atau memperbarui nilai bulan lalu.
+        </div>
+      )}
 
       {!isLoading && deptNames.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
@@ -400,8 +417,13 @@ export default function HeadQualityPage() {
                                     <div key={assignment.id} className="rounded-lg border border-border bg-card px-4 py-3 flex flex-col gap-3">
                                       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                                         <div className="flex-1 min-w-0">
-                                          <p className="text-sm font-medium">{kpi.title}</p>
-                                          <p className="text-xs text-muted-foreground">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <p className="text-sm font-medium">{kpi.title}</p>
+                                            <span className="text-[10px] uppercase font-bold tracking-widest text-primary/80 bg-primary/10 px-2 py-0.5 rounded-full">
+                                              {kpi.type === 'lead_tim' ? 'Lead Tim' : 'Quality'}
+                                            </span>
+                                          </div>
+                                          <p className="text-xs text-muted-foreground mt-0.5">
                                             Aktual: {formatPercentage(displayActual)} / {formatPercentage(assignment.monthlyTarget)}
                                           </p>
                                         </div>

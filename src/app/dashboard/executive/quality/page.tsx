@@ -36,6 +36,10 @@ export default function ExecutiveQualityPage() {
   const [expandedDepts, setExpandedDepts] = useState<Set<string>>(new Set());
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
 
+  const isPastMonth =
+    selectedYear < now.getFullYear() ||
+    (selectedYear === now.getFullYear() && selectedMonthNum < now.getMonth() + 1);
+
   useEffect(() => {
     if (users.length === 0) return;
     async function load() {
@@ -45,11 +49,14 @@ export default function ExecutiveQualityPage() {
       setExpandedUsers(new Set());
 
       const supabase = createClient();
+      const statusFilter = isPastMonth ? ["active", "completed"] : ["active"];
+
       const { data: aRows } = await supabase
         .from("kpi_assignments")
         .select("*, kpis(id, title, type, unit, monthly_target, brand, departments(name)), monthly_scores(*)")
         .eq("year", selectedYear)
-        .eq("status", "active");
+        .eq("month", selectedMonthNum)
+        .in("status", statusFilter);
 
       const items: QualityItem[] = [];
       const initNotes: Record<string, string> = {};
@@ -57,7 +64,7 @@ export default function ExecutiveQualityPage() {
 
       (aRows ?? []).forEach((row: any) => {
         const kpiRow = row.kpis;
-        if (!kpiRow || kpiRow.type !== "quality") return;
+        if (!kpiRow || (kpiRow.type !== "quality" && kpiRow.type !== "lead_tim")) return;
 
         const msRows = (row.monthly_scores as any[]) ?? [];
         const monthlyScores: Record<string, any> = {};
@@ -70,19 +77,24 @@ export default function ExecutiveQualityPage() {
           };
         });
 
+        const ms = monthlyScores[scoreKey];
+        const actualTotal = ms ? ms.actualTotal : (row.actual_total ?? 0);
+        const achievementPct = ms ? ms.achievementPercentage : (row.achievement_percentage ?? 0);
+        const note = ms?.qualityNotes ?? row.quality_notes ?? row.notes ?? "";
+
         const assignment: KpiAssignment = {
           id: row.id,
           kpiId: row.kpi_id,
           userId: row.user_id,
           department: kpiRow.departments?.name ?? "",
-          kpiType: "quality",
+          kpiType: kpiRow.type as any,
           status: row.status,
           monthlyTarget: row.monthly_target ?? 0,
-          actualTotal: row.actual_total ?? 0,
-          achievementPercentage: row.achievement_percentage ?? 0,
-          performanceCategory: getPerformanceCategory(row.achievement_percentage ?? 0) as any,
+          actualTotal: actualTotal,
+          achievementPercentage: achievementPct,
+          performanceCategory: getPerformanceCategory(achievementPct) as any,
           weight: row.weight ?? 0,
-          notes: row.notes ?? "",
+          notes: note,
           year: row.year,
           month: row.month,
           currentDailyTarget: 0,
@@ -96,7 +108,7 @@ export default function ExecutiveQualityPage() {
           completedAt: null,
           createdAt: row.created_at,
           updatedAt: row.updated_at,
-          qualityNotes: row.quality_notes ?? "",
+          qualityNotes: note,
           monthlyScores: Object.keys(monthlyScores).length > 0 ? monthlyScores : undefined,
         };
 
@@ -120,8 +132,6 @@ export default function ExecutiveQualityPage() {
 
         items.push({ assignment, kpi });
 
-        const ms = monthlyScores[scoreKey];
-        const note = ms?.qualityNotes ?? assignment.qualityNotes ?? "";
         if (note) initNotes[row.id] = note;
       });
 
@@ -130,7 +140,7 @@ export default function ExecutiveQualityPage() {
       setIsLoading(false);
     }
     load();
-  }, [users, selectedYear]);
+  }, [users, selectedYear, selectedMonthNum, isPastMonth]);
 
   const grouped = useMemo(() => {
     const userMap: Record<string, string> = {};
@@ -176,6 +186,7 @@ export default function ExecutiveQualityPage() {
         actual_total: value,
         achievement_percentage: pct,
         quality_notes: notes,
+        notes: notes,
       } as any).eq("id", assignmentId);
 
       setInputValues((prev) => ({ ...prev, [assignmentId]: "" }));
@@ -186,7 +197,7 @@ export default function ExecutiveQualityPage() {
             ...(q.assignment.monthlyScores ?? {}),
             [scoreKey]: { actualTotal: value, achievementPercentage: pct, performanceCategory: category as any, qualityNotes: notes },
           };
-          return { ...q, assignment: { ...q.assignment, actualTotal: value, achievementPercentage: pct, performanceCategory: category as any, qualityNotes: notes, monthlyScores: updatedMonthlyScores } };
+          return { ...q, assignment: { ...q.assignment, actualTotal: value, achievementPercentage: pct, performanceCategory: category as any, qualityNotes: notes, notes: notes, monthlyScores: updatedMonthlyScores } };
         })
       );
     } finally {

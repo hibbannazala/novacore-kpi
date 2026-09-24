@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAllUsers } from "@/hooks/useUsers";
 import { useAuth } from "@/contexts/AuthContext";
 import { getKpiRole } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatPercentage, getPerformanceCategory } from "@/lib/utils";
+import { formatPercentage, getPerformanceCategory, monthName } from "@/lib/utils";
 import { PerformanceBadge } from "@/components/ui/badge";
+import { Search } from "lucide-react";
 import type { KpiAssignment, KPI } from "@/types";
 
 interface QualityAssignment {
@@ -31,23 +32,33 @@ export default function HrQualityPage() {
     );
   }
 
+  const [selectedMonth, setSelectedMonth] = useState(
+    () => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+  );
+  const [selectedYear, selectedMonthNum] = selectedMonth.split("-").map(Number);
+  const isPastMonth =
+    selectedYear < now.getFullYear() ||
+    (selectedYear === now.getFullYear() && selectedMonthNum < now.getMonth() + 1);
+
   const [qualityAssignments, setQualityAssignments] = useState<QualityAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
+  const [listSearch, setListSearch] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
-
-  const selectedYear = now.getFullYear();
-  const selectedMonth = now.getMonth() + 1;
 
   useEffect(() => {
     async function load() {
+      setIsLoading(true);
+      setInputValues({});
       const supabase = createClient();
+      const statusFilter = isPastMonth ? ["active", "completed"] : ["active"];
+
       const { data: aRows } = await supabase
         .from("kpi_assignments")
         .select("*, kpis(id, title, type, unit, monthly_target, departments(name)), monthly_scores(*)")
         .eq("year", selectedYear)
-        .eq("month", selectedMonth)
-        .eq("status", "active");
+        .eq("month", selectedMonthNum)
+        .in("status", statusFilter);
 
       const userMap: Record<string, string> = {};
       users.forEach((u) => { userMap[u.id] = u.name; });
@@ -57,6 +68,11 @@ export default function HrQualityPage() {
         const kpiRow = row.kpis;
         if (!kpiRow || kpiRow.type !== "quality") return;
 
+        const msRows = (row.monthly_scores as any[]) ?? [];
+        const scoreRow = msRows.find((ms: any) => ms.year === selectedYear && ms.month === selectedMonthNum);
+        const actualTotal = scoreRow ? scoreRow.actual_total : (row.actual_total ?? 0);
+        const achievementPct = scoreRow ? scoreRow.achievement_percentage : (row.achievement_percentage ?? 0);
+
         const assignment: KpiAssignment = {
           id: row.id,
           kpiId: row.kpi_id,
@@ -65,9 +81,9 @@ export default function HrQualityPage() {
           kpiType: "quality",
           status: row.status,
           monthlyTarget: row.monthly_target ?? 0,
-          actualTotal: row.actual_total ?? 0,
-          achievementPercentage: row.achievement_percentage ?? 0,
-          performanceCategory: getPerformanceCategory(row.achievement_percentage ?? 0) as any,
+          actualTotal: actualTotal,
+          achievementPercentage: achievementPct,
+          performanceCategory: getPerformanceCategory(achievementPct) as any,
           weight: row.weight ?? 0,
           notes: row.notes ?? "",
           year: row.year,
@@ -98,7 +114,7 @@ export default function HrQualityPage() {
           createdBy: "",
           monthlyTarget: kpiRow.monthly_target ?? 0,
           year: selectedYear,
-          month: selectedMonth,
+          month: selectedMonthNum,
           createdAt: "",
           updatedAt: "",
         };
@@ -111,7 +127,18 @@ export default function HrQualityPage() {
     }
 
     if (users.length > 0) load();
-  }, [users, selectedYear, selectedMonth]);
+  }, [users, selectedYear, selectedMonthNum, isPastMonth]);
+
+  const filteredAssignments = useMemo(() => {
+    if (!listSearch.trim()) return qualityAssignments;
+    const q = listSearch.toLowerCase();
+    return qualityAssignments.filter(
+      (item) =>
+        item.userName.toLowerCase().includes(q) ||
+        item.assignment.department.toLowerCase().includes(q) ||
+        item.kpi.title.toLowerCase().includes(q)
+    );
+  }, [qualityAssignments, listSearch]);
 
   async function handleSave(assignmentId: string, monthlyTarget: number) {
     const value = parseFloat(inputValues[assignmentId]);
@@ -124,7 +151,7 @@ export default function HrQualityPage() {
       await supabase.from("monthly_scores").upsert({
         assignment_id: assignmentId,
         year: selectedYear,
-        month: selectedMonth,
+        month: selectedMonthNum,
         actual_total: value,
         achievement_percentage: pct,
       }, { onConflict: "assignment_id,year,month" });
@@ -147,7 +174,7 @@ export default function HrQualityPage() {
     }
   }
 
-  if (isLoading) {
+  if (isLoading && qualityAssignments.length === 0) {
     return (
       <div className="flex h-40 items-center justify-center">
         <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -157,18 +184,52 @@ export default function HrQualityPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-base font-semibold">Input KPI Kualitas</h2>
-        <p className="text-sm text-muted-foreground">{qualityAssignments.length} KPI kualitas aktif bulan ini</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold">Input KPI Kualitas</h2>
+          <p className="text-sm text-muted-foreground">
+            {qualityAssignments.length} KPI kualitas aktif · {monthName(selectedMonthNum)} {selectedYear}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Input
+            type="month"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="h-9 w-[155px]"
+          />
+        </div>
       </div>
 
-      {qualityAssignments.length === 0 ? (
+      {isPastMonth && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300">
+          Menampilkan data KPI Kualitas <strong>{monthName(selectedMonthNum)} {selectedYear}</strong>. Anda dapat menginput atau memperbarui nilai bulan lalu.
+        </div>
+      )}
+
+      {qualityAssignments.length > 0 && (
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Cari nama karyawan, divisi, atau KPI kualitas..."
+            value={listSearch}
+            onChange={(e) => setListSearch(e.target.value)}
+            className="pl-8 h-8 text-sm max-w-md"
+          />
+        </div>
+      )}
+
+      {filteredAssignments.length === 0 ? (
         <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-border">
-          <p className="text-sm text-muted-foreground">Tidak ada KPI kualitas aktif bulan ini</p>
+          <p className="text-sm text-muted-foreground">
+            {qualityAssignments.length === 0
+              ? `Tidak ada KPI kualitas aktif pada ${monthName(selectedMonthNum)} ${selectedYear}`
+              : "Tidak ada hasil yang cocok dengan pencarian"}
+          </p>
         </div>
       ) : (
         <div className="space-y-2">
-          {qualityAssignments.map(({ assignment, kpi, userName }) => (
+          {filteredAssignments.map(({ assignment, kpi, userName }) => (
             <div key={assignment.id} className="rounded-xl border border-border bg-card px-4 py-3">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <div className="flex-1 min-w-0">
