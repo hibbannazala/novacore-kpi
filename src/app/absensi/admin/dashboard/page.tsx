@@ -26,6 +26,7 @@ interface AttLog {
   userName: string;
   userEmail: string;
   dept: string;
+  deptId?: string;
   date: string;
   checkIn: string | null;
   checkOut: string | null;
@@ -45,6 +46,7 @@ interface ActiveUser {
   name: string;
   email: string;
   dept: string;
+  deptId?: string;
   isHidden: boolean;
 }
 
@@ -56,6 +58,7 @@ interface DisplayRow {
   name: string;
   email: string;
   dept: string;
+  deptId?: string;
   log: AttLog | null;
   isExcused: boolean;
   excusedType?: string;
@@ -143,7 +146,10 @@ export default function AdminDashboardPage() {
   const [selectedRow, setSelectedRow]   = useState<DisplayRow | null>(null);
   const [editingLog,  setEditingLog]    = useState<EditingLog | null>(null);
   const [selectedDist, setSelectedDist] = useState<number | null>(null);
+  const [selectedOfficeName, setSelectedOfficeName] = useState<string | null>(null);
+  const [selectedOfficeRadius, setSelectedOfficeRadius] = useState<number>(100);
   const [officeLocations, setOfficeLocations] = useState<{ id: string; name: string; lat: number; lng: number; radius: number }[]>([]);
+  const [deptOfficeMap, setDeptOfficeMap] = useState<Map<string, { id: string; name: string; lat: number; lng: number; radius: number }[]>>(new Map());
 
   // Export modal
   const [showExport, setShowExport]       = useState(false);
@@ -155,10 +161,10 @@ export default function AdminDashboardPage() {
     const supabase = createClient();
     const [attRes, usersRes, reqsRes, pendingRes] = await Promise.all([
       supabase.from("attendance")
-        .select("id, user_id, date, check_in, check_out, status, type, late_fine, radius_penalty, location_status, location_in, late_reason, late_reason_status, notes, users(name, email, departments(name))")
+        .select("id, user_id, date, check_in, check_out, status, type, late_fine, radius_penalty, location_status, location_in, late_reason, late_reason_status, notes, users(name, email, department_id, departments(id, name))")
         .eq("date", filterDate),
       supabase.from("users")
-        .select("id, name, email, is_hidden, departments(name)")
+        .select("id, name, email, is_hidden, department_id, departments(id, name)")
         .eq("absensi_status", "active"),
       supabase.from("leave_requests")
         .select("user_id, type, reason, created_at, dates")
@@ -169,11 +175,12 @@ export default function AdminDashboardPage() {
         .eq("absensi_status", "pending"),
     ]);
 
-    const uList: ActiveUser[] = (usersRes.data ?? []).map((r) => ({
+    const uList: ActiveUser[] = (usersRes.data ?? []).map((r: any) => ({
       id:       r.id as string,
       name:     r.name as string,
       email:    r.email as string,
       dept:     ((r.departments as unknown) as { name: string } | null)?.name ?? "Umum",
+      deptId:   (r.department_id as string) ?? undefined,
       isHidden: (r.is_hidden as boolean) ?? false,
     }));
     setActiveUsers(uList.filter((u) => !u.isHidden));
@@ -185,15 +192,16 @@ export default function AdminDashboardPage() {
     );
 
     setLogs(
-      (attRes.data ?? []).map((r) => {
+      (attRes.data ?? []).map((r: any) => {
         const usr = uMap.get(r.user_id as string);
-        const depts = (r.users as unknown) as { name: string; email: string; departments?: { name: string } | null } | null;
+        const depts = (r.users as unknown) as { name: string; email: string; department_id?: string; departments?: { name: string } | null } | null;
         return {
           id:               r.id as string,
           userId:           r.user_id as string,
           userName:         usr?.name ?? (depts?.name ?? "Unknown"),
           userEmail:        usr?.email ?? (depts?.email ?? ""),
           dept:             usr?.dept ?? (depts?.departments?.name ?? "Umum"),
+          deptId:           usr?.deptId ?? depts?.department_id ?? undefined,
           date:             r.date as string,
           checkIn:          r.check_in as string | null,
           checkOut:         r.check_out as string | null,
@@ -218,9 +226,23 @@ export default function AdminDashboardPage() {
     setIsLoading(true);
     fetchData();
     const supabase = createClient();
-    // Fetch all office locations for distance calculation
-    supabase.from('office_locations').select('id, name, lat, lng, radius').then(({ data }) => {
-      if (data) setOfficeLocations(data as { id: string; name: string; lat: number; lng: number; radius: number }[]);
+    // Fetch all office locations and department mappings for distance calculation
+    Promise.all([
+      supabase.from('office_locations').select('id, name, lat, lng, radius'),
+      supabase.from('department_locations' as any).select('department_id, office_locations(id, name, lat, lng, radius)')
+    ]).then(([oRes, dlRes]) => {
+      if (oRes.data) setOfficeLocations(oRes.data as any);
+      if (dlRes.data) {
+        const m = new Map<string, { id: string; name: string; lat: number; lng: number; radius: number }[]>();
+        (dlRes.data as any[]).forEach(dl => {
+          if (dl.department_id && dl.office_locations) {
+            const list = m.get(dl.department_id) ?? [];
+            list.push(dl.office_locations);
+            m.set(dl.department_id, list);
+          }
+        });
+        setDeptOfficeMap(m);
+      }
     });
     const ch = supabase.channel("admin_dash_" + filterDate)
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance" }, fetchData)
@@ -299,7 +321,7 @@ export default function AdminDashboardPage() {
 
     if (activeFilter === "all") {
       rows = activeUsers.map((u) => ({
-        id: u.id, userId: u.id, name: u.name, email: u.email, dept: u.dept,
+        id: u.id, userId: u.id, name: u.name, email: u.email, dept: u.dept, deptId: u.deptId,
         log: logMap.get(u.id) ?? null,
         isExcused: excusedIds.has(u.id), excusedType: excusedMap.get(u.id)?.type, excusedReason: excusedMap.get(u.id)?.reason, excusedCreatedAt: excusedMap.get(u.id)?.createdAt, excusedDates: excusedMap.get(u.id)?.dates,
         isMissed: !presentIds.has(u.id) && !excusedIds.has(u.id),
@@ -307,22 +329,22 @@ export default function AdminDashboardPage() {
     } else if (activeFilter === "present") {
       rows = logs.map((l) => {
         const u = activeUsers.find((a) => a.id === l.userId);
-        return { id: l.id, userId: l.userId, name: l.userName, email: l.userEmail, dept: l.dept, log: l, isExcused: false, isMissed: false };
+        return { id: l.id, userId: l.userId, name: l.userName, email: l.userEmail, dept: l.dept, deptId: l.deptId ?? u?.deptId, log: l, isExcused: false, isMissed: false };
       });
     } else if (activeFilter === "wfo" || activeFilter === "wfa") {
       const t = activeFilter.toUpperCase();
       rows = logs.filter((l) => l.type === t).map((l) => ({
-        id: l.id, userId: l.userId, name: l.userName, email: l.userEmail, dept: l.dept,
+        id: l.id, userId: l.userId, name: l.userName, email: l.userEmail, dept: l.dept, deptId: l.deptId,
         log: l, isExcused: false, isMissed: false,
       }));
     } else if (activeFilter === "leave") {
       rows = activeUsers.filter((u) => excusedIds.has(u.id)).map((u) => ({
-        id: u.id, userId: u.id, name: u.name, email: u.email, dept: u.dept,
+        id: u.id, userId: u.id, name: u.name, email: u.email, dept: u.dept, deptId: u.deptId,
         log: null, isExcused: true, excusedType: excusedMap.get(u.id)?.type, excusedReason: excusedMap.get(u.id)?.reason, excusedCreatedAt: excusedMap.get(u.id)?.createdAt, excusedDates: excusedMap.get(u.id)?.dates, isMissed: false,
       }));
     } else if (activeFilter === "missed") {
       rows = activeUsers.filter((u) => !presentIds.has(u.id) && !excusedIds.has(u.id)).map((u) => ({
-        id: u.id, userId: u.id, name: u.name, email: u.email, dept: u.dept,
+        id: u.id, userId: u.id, name: u.name, email: u.email, dept: u.dept, deptId: u.deptId,
         log: null, isExcused: false, isMissed: true,
       }));
     }
@@ -832,21 +854,48 @@ export default function AdminDashboardPage() {
                       onClick={() => {
                         if (row.log) {
                           let dist: number | null = null;
-                          if (row.log.locationIn && (row.log.locationIn as any).distance !== undefined) {
-                            dist = (row.log.locationIn as any).distance;
-                          } else if (row.log.locationIn && officeLocations.length > 0) {
-                            let minDist = Infinity;
-                            for (const ol of officeLocations) {
-                              const d = calcDist(row.log.locationIn.lat, row.log.locationIn.lng, ol.lat, ol.lng);
-                              if (d < minDist) minDist = d;
+                          let targetOfficeName: string | null = (row.log.locationIn as any)?.officeName ?? null;
+                          let targetRadius = 100;
+
+                          // Check if saved distance is valid
+                          const savedDist = (row.log.locationIn as any)?.distance;
+                          if (typeof savedDist === "number" && !isNaN(savedDist) && isFinite(savedDist)) {
+                            dist = savedDist;
+                          }
+
+                          if (row.log.locationIn && typeof row.log.locationIn.lat === "number" && typeof row.log.locationIn.lng === "number") {
+                            // Find assigned offices for this user's department
+                            const deptOffices = (row.deptId && deptOfficeMap.get(row.deptId)) || [];
+                            const officesToCheck = deptOffices.length > 0 ? deptOffices : officeLocations;
+
+                            if (officesToCheck.length > 0) {
+                              let minDist = Infinity;
+                              let bestOffice: any = null;
+                              for (const ol of officesToCheck) {
+                                const d = calcDist(row.log.locationIn.lat, row.log.locationIn.lng, ol.lat, ol.lng);
+                                if (d < minDist) {
+                                  minDist = d;
+                                  bestOffice = ol;
+                                }
+                              }
+                              if (bestOffice) {
+                                if (dist === null) dist = minDist;
+                                targetOfficeName = bestOffice.name;
+                                targetRadius = bestOffice.radius;
+                              }
+                            } else if (settings?.officeLat && settings?.officeLng) {
+                              if (dist === null) dist = calcDist(row.log.locationIn.lat, row.log.locationIn.lng, settings.officeLat, settings.officeLng);
+                              targetOfficeName = "Kantor Utama";
+                              targetRadius = settings.officeRadius ?? 100;
                             }
-                            dist = minDist;
-                          } else if (row.log.locationIn && settings?.officeLat && settings?.officeLng) {
-                            dist = calcDist(row.log.locationIn.lat, row.log.locationIn.lng, settings.officeLat, settings.officeLng);
                           }
                           setSelectedDist(dist);
+                          setSelectedOfficeName(targetOfficeName);
+                          setSelectedOfficeRadius(targetRadius);
                         } else {
                           setSelectedDist(null);
+                          setSelectedOfficeName(null);
+                          setSelectedOfficeRadius(100);
                         }
                         setSelectedRow(row);
                         setEditingLog(null);
@@ -1061,8 +1110,12 @@ export default function AdminDashboardPage() {
                         )}
                         {selectedDist !== null && (
                           <div className="flex justify-between items-center">
-                            <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">Jarak ke Kantor</span>
-                            <span className={`text-[10px] font-black uppercase ${selectedDist <= (officeLocations.length > 0 ? Math.max(...officeLocations.map(o => o.radius)) : (settings?.officeRadius ?? 100)) ? "text-green-500" : "text-red-500"}`}>{Math.round(selectedDist)} meter</span>
+                            <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">
+                              Jarak ke {selectedOfficeName ? selectedOfficeName : "Kantor"}
+                            </span>
+                            <span className={`text-[10px] font-black uppercase ${selectedDist <= selectedOfficeRadius ? "text-green-500" : "text-red-500"}`}>
+                              {Math.round(selectedDist)} meter (Radius: {selectedOfficeRadius}m)
+                            </span>
                           </div>
                         )}
                         {selectedRow.log.locationIn && (

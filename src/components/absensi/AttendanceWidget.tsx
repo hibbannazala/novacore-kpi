@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -73,10 +73,11 @@ export function AttendanceWidget() {
   const [locationPerm, setLocationPerm] = useState<LocationPerm>("prompt");
   const [showLocationGuide, setShowLocationGuide] = useState(false);
   const [allowedLocations, setAllowedLocations] = useState<AllowedLocation[]>([]);
+  const allowedLocationsRef = useRef<AllowedLocation[]>([]);
 
-  useEffect(() => {
-    if (!user?.departmentId) return;
-    const fetchLocs = async () => {
+  const fetchLocs = useCallback(async () => {
+    if (!user?.departmentId) return [];
+    try {
       const supabase = createClient();
       // Fetch locations assigned to this user's department
       const { data } = await supabase
@@ -86,19 +87,37 @@ export function AttendanceWidget() {
       if (data && data.length > 0) {
         const locs = data.map((d: any) => d.office_locations).filter(Boolean);
         setAllowedLocations(locs);
+        allowedLocationsRef.current = locs;
+        return locs;
       } else {
         setAllowedLocations([]);
+        allowedLocationsRef.current = [];
+        return [];
       }
-    };
-    fetchLocs();
+    } catch {
+      return [];
+    }
   }, [user?.departmentId]);
 
-  const getNearestLocation = useCallback((loc: { lat: number; lng: number }) => {
-    if (allowedLocations.length > 0) {
+  useEffect(() => {
+    fetchLocs();
+  }, [fetchLocs]);
+
+  const getNearestLocation = useCallback((
+    loc: { lat: number; lng: number },
+    overrideLocs?: AllowedLocation[]
+  ) => {
+    const locs = (overrideLocs && overrideLocs.length > 0)
+      ? overrideLocs
+      : allowedLocationsRef.current.length > 0
+      ? allowedLocationsRef.current
+      : allowedLocations;
+
+    if (locs.length > 0) {
       let minDist = Infinity;
       let minRadius = 100;
-      let bestOffice = null;
-      for (const al of allowedLocations) {
+      let bestOffice: { lat: number; lng: number; name: string } | null = null;
+      for (const al of locs) {
         if (!al) continue;
         const dist = calcDist(loc.lat, loc.lng, al.lat, al.lng);
         if (dist < minDist) {
@@ -108,10 +127,19 @@ export function AttendanceWidget() {
         }
       }
       return { dist: minDist, radius: minRadius, office: bestOffice, noLocationError: false };
+    } else if (settings.officeLat && settings.officeLng) {
+      // Fallback to default office settings if department locations not configured or still loading
+      const dist = calcDist(loc.lat, loc.lng, settings.officeLat, settings.officeLng);
+      return {
+        dist,
+        radius: settings.officeRadius || 100,
+        office: { lat: settings.officeLat, lng: settings.officeLng, name: "Kantor Utama" },
+        noLocationError: false
+      };
     } else {
       return { dist: Infinity, radius: 0, office: null, noLocationError: true };
     }
-  }, [allowedLocations]);
+  }, [allowedLocations, settings]);
 
   const [pendingLocation, setPendingLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [showCheckoutConfirm, setShowCheckoutConfirm] = useState(false);
@@ -245,17 +273,28 @@ export function AttendanceWidget() {
     let radiusPenalty = 0;
     let locationToSave: any = location;
     if (location) {
-      const nearest = getNearestLocation(location);
-      if (nearest.dist <= nearest.radius) {
+      let activeLocs = allowedLocationsRef.current;
+      if (activeLocs.length === 0 && user?.departmentId) {
+        activeLocs = await fetchLocs();
+      }
+
+      const nearest = getNearestLocation(location, activeLocs);
+      const isFiniteDist = isFinite(nearest.dist);
+      const roundedDist = isFiniteDist ? Math.round(nearest.dist) : null;
+
+      if (isFiniteDist && nearest.dist <= nearest.radius) {
         locationStatus = "Dalam Area";
+        radiusPenalty = 0;
       } else {
         locationStatus = "Di Luar Area";
-        if (nearest.dist > 500) radiusPenalty = 2;
+        if (isFiniteDist && nearest.dist > 500) radiusPenalty = 2;
+        else if (!isFiniteDist) radiusPenalty = 2;
       }
+
       locationToSave = {
         lat: location.lat,
         lng: location.lng,
-        distance: Math.round(nearest.dist),
+        distance: roundedDist,
         officeLat: nearest.office?.lat,
         officeLng: nearest.office?.lng,
         officeName: nearest.office?.name
@@ -281,7 +320,7 @@ export function AttendanceWidget() {
       return { success: false, error: "Gagal menyimpan data ke sistem." };
     }
     return { success: true, status: arrStat, time: getNowTime(), locationStatus, lateFine, radiusPenalty };
-  }, [user, settings]);
+  }, [user, settings, fetchLocs, getNearestLocation]);
 
   // ─ Check-out ────────────────────────────────────────────────────────────────
   const doCheckOut = useCallback(async (earlyReason = "") => {
@@ -347,7 +386,11 @@ export function AttendanceWidget() {
       async (pos) => {
         toast.dismiss(toastId);
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        const nearest = getNearestLocation(loc);
+        let activeLocs = allowedLocationsRef.current;
+        if (activeLocs.length === 0 && user?.departmentId) {
+          activeLocs = await fetchLocs();
+        }
+        const nearest = getNearestLocation(loc, activeLocs);
         if (nearest.noLocationError) {
           toast.error("Lokasi absen divisi Anda belum diatur oleh Admin. Hubungi HR.");
           setIsProcessing(false);
@@ -956,7 +999,13 @@ export function AttendanceWidget() {
                           (pos) => {
                             toast.dismiss(toastId);
                             const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                            const nearest = getNearestLocation(loc);
+                            let activeLocs = allowedLocationsRef.current;
+                            if (activeLocs.length === 0 && user?.departmentId) {
+                              fetchLocs().then(l => {
+                                activeLocs = l;
+                              });
+                            }
+                            const nearest = getNearestLocation(loc, activeLocs);
                             if (nearest.noLocationError) {
                               toast.error("Lokasi absen divisi Anda belum diatur oleh Admin.");
                               setIsSyncing(false);
