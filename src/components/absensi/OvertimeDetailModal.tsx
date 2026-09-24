@@ -24,6 +24,7 @@ import {
   Building2,
   Award,
   DollarSign,
+  Moon,
 } from "lucide-react";
 
 interface OvertimeDetailModalProps {
@@ -116,6 +117,12 @@ export default function OvertimeDetailModal({
     }
   };
 
+  const startDate = overtime.calculationBreakdown?.startDate || overtime.overtimeDate;
+  const endDate = overtime.calculationBreakdown?.endDate || overtime.overtimeDate;
+  const actualStartDate = overtime.calculationBreakdown?.actualStartDate || startDate;
+  const actualEndDate = overtime.calculationBreakdown?.actualEndDate || endDate;
+  const isCrossDay = startDate !== endDate || actualStartDate !== actualEndDate || overtime.calculationBreakdown?.isCrossDay === true;
+
   return createPortal(
     <div
       className="fixed inset-0 z-[99999] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto overscroll-contain animate-in fade-in duration-200"
@@ -135,6 +142,11 @@ export default function OvertimeDetailModal({
                 Detail Lengkap Lembur
               </h3>
               {statusBadge(overtime.status)}
+              {isCrossDay && (
+                <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30 flex items-center gap-1">
+                  <Moon size={11} /> Lintas Hari (+1 Hr)
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-3 text-xs text-[var(--ab-text-dim)] flex-wrap">
               <span className="flex items-center gap-1 font-bold text-[var(--ab-text-main)]">
@@ -179,7 +191,9 @@ export default function OvertimeDetailModal({
                 desc: formatScheduleRange(
                   overtime.requestedStartTime,
                   overtime.requestedEndTime,
-                  overtime.requestedDurationMinutes
+                  overtime.requestedDurationMinutes,
+                  startDate,
+                  endDate
                 ),
               },
               {
@@ -193,7 +207,9 @@ export default function OvertimeDetailModal({
                     : formatScheduleRange(
                         overtime.approvedStartTime,
                         overtime.approvedEndTime,
-                        overtime.approvedDurationMinutes
+                        overtime.approvedDurationMinutes,
+                        startDate,
+                        endDate
                       ),
               },
               {
@@ -203,7 +219,9 @@ export default function OvertimeDetailModal({
                   ? formatScheduleRange(
                       overtime.actualStartTime,
                       overtime.actualEndTime,
-                      overtime.actualDurationMinutes
+                      overtime.actualDurationMinutes,
+                      actualStartDate,
+                      actualEndDate
                     )
                   : overtime.status === "approved"
                   ? "Waktunya Lapor"
@@ -286,7 +304,9 @@ export default function OvertimeDetailModal({
                   {formatScheduleRange(
                     overtime.requestedStartTime,
                     overtime.requestedEndTime,
-                    overtime.requestedDurationMinutes
+                    overtime.requestedDurationMinutes,
+                    startDate,
+                    endDate
                   )}
                 </p>
               </div>
@@ -351,7 +371,9 @@ export default function OvertimeDetailModal({
                       {formatScheduleRange(
                         overtime.approvedStartTime,
                         overtime.approvedEndTime,
-                        overtime.approvedDurationMinutes
+                        overtime.approvedDurationMinutes,
+                        startDate,
+                        endDate
                       )}
                     </p>
                   </div>
@@ -396,7 +418,9 @@ export default function OvertimeDetailModal({
                       {formatScheduleRange(
                         overtime.actualStartTime,
                         overtime.actualEndTime,
-                        overtime.actualDurationMinutes
+                        overtime.actualDurationMinutes,
+                        actualStartDate,
+                        actualEndDate
                       )}
                     </p>
                   </div>

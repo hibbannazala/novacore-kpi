@@ -13,35 +13,80 @@ export function formatDurationDetail(mins: number | null | undefined): string {
 }
 
 /**
- * Formats a schedule time range with its duration (e.g., "18:30 - 20:30 (2 Jam 00 Menit)")
+ * Adds or subtracts days to a YYYY-MM-DD date string
  */
-export function formatScheduleRange(
-  startStr: string | null | undefined,
-  endStr: string | null | undefined,
-  durationMinutes?: number | null
-): string {
-  if (!startStr || !endStr) return "-";
-  const start = startStr.substring(0, 5);
-  const end = endStr.substring(0, 5);
-  
-  const dur = durationMinutes !== undefined && durationMinutes !== null
-    ? durationMinutes
-    : calcDurationMinutes(start, end);
-
-  return `${start} - ${end} (${formatDurationDetail(dur)})`;
+export function addDaysToDate(dateStr: string, days: number): string {
+  if (!dateStr) return "";
+  const [y, m, d] = dateStr.split("-").map(Number);
+  if (!y || !m || !d) return dateStr;
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + days);
+  const resY = date.getFullYear();
+  const resM = String(date.getMonth() + 1).padStart(2, "0");
+  const resD = String(date.getDate()).padStart(2, "0");
+  return `${resY}-${resM}-${resD}`;
 }
 
 /**
- * Calculates duration in minutes between two "HH:mm" time strings
+ * Calculates duration in minutes between start datetime and end datetime.
+ * Supports cross-midnight / cross-day overtime (e.g., 24 Sept 18:00 to 25 Sept 01:00 = 420 mins / 7h).
+ */
+export function calcOvertimeDurationMinutes(
+  startDate: string,
+  startTime: string,
+  endDate: string,
+  endTime: string
+): number {
+  if (!startDate || !startTime || !endDate || !endTime) return 0;
+  const sStr = `${startDate}T${startTime.substring(0, 5)}:00`;
+  const eStr = `${endDate}T${endTime.substring(0, 5)}:00`;
+  const sDate = new Date(sStr);
+  const eDate = new Date(eStr);
+  if (isNaN(sDate.getTime()) || isNaN(eDate.getTime())) return 0;
+  const diffMs = eDate.getTime() - sDate.getTime();
+  return Math.max(0, Math.round(diffMs / 60000));
+}
+
+/**
+ * Calculates duration in minutes between two "HH:mm" time strings.
+ * If endStr is smaller than startStr (e.g. 18:00 to 01:00), it automatically handles midnight crossing (18:00 to 01:00 next day = 7 hours).
  */
 export function calcDurationMinutes(startStr: string, endStr: string): number {
   if (!startStr || !endStr) return 0;
   const [sh, sm] = startStr.split(":").map(Number);
   const [eh, em] = endStr.split(":").map(Number);
   if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return 0;
-  const startMins = sh * 60 + sm;
-  const endMins = eh * 60 + em;
+  let startMins = sh * 60 + sm;
+  let endMins = eh * 60 + em;
+  if (endMins < startMins) {
+    // Cross midnight
+    endMins += 24 * 60;
+  }
   return Math.max(0, endMins - startMins);
+}
+
+/**
+ * Formats a schedule time range with its duration (e.g., "18:30 - 20:30 (2 Jam 00 Menit)" or "18:30 - 01:00 (+1 hr) (6 Jam 30 Menit)")
+ */
+export function formatScheduleRange(
+  startStr: string | null | undefined,
+  endStr: string | null | undefined,
+  durationMinutes?: number | null,
+  startDate?: string | null | undefined,
+  endDate?: string | null | undefined
+): string {
+  if (!startStr || !endStr) return "-";
+  const start = startStr.substring(0, 5);
+  const end = endStr.substring(0, 5);
+
+  const isCrossDay = (startDate && endDate && startDate !== endDate) || (durationMinutes && durationMinutes > 0 && end < start);
+  const endDisplay = isCrossDay ? `${end} (+1 hr)` : end;
+  
+  const dur = durationMinutes !== undefined && durationMinutes !== null
+    ? durationMinutes
+    : (startDate && endDate ? calcOvertimeDurationMinutes(startDate, start, endDate, end) : calcDurationMinutes(start, end));
+
+  return `${start} - ${endDisplay} (${formatDurationDetail(dur)})`;
 }
 
 /**

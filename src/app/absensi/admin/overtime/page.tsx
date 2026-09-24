@@ -16,6 +16,8 @@ import {
   formatRp,
   isWeekend,
   calcDurationMinutes,
+  calcOvertimeDurationMinutes,
+  addDaysToDate,
 } from "@/lib/overtimeHelpers";
 import {
   Clock,
@@ -40,6 +42,7 @@ import {
   DollarSign,
   Plus,
   RefreshCw,
+  Moon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, subMonths, addMonths } from "date-fns";
@@ -72,6 +75,8 @@ export default function AdminOvertimePage() {
 
   // Approve Schedule Modal (for initial pending review)
   const [approvingScheduleReq, setApprovingScheduleReq] = useState<OvertimeRequest | null>(null);
+  const [approveStartDate, setApproveStartDate] = useState("");
+  const [approveEndDate, setApproveEndDate] = useState("");
   const [approveStartTime, setApproveStartTime] = useState("");
   const [approveEndTime, setApproveEndTime] = useState("");
   const [approveNotes, setApproveNotes] = useState("");
@@ -298,6 +303,10 @@ export default function AdminOvertimePage() {
   // Quick Approve Schedule
   const handleOpenApproveModal = (req: OvertimeRequest) => {
     setApprovingScheduleReq(req);
+    const reqStart = req.calculationBreakdown?.startDate || req.overtimeDate;
+    const reqEnd = req.calculationBreakdown?.endDate || req.overtimeDate;
+    setApproveStartDate(reqStart);
+    setApproveEndDate(reqEnd);
     setApproveStartTime(req.requestedStartTime);
     setApproveEndTime(req.requestedEndTime);
     setApproveNotes("");
@@ -305,9 +314,9 @@ export default function AdminOvertimePage() {
 
   const handleApproveSchedule = async () => {
     if (!approvingScheduleReq || !user) return;
-    const dur = calcDurationMinutes(approveStartTime, approveEndTime);
+    const dur = calcOvertimeDurationMinutes(approveStartDate, approveStartTime, approveEndDate, approveEndTime);
     if (dur <= 0) {
-      toast.error("Jam selesai harus lebih besar dari jam mulai.");
+      toast.error("Waktu selesai harus lebih besar dari waktu mulai.");
       return;
     }
 
@@ -321,6 +330,12 @@ export default function AdminOvertimePage() {
           approved_start_time: approveStartTime + ":00",
           approved_end_time: approveEndTime + ":00",
           approved_duration_minutes: dur,
+          calculation_breakdown: {
+            ...(approvingScheduleReq.calculationBreakdown || {}),
+            startDate: approveStartDate,
+            endDate: approveEndDate,
+            isCrossDay: approveStartDate !== approveEndDate,
+          },
           approved_by: user.id,
           approval_date: new Date().toISOString(),
           approval_notes: approveNotes.trim() || null,
@@ -929,30 +944,75 @@ export default function AdminOvertimePage() {
               </button>
             </div>
 
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] block mb-1">
-                    Jam Mulai Disetujui
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Mulai */}
+                <div className="p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] space-y-2">
+                  <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest block">
+                    Mulai Disetujui
                   </label>
-                  <input
-                    type="time"
-                    value={approveStartTime}
-                    onChange={(e) => setApproveStartTime(e.target.value)}
-                    className="ab-input text-xs py-2 w-full text-center"
-                  />
+                  <div className="space-y-1.5">
+                    <input
+                      type="date"
+                      value={approveStartDate}
+                      onChange={(e) => setApproveStartDate(e.target.value)}
+                      className="ab-input text-xs py-2 w-full"
+                    />
+                    <input
+                      type="time"
+                      value={approveStartTime}
+                      onChange={(e) => setApproveStartTime(e.target.value)}
+                      className="ab-input text-xs py-2 w-full text-center"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] block mb-1">
-                    Jam Selesai Disetujui
-                  </label>
-                  <input
-                    type="time"
-                    value={approveEndTime}
-                    onChange={(e) => setApproveEndTime(e.target.value)}
-                    className="ab-input text-xs py-2 w-full text-center"
-                  />
+
+                {/* Selesai */}
+                <div className="p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest block">
+                      Selesai Disetujui
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setApproveEndDate(approveEndDate === approveStartDate ? addDaysToDate(approveStartDate, 1) : approveStartDate)}
+                      className="text-[9px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-wider flex items-center gap-1 hover:underline"
+                    >
+                      <Moon size={10} /> {approveEndDate === approveStartDate ? "+1 Hari" : "Hari Sama"}
+                    </button>
+                  </div>
+                  <div className="space-y-1.5">
+                    <input
+                      type="date"
+                      value={approveEndDate}
+                      min={approveStartDate}
+                      onChange={(e) => setApproveEndDate(e.target.value)}
+                      className="ab-input text-xs py-2 w-full"
+                    />
+                    <input
+                      type="time"
+                      value={approveEndTime}
+                      onChange={(e) => {
+                        const newEnd = e.target.value;
+                        setApproveEndTime(newEnd);
+                        if (newEnd < approveStartTime && approveEndDate === approveStartDate) {
+                          setApproveEndDate(addDaysToDate(approveStartDate, 1));
+                        }
+                      }}
+                      className="ab-input text-xs py-2 w-full text-center"
+                    />
+                  </div>
                 </div>
+              </div>
+
+              {/* Live Duration Calculation Box */}
+              <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-between text-xs">
+                <span className="font-bold text-blue-600 dark:text-blue-400 text-[10px] uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock size={13} /> Durasi Disetujui:
+                </span>
+                <span className="font-black text-blue-600 dark:text-blue-400">
+                  {formatDurationDetail(calcOvertimeDurationMinutes(approveStartDate, approveStartTime, approveEndDate, approveEndTime))}
+                </span>
               </div>
 
               <div>
@@ -963,7 +1023,7 @@ export default function AdminOvertimePage() {
                   rows={2}
                   value={approveNotes}
                   onChange={(e) => setApproveNotes(e.target.value)}
-                  placeholder="Contoh: Disetujui maksimal sampai jam 21:00..."
+                  placeholder="Contoh: Disetujui sampai dini hari..."
                   className="ab-input text-xs py-2 w-full resize-none rounded-xl"
                 />
               </div>

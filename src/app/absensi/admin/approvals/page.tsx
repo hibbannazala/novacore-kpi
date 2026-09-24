@@ -14,11 +14,13 @@ import {
   formatDurationDetail,
   formatScheduleRange,
   calcDurationMinutes,
+  calcOvertimeDurationMinutes,
+  addDaysToDate,
 } from "@/lib/overtimeHelpers";
 import {
   Check, X, CalendarDays, FileEdit, Smile, Shield, ArrowRight,
   Clock, CheckCircle2, ClipboardCheck, Image as ImageIcon, Eye,
-  Search, Filter, Users, ChevronRight, Sparkles, AlertCircle
+  Search, Filter, Users, ChevronRight, Sparkles, AlertCircle, Moon
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -69,6 +71,8 @@ export default function AdminApprovalsPage() {
   const [overtimes, setOvertimes] = useState<OvertimeRequest[]>([]);
   const [overtimeTab, setOvertimeTab] = useState<"pending" | "reported" | "finalized">("pending");
   const [adjustingReq, setAdjustingReq] = useState<OvertimeRequest | null>(null);
+  const [adjustStartDate, setAdjustStartDate] = useState("");
+  const [adjustEndDate, setAdjustEndDate] = useState("");
   const [adjustStartTime, setAdjustStartTime] = useState("");
   const [adjustEndTime, setAdjustEndTime] = useState("");
   const [adjustNotes, setAdjustNotes] = useState("");
@@ -153,6 +157,7 @@ export default function AdminApprovalsPage() {
             finalizedBy: r.finalized_by,
             finalizedDate: r.finalized_date,
             finalNotes: r.final_notes,
+            calculationBreakdown: r.calculation_breakdown || null,
             createdAt: r.created_at,
             updatedAt: r.updated_at,
             userName: r.users?.name,
@@ -306,6 +311,10 @@ export default function AdminApprovalsPage() {
   // Overtime Actions
   const handleOpenApproveModal = (req: OvertimeRequest) => {
     setAdjustingReq(req);
+    const reqStart = req.calculationBreakdown?.startDate || req.overtimeDate;
+    const reqEnd = req.calculationBreakdown?.endDate || req.overtimeDate;
+    setAdjustStartDate(reqStart);
+    setAdjustEndDate(reqEnd);
     setAdjustStartTime(req.requestedStartTime);
     setAdjustEndTime(req.requestedEndTime);
     setAdjustNotes("");
@@ -313,8 +322,8 @@ export default function AdminApprovalsPage() {
 
   const handleApproveOvertime = async () => {
     if (!adjustingReq || !user) return;
-    const durMins = calcDurationMinutes(adjustStartTime, adjustEndTime);
-    if (durMins <= 0) { toast.error("Jam selesai harus lebih besar dari jam mulai."); return; }
+    const durMins = calcOvertimeDurationMinutes(adjustStartDate, adjustStartTime, adjustEndDate, adjustEndTime);
+    if (durMins <= 0) { toast.error("Waktu selesai harus lebih besar dari waktu mulai."); return; }
 
     const tid = toast.loading("Menyetujui jadwal lembur...");
     try {
@@ -326,6 +335,12 @@ export default function AdminApprovalsPage() {
           approved_start_time: adjustStartTime + ":00",
           approved_end_time: adjustEndTime + ":00",
           approved_duration_minutes: durMins,
+          calculation_breakdown: {
+            ...(adjustingReq.calculationBreakdown || {}),
+            startDate: adjustStartDate,
+            endDate: adjustEndDate,
+            isCrossDay: adjustStartDate !== adjustEndDate,
+          },
           approved_by: user.id,
           approval_date: new Date().toISOString(),
           approval_notes: adjustNotes.trim() || null,
@@ -1290,7 +1305,15 @@ export default function AdminApprovalsPage() {
 
             <div className="p-3.5 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] text-xs space-y-1">
               <span className="text-[9px] font-black uppercase tracking-widest text-[var(--ab-text-dim)]">Permintaan Awal Staf:</span>
-              <p className="font-black text-amber-500">{adjustingReq.requestedStartTime} - {adjustingReq.requestedEndTime} ({formatMinutes(adjustingReq.requestedDurationMinutes)})</p>
+              <p className="font-black text-amber-500">
+                {formatScheduleRange(
+                  adjustingReq.requestedStartTime,
+                  adjustingReq.requestedEndTime,
+                  adjustingReq.requestedDurationMinutes,
+                  adjustingReq.calculationBreakdown?.startDate || adjustingReq.overtimeDate,
+                  adjustingReq.calculationBreakdown?.endDate || adjustingReq.overtimeDate
+                )}
+              </p>
             </div>
 
             {/* HR Adjust Time Inputs */}
@@ -1298,29 +1321,60 @@ export default function AdminApprovalsPage() {
               <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest block">
                 Sesuaikan Waktu yang Disetujui HR
               </label>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <span className="text-[9px] font-bold text-[var(--ab-text-dim)]">Mulai:</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Mulai */}
+                <div className="p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] space-y-2">
+                  <span className="text-[9px] font-bold text-[var(--ab-text-dim)] block">Mulai Disetujui:</span>
+                  <input
+                    type="date"
+                    value={adjustStartDate}
+                    onChange={(e) => setAdjustStartDate(e.target.value)}
+                    className="ab-input text-xs py-2 w-full"
+                  />
                   <input
                     type="time"
                     value={adjustStartTime}
                     onChange={(e) => setAdjustStartTime(e.target.value)}
-                    className="ab-input text-xs font-black py-2.5 px-3 rounded-xl text-center"
+                    className="ab-input text-xs font-black py-2 px-3 rounded-xl text-center w-full"
                   />
                 </div>
-                <div className="space-y-1">
-                  <span className="text-[9px] font-bold text-[var(--ab-text-dim)]">Selesai:</span>
+
+                {/* Selesai */}
+                <div className="p-3 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-bold text-[var(--ab-text-dim)] block">Selesai Disetujui:</span>
+                    <button
+                      type="button"
+                      onClick={() => setAdjustEndDate(adjustEndDate === adjustStartDate ? addDaysToDate(adjustStartDate, 1) : adjustStartDate)}
+                      className="text-[9px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-wider flex items-center gap-1 hover:underline"
+                    >
+                      <Moon size={10} /> {adjustEndDate === adjustStartDate ? "+1 Hr" : "Hari Sama"}
+                    </button>
+                  </div>
+                  <input
+                    type="date"
+                    value={adjustEndDate}
+                    min={adjustStartDate}
+                    onChange={(e) => setAdjustEndDate(e.target.value)}
+                    className="ab-input text-xs py-2 w-full"
+                  />
                   <input
                     type="time"
                     value={adjustEndTime}
-                    onChange={(e) => setAdjustEndTime(e.target.value)}
-                    className="ab-input text-xs font-black py-2.5 px-3 rounded-xl text-center"
+                    onChange={(e) => {
+                      const newEnd = e.target.value;
+                      setAdjustEndTime(newEnd);
+                      if (newEnd < adjustStartTime && adjustEndDate === adjustStartDate) {
+                        setAdjustEndDate(addDaysToDate(adjustStartDate, 1));
+                      }
+                    }}
+                    className="ab-input text-xs font-black py-2 px-3 rounded-xl text-center w-full"
                   />
                 </div>
               </div>
-              <p className="text-center text-xs font-black text-blue-500 pt-1">
-                Durasi Disetujui: {formatMinutes(calcDurationMinutes(adjustStartTime, adjustEndTime))}
-              </p>
+              <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl text-center text-xs font-black text-blue-600 dark:text-blue-400">
+                Durasi Disetujui: {formatDurationDetail(calcOvertimeDurationMinutes(adjustStartDate, adjustStartTime, adjustEndDate, adjustEndTime))}
+              </div>
             </div>
 
             <div className="space-y-1.5">

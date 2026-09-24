@@ -13,12 +13,14 @@ import {
   formatDurationDetail,
   formatScheduleRange,
   getOvertimeStepState,
-  isWeekend
+  isWeekend,
+  calcOvertimeDurationMinutes,
+  addDaysToDate,
 } from "@/lib/overtimeHelpers";
 import {
   Clock, Plus, Trash2, CheckCircle2, AlertCircle, CalendarDays,
   FileText, Send, Loader2, Sparkles, Check, X, ShieldAlert, History,
-  Camera, Image as ImageIcon, Eye, Users, Info
+  Camera, Image as ImageIcon, Eye, Users, Info, Moon
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -40,6 +42,10 @@ export function OvertimeStaffSection() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
+  const [endDate, setEndDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
   const [startTime, setStartTime] = useState("18:30");
   const [endTime, setEndTime] = useState("20:30");
   const [staffNotes, setStaffNotes] = useState("");
@@ -51,6 +57,8 @@ export function OvertimeStaffSection() {
 
   // Report Modal State
   const [reportingReq, setReportingReq] = useState<OvertimeRequest | null>(null);
+  const [actualStartDate, setActualStartDate] = useState("");
+  const [actualEndDate, setActualEndDate] = useState("");
   const [actualEndTime, setActualEndTime] = useState("");
   const [taskReports, setTaskReports] = useState<OvertimeTaskReport[]>([]);
   const [reportNotes, setReportNotes] = useState("");
@@ -93,19 +101,10 @@ export function OvertimeStaffSection() {
     };
   }, [reportingReq]);
 
-  // Auto calculate requested duration in minutes
-  const calcDurationMinutes = (startStr: string, endStr: string) => {
-    if (!startStr || !endStr) return 0;
-    const [sh, sm] = startStr.split(":").map(Number);
-    const [eh, em] = endStr.split(":").map(Number);
-    const startMins = sh * 60 + sm;
-    const endMins = eh * 60 + em;
-    return Math.max(0, endMins - startMins);
-  };
+  // Auto calculate requested duration in minutes with cross-day support
+  const durationMinutes = calcOvertimeDurationMinutes(overtimeDate, startTime, endDate, endTime);
 
   const formatMinutes = (mins: number | null | undefined) => formatDurationDetail(mins);
-
-  const durationMinutes = calcDurationMinutes(startTime, endTime);
 
   const [cancelingId, setCancelingId] = useState<string | null>(null);
   const [isCanceling, setIsCanceling] = useState(false);
@@ -157,6 +156,7 @@ export function OvertimeStaffSection() {
             finalizedDate: r.finalized_date,
             finalNotes: r.final_notes,
             proofImages: r.proof_images || [],
+            calculationBreakdown: r.calculation_breakdown || null,
             createdAt: r.created_at,
             updatedAt: r.updated_at,
             userName: r.users?.name,
@@ -219,6 +219,7 @@ export function OvertimeStaffSection() {
             finalizedDate: r.finalized_date,
             finalNotes: r.final_notes,
             proofImages: r.proof_images || [],
+            calculationBreakdown: r.calculation_breakdown || null,
             createdAt: r.created_at,
             updatedAt: r.updated_at,
             userName: r.users?.name,
@@ -290,24 +291,18 @@ export function OvertimeStaffSection() {
   // Submit Overtime Request
   const handleSubmitForm = async () => {
     if (!user) return;
-    if (!overtimeDate) { toast.error("Pilih tanggal lembur."); return; }
-    if (durationMinutes <= 0) { toast.error("Jam selesai harus lebih besar dari jam mulai."); return; }
+    if (!overtimeDate) { toast.error("Pilih tanggal mulai lembur."); return; }
+    if (!endDate) { toast.error("Pilih tanggal selesai lembur."); return; }
+    if (durationMinutes <= 0) { toast.error("Waktu selesai lembur harus lebih besar dari waktu mulai."); return; }
     const validTasks = tasks.filter(t => t.task.trim() !== "");
     if (validTasks.length === 0) { toast.error("Isi minimal 1 rencana tugas lembur."); return; }
-
-    const isHoliday = isWeekend(overtimeDate);
-    const maxMinutes = isHoliday ? 12 * 60 : 4 * 60;
-    
-    if (durationMinutes > maxMinutes) {
-      toast.error(`Durasi maksimal lembur untuk ${isHoliday ? 'Hari Libur adalah 12 Jam' : 'Hari Kerja adalah 4 Jam'}.`);
-      return;
-    }
 
     setShowConfirm(false);
     setIsSubmitting(true);
     const tid = toast.loading("Mengirim pengajuan lembur...");
     try {
       const supabase = createClient();
+      const isCrossDay = overtimeDate !== endDate;
       const { error } = await supabase.from("overtime_requests" as any).insert({
         user_id: user.id,
         request_date: new Date().toISOString().substring(0, 10),
@@ -317,6 +312,11 @@ export function OvertimeStaffSection() {
         requested_duration_minutes: durationMinutes,
         tasks: validTasks,
         staff_notes: staffNotes.trim() || null,
+        calculation_breakdown: {
+          startDate: overtimeDate,
+          endDate: endDate,
+          isCrossDay,
+        },
         status: "pending",
       });
 
@@ -339,6 +339,12 @@ export function OvertimeStaffSection() {
     setReportingReq(req);
     const now = new Date();
     const currentHM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    
+    const reqStartDate = req.calculationBreakdown?.startDate || req.overtimeDate;
+    const reqEndDate = req.calculationBreakdown?.endDate || req.overtimeDate;
+    
+    setActualStartDate(req.calculationBreakdown?.actualStartDate || reqStartDate);
+    setActualEndDate(req.calculationBreakdown?.actualEndDate || reqEndDate);
     setActualEndTime(req.actualEndTime || req.approvedEndTime || currentHM);
     
     if (req.taskReports && req.taskReports.length > 0) {
@@ -430,10 +436,16 @@ export function OvertimeStaffSection() {
   // Submit Overtime Report
   const handleSubmitReport = async () => {
     if (!reportingReq || !user) return;
+    if (!actualEndDate) { toast.error("Pilih tanggal selesai aktual."); return; }
     if (!actualEndTime) { toast.error("Isi jam selesai aktual."); return; }
 
     const actualStart = reportingReq.approvedStartTime || reportingReq.requestedStartTime;
-    const actualDur = calcDurationMinutes(actualStart, actualEndTime);
+    const actualDur = calcOvertimeDurationMinutes(actualStartDate, actualStart, actualEndDate, actualEndTime);
+
+    if (actualDur <= 0) {
+      toast.error("Waktu selesai aktual harus lebih besar dari waktu mulai.");
+      return;
+    }
 
     setIsSubmittingReport(true);
     const tid = toast.loading("Mengunggah bukti & mengirim laporan...");
@@ -469,6 +481,14 @@ export function OvertimeStaffSection() {
           actual_start_time: actualStart + ":00",
           actual_end_time: actualEndTime + ":00",
           actual_duration_minutes: actualDur,
+          calculation_breakdown: {
+            ...(reportingReq.calculationBreakdown || {}),
+            startDate: reportingReq.calculationBreakdown?.startDate || reportingReq.overtimeDate,
+            endDate: reportingReq.calculationBreakdown?.endDate || reportingReq.overtimeDate,
+            actualStartDate,
+            actualEndDate,
+            isCrossDay: actualStartDate !== actualEndDate,
+          },
           report_submitted_at: new Date().toISOString(),
           task_reports: taskReports,
           staff_report_notes: reportNotes.trim() || null,
@@ -644,40 +664,127 @@ export function OvertimeStaffSection() {
           </div>
 
           {/* Tanggal & Waktu Lembur */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest">
-                Tanggal Lembur
-              </label>
-              <input
-                type="date"
-                value={overtimeDate}
-                onChange={(e) => setOvertimeDate(e.target.value)}
-                className="ab-input text-xs font-black py-3 px-4 rounded-xl"
-              />
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Mulai Lembur */}
+              <div className="p-4 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest flex items-center gap-1.5">
+                    <CalendarDays size={13} className="text-amber-500" /> Mulai Lembur
+                  </label>
+                  <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">
+                    Tanggal Rekap Resmi
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-bold text-[var(--ab-text-dim)] block">Tanggal Mulai:</span>
+                    <input
+                      type="date"
+                      value={overtimeDate}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const prevStart = overtimeDate;
+                        setOvertimeDate(val);
+                        if (endDate < val || endDate === prevStart) {
+                          setEndDate(val);
+                        }
+                      }}
+                      className="ab-input text-xs font-black py-2.5 px-3 rounded-xl w-full"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-bold text-[var(--ab-text-dim)] block">Jam Mulai:</span>
+                    <input
+                      type="time"
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      className="ab-input text-xs font-black py-2.5 px-3 rounded-xl text-center w-full"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Selesai Lembur */}
+              <div className="p-4 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-1">
+                  <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest flex items-center gap-1.5">
+                    <Clock size={13} className="text-blue-500" /> Selesai Lembur
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setEndDate(overtimeDate)}
+                      className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border ${
+                        endDate === overtimeDate
+                          ? "bg-[var(--ab-primary)] text-white border-transparent"
+                          : "bg-[var(--ab-bg-surface)] text-[var(--ab-text-dim)] border-[var(--ab-border)] hover:text-[var(--ab-text-main)]"
+                      }`}
+                    >
+                      Hari Sama
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEndDate(addDaysToDate(overtimeDate, 1))}
+                      className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border flex items-center gap-1 ${
+                        endDate !== overtimeDate
+                          ? "bg-purple-600 text-white border-transparent shadow-sm"
+                          : "bg-[var(--ab-bg-surface)] text-[var(--ab-text-dim)] border-[var(--ab-border)] hover:text-[var(--ab-text-main)]"
+                      }`}
+                    >
+                      <Moon size={10} /> Besok (+1 Hr)
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-bold text-[var(--ab-text-dim)] block">Tanggal Selesai:</span>
+                    <input
+                      type="date"
+                      value={endDate}
+                      min={overtimeDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="ab-input text-xs font-black py-2.5 px-3 rounded-xl w-full"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-bold text-[var(--ab-text-dim)] block">Jam Selesai:</span>
+                    <input
+                      type="time"
+                      value={endTime}
+                      onChange={(e) => {
+                        const newEnd = e.target.value;
+                        setEndTime(newEnd);
+                        if (newEnd < startTime && endDate === overtimeDate) {
+                          setEndDate(addDaysToDate(overtimeDate, 1));
+                        }
+                      }}
+                      className="ab-input text-xs font-black py-2.5 px-3 rounded-xl text-center w-full"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest">
-                Mulai Lembur
-              </label>
-              <input
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="ab-input text-xs font-black py-3 px-4 rounded-xl text-center"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest">
-                Selesai Lembur
-              </label>
-              <input
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className="ab-input text-xs font-black py-3 px-4 rounded-xl text-center"
-              />
-            </div>
+
+            {/* Cross day notification badge if selected */}
+            {endDate !== overtimeDate && (
+              <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-2xl flex items-center justify-between text-xs text-purple-600 dark:text-purple-400">
+                <div className="flex items-center gap-2">
+                  <Moon size={16} className="shrink-0 text-purple-500" />
+                  <div>
+                    <span className="font-black block uppercase text-[10px] tracking-wider">
+                      Lembur Lintas Hari (Melewati Tengah Malam)
+                    </span>
+                    <span className="text-[10px] opacity-90">
+                      Selesai dini hari ({endDate}). Lembur dihitung penuh dan resmi terdata pada tanggal mulai ({overtimeDate}).
+                    </span>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase bg-purple-500/20 border border-purple-500/30 whitespace-nowrap">
+                  🌙 +1 Hari
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Durasi Summary Box */}
@@ -689,7 +796,7 @@ export function OvertimeStaffSection() {
                   Estimasi Durasi Pengajuan
                 </span>
                 <span className="text-[10px] font-bold text-[var(--ab-text-dim)]">
-                  Jadwal: {startTime} s/d {endTime}
+                  Jadwal: {formatScheduleRange(startTime, endTime, durationMinutes, overtimeDate, endDate)}
                 </span>
               </div>
             </div>
@@ -829,7 +936,13 @@ export function OvertimeStaffSection() {
                       {
                         step: 1,
                         title: "1. Pengajuan",
-                        desc: formatScheduleRange(req.requestedStartTime, req.requestedEndTime, req.requestedDurationMinutes),
+                        desc: formatScheduleRange(
+                          req.requestedStartTime,
+                          req.requestedEndTime,
+                          req.requestedDurationMinutes,
+                          req.calculationBreakdown?.startDate || req.overtimeDate,
+                          req.calculationBreakdown?.endDate || req.overtimeDate
+                        ),
                       },
                       {
                         step: 2,
@@ -839,7 +952,13 @@ export function OvertimeStaffSection() {
                           : req.status === "rejected"
                           ? "Ditolak"
                           : req.approvedStartTime
-                          ? formatScheduleRange(req.approvedStartTime, req.approvedEndTime, req.approvedDurationMinutes)
+                          ? formatScheduleRange(
+                              req.approvedStartTime,
+                              req.approvedEndTime,
+                              req.approvedDurationMinutes,
+                              req.calculationBreakdown?.startDate || req.overtimeDate,
+                              req.calculationBreakdown?.endDate || req.overtimeDate
+                            )
                           : "Disetujui",
                       },
                       {
@@ -1165,39 +1284,87 @@ export function OvertimeStaffSection() {
               </button>
             </div>
 
-            {/* Jam Selesai Riil */}
+            {/* Waktu Selesai Riil */}
             <div className="space-y-2.5 p-3.5 sm:p-4 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] box-border max-w-full overflow-hidden">
               <div className="flex items-center justify-between flex-wrap gap-1">
                 <label className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest block">
-                  Jam Selesai Aktual
+                  Waktu Selesai Aktual
                 </label>
-                <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 px-2.5 py-0.5 rounded-full border border-purple-500/20">
-                  Bisa lebih cepat / lebih lama
-                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setActualEndDate(actualStartDate || reportingReq.overtimeDate)}
+                    className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border ${
+                      actualEndDate === (actualStartDate || reportingReq.overtimeDate)
+                        ? "bg-[var(--ab-primary)] text-white border-transparent"
+                        : "bg-[var(--ab-bg-surface)] text-[var(--ab-text-dim)] border-[var(--ab-border)] hover:text-[var(--ab-text-main)]"
+                    }`}
+                  >
+                    Hari Sama
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActualEndDate(addDaysToDate(actualStartDate || reportingReq.overtimeDate, 1))}
+                    className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border flex items-center gap-1 ${
+                      actualEndDate !== (actualStartDate || reportingReq.overtimeDate)
+                        ? "bg-purple-600 text-white border-transparent shadow-sm"
+                        : "bg-[var(--ab-bg-surface)] text-[var(--ab-text-dim)] border-[var(--ab-border)] hover:text-[var(--ab-text-main)]"
+                    }`}
+                  >
+                    <Moon size={10} /> Besok (+1 Hr)
+                  </button>
+                </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
-                <div className="space-y-1">
-                  <span className="text-[9px] font-bold text-[var(--ab-text-dim)] block">Waktu Selesai (Riil):</span>
-                  <input
-                    type="time"
-                    value={actualEndTime}
-                    onChange={(e) => setActualEndTime(e.target.value)}
-                    className="ab-input text-sm font-black py-2.5 px-3 rounded-xl text-center w-full box-border max-w-full"
-                  />
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-bold text-[var(--ab-text-dim)] block">Tanggal Selesai (Riil):</span>
+                    <input
+                      type="date"
+                      value={actualEndDate}
+                      min={actualStartDate || reportingReq.overtimeDate}
+                      onChange={(e) => setActualEndDate(e.target.value)}
+                      className="ab-input text-xs font-black py-2 px-3 rounded-xl w-full box-border"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-bold text-[var(--ab-text-dim)] block">Jam Selesai (Riil):</span>
+                    <input
+                      type="time"
+                      value={actualEndTime}
+                      onChange={(e) => {
+                        const newEnd = e.target.value;
+                        setActualEndTime(newEnd);
+                        const startHM = reportingReq.approvedStartTime || reportingReq.requestedStartTime;
+                        if (newEnd < startHM && actualEndDate === (actualStartDate || reportingReq.overtimeDate)) {
+                          setActualEndDate(addDaysToDate(actualStartDate || reportingReq.overtimeDate, 1));
+                        }
+                      }}
+                      className="ab-input text-sm font-black py-2 px-3 rounded-xl text-center w-full box-border"
+                    />
+                  </div>
                 </div>
-                <div className="p-2.5 bg-[var(--ab-bg-surface)] rounded-xl border border-[var(--ab-border)] text-xs space-y-1">
+                <div className="p-3 bg-[var(--ab-bg-surface)] rounded-2xl border border-[var(--ab-border)] text-xs space-y-1.5 h-full flex flex-col justify-center">
                   <div className="flex justify-between items-center text-[10px] text-[var(--ab-text-dim)] font-bold">
                     <span>Mulai:</span>
                     <span className="font-black text-[var(--ab-text-main)]">
-                      {reportingReq.approvedStartTime || reportingReq.requestedStartTime}
+                      {actualStartDate || reportingReq.overtimeDate} • {reportingReq.approvedStartTime || reportingReq.requestedStartTime}
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-[10px] text-[var(--ab-text-dim)] font-bold">
+                    <span>Selesai:</span>
+                    <span className="font-black text-[var(--ab-text-main)]">
+                      {actualEndDate} • {actualEndTime}
+                    </span>
+                  </div>
+                  <div className="pt-1 border-t border-[var(--ab-border)]/50 flex justify-between items-center text-[10px] text-[var(--ab-text-dim)] font-bold">
                     <span>Durasi Riil:</span>
                     <span className="font-black text-purple-600 dark:text-purple-400">
                       {formatDurationDetail(
-                        calcDurationMinutes(
+                        calcOvertimeDurationMinutes(
+                          actualStartDate || reportingReq.overtimeDate,
                           reportingReq.approvedStartTime || reportingReq.requestedStartTime,
+                          actualEndDate,
                           actualEndTime
                         )
                       )}
