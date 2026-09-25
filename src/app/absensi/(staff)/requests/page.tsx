@@ -40,7 +40,7 @@ export default function StaffRequestsPage() {
     const fetchAll = async () => {
       const { data } = await supabase
         .from("leave_requests")
-        .select("*, users(name, department_id, departments(name))")
+        .select("*, users!user_id(name, department_id, departments(name))")
         .order("created_at", { ascending: false });
       
       setGlobalRequests(data ?? []);
@@ -184,7 +184,7 @@ export default function StaffRequestsPage() {
         if (deptSize >= 3) {
           const { data: deptLeavesJoined, error: leavesJoinedErr } = await supabase
             .from("leave_requests")
-            .select("user_id, dates, users!inner(name, department_id)")
+            .select("user_id, dates, users!user_id!inner(name, department_id)")
             .eq("status", "approved")
             .eq("users.department_id", user.departmentId)
             .neq("user_id", user.id);

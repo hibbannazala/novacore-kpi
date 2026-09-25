@@ -36,7 +36,7 @@ export default function StaffTeamPage() {
     const fetchData = async () => {
       const [attRes, reqRes, staffRes] = await Promise.all([
         supabase.from("attendance").select("date, type, users(name)").gte("date", start).lte("date", end),
-        supabase.from("leave_requests").select("dates, type, users(name)").eq("status", "approved"),
+        supabase.from("leave_requests").select("dates, type, users!user_id(name)").eq("status", "approved"),
         supabase.from("users").select("id", { count: "exact", head: true }).eq("absensi_status", "active"),
       ]);
 

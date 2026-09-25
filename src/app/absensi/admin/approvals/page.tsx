@@ -201,7 +201,7 @@ export default function AdminApprovalsPage() {
     const fetchPending = async () => {
       const { data } = await supabase
         .from("leave_requests")
-        .select("*, users(id, name, email, departments(name))")
+        .select("*, users!user_id(id, name, email, departments(name))")
         .in("status", ["pending", "approved_executive"])
         .order("created_at", { ascending: true });
 
@@ -245,7 +245,7 @@ export default function AdminApprovalsPage() {
     const fetchCancel = async () => {
       const { data } = await supabase
         .from("leave_requests")
-        .select("*, users(id, name, email, departments(name))")
+        .select("*, users!user_id(id, name, email, departments(name))")
         .eq("status", "approved")
         .eq("cancellation_requested", true);
 
@@ -296,7 +296,7 @@ export default function AdminApprovalsPage() {
     const fetchHistory = async () => {
       const { data } = await supabase
         .from("leave_requests")
-        .select("*, users(id, name, email, departments(name))")
+        .select("*, users!user_id(id, name, email, departments(name))")
         .in("status", ["approved", "rejected"])
         .order("created_at", { ascending: false });
 
