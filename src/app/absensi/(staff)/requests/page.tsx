@@ -12,7 +12,7 @@ import PromptDialog from "@/components/absensi/PromptDialog";
 import { OvertimeStaffSection } from "@/components/absensi/OvertimeStaffSection";
 import {
   CalendarPlus, CalendarDays, History, X, Info,
-  FileEdit, Smile, Clock
+  FileEdit, Smile, Clock, Shield, Sparkles, CheckCircle2, XCircle, Check
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -563,10 +563,17 @@ export default function StaffRequestsPage() {
 
 // ─ Request Card ───────────────────────────────────────────────────────────────
 function RequestCard({ req, isMine, onCancel }: { req: any; isMine: boolean; onCancel: (req: any) => void }) {
+  const isApproved = req.status === "approved";
+  const isPendingExecutive = req.status === "pending";
+  const isPendingHR = req.status === "approved_executive";
+  const isRejected = req.status === "rejected";
+  const isCancelled = req.status === "cancelled";
+
   const statusColor =
-    req.status === "approved" ? "bg-green-500" :
-    req.status === "pending"  ? "bg-orange-400" :
-    req.status === "cancelled" ? "#94a3b8" : "bg-red-500";
+    isApproved ? "#10b981" :
+    isPendingHR ? "#3b82f6" :
+    isPendingExecutive ? "#f59e0b" :
+    isCancelled ? "#94a3b8" : "#ef4444";
 
   const typeStyle =
     req.type === "leave"  ? "bg-emerald-50 text-[#00897B] border-emerald-100 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400" :
@@ -574,81 +581,236 @@ function RequestCard({ req, isMine, onCancel }: { req: any; isMine: boolean; onC
                             "bg-purple-50 text-purple-600 border-purple-100 dark:bg-purple-900/20 dark:border-purple-800 dark:text-purple-400";
 
   const statusBadgeStyle =
-    req.status === "approved"  ? "bg-green-500 text-white" :
-    req.status === "pending"   ? "bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400" :
-    req.status === "cancelled" ? "bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)]" :
-                                 "bg-red-500 text-white";
+    isApproved ? "bg-emerald-500 text-white shadow-emerald-500/20 shadow-md" :
+    isPendingHR ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200 dark:border-blue-800/40" :
+    isPendingExecutive ? "bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40" :
+    isCancelled ? "bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] border border-[var(--ab-border)]" :
+                  "bg-rose-500 text-white shadow-rose-500/20 shadow-md";
 
   const statusLabel =
-    req.status === "pending"   ? "DIAJUKAN" :
-    req.status === "cancelled" ? "DIBATALKAN" :
-    req.status.toUpperCase();
+    isApproved ? "DISETUJUI FINAL" :
+    isPendingHR ? "MENUNGGU HR (FINAL)" :
+    isPendingExecutive ? "MENUNGGU EXECUTIVE" :
+    isCancelled ? "DIBATALKAN" : "DITOLAK";
+
+  const formatDate = (d?: string | null) => {
+    if (!d) return "-";
+    return new Date(d).toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    }).replace(/\./g, ":");
+  };
 
   return (
-    <div className="bg-[var(--ab-bg-surface)] p-6 rounded-[30px] border border-[var(--ab-border)] shadow-sm relative overflow-hidden">
+    <div className="bg-[var(--ab-bg-surface)] p-5 sm:p-6 rounded-[32px] border border-[var(--ab-border)] shadow-sm relative overflow-hidden flex flex-col justify-between gap-4">
       <div
-        className="absolute top-0 right-0 w-2 h-full"
+        className="absolute top-0 right-0 w-2.5 h-full"
         style={{ background: statusColor }}
       />
-      <div className="flex justify-between items-start mb-4">
-        <span className={`text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-sm border ${typeStyle}`}>
-          {req.type === "leave" ? "🏡 Cuti" : req.type === "sick" ? "🤒 Sakit" : "💻 WFA"}
-        </span>
-        <div className="flex flex-col items-end gap-2">
-          <span className={`text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest ${statusBadgeStyle}`}>
-            {statusLabel}
-          </span>
-          {isMine && (req.status === "pending" || (req.status === "approved" && !req.cancellation_requested)) && (
-            <button
-              onClick={() => onCancel(req)}
-              className="text-[8px] font-black uppercase tracking-widest text-red-400 hover:text-white hover:bg-red-500 px-3 py-1.5 rounded-lg border border-red-200 transition-all active:scale-95"
-            >
-              {req.status === "pending" ? "Batalkan" : "Pengajuan Batal"}
-            </button>
-          )}
-          {req.cancellation_requested && (
-            <span className="text-[8px] font-black uppercase tracking-widest text-orange-500 bg-orange-50 dark:bg-orange-900/20 px-2 py-1 rounded border border-orange-200 dark:border-orange-800">
-              Menunggu Batal
-            </span>
-          )}
-        </div>
-      </div>
       
-      {/* Name and Department */}
-      <div className="mb-4 flex flex-col border-b border-[var(--ab-border)] pb-3">
-        <span className="text-[14px] font-black text-[var(--ab-text-main)]">{req.users?.name ?? "Unknown"}</span>
-        <div className="flex justify-between items-center mt-1">
-          <span className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
-            {req.users?.departments?.name ?? "Umum"}
+      <div className="space-y-4">
+        {/* Top Header */}
+        <div className="flex justify-between items-start gap-2 pr-2">
+          <span className={`text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-sm border ${typeStyle}`}>
+            {req.type === "leave" ? "🏡 Cuti" : req.type === "sick" ? "🤒 Sakit" : "💻 WFA"}
           </span>
-          {req.created_at && (
-            <span className="text-[9px] font-bold text-[var(--ab-text-dim)]/80 uppercase tracking-widest flex items-center gap-1">
-              <Clock size={10} />
-              {new Date(req.created_at).toLocaleString("id-ID", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit"
-              }).replace(/\./g, ":")}
+          <div className="flex flex-col items-end gap-1.5">
+            <span className={`text-[9px] font-black px-3.5 py-1 rounded-full uppercase tracking-wider ${statusBadgeStyle}`}>
+              {statusLabel}
             </span>
+            {isMine && (isPendingExecutive || (isApproved && !req.cancellation_requested)) && (
+              <button
+                onClick={() => onCancel(req)}
+                className="text-[8px] font-black uppercase tracking-widest text-red-400 hover:text-white hover:bg-red-500 px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-900 transition-all active:scale-95"
+              >
+                {isPendingExecutive ? "Batalkan" : "Pengajuan Batal"}
+              </button>
+            )}
+            {req.cancellation_requested && (
+              <span className="text-[8px] font-black uppercase tracking-widest text-orange-500 bg-orange-50 dark:bg-orange-900/20 px-2.5 py-1 rounded-md border border-orange-200 dark:border-orange-800">
+                Menunggu Batal
+              </span>
+            )}
+          </div>
+        </div>
+        
+        {/* Name, Department, Submitted At */}
+        <div className="flex flex-col border-b border-[var(--ab-border)] pb-3">
+          <span className="text-[15px] font-black text-[var(--ab-text-main)] tracking-tight">{req.users?.name ?? "Unknown"}</span>
+          <div className="flex justify-between items-center mt-1">
+            <span className="text-[10px] font-bold text-[var(--ab-text-dim)] uppercase tracking-widest">
+              {req.users?.departments?.name ?? "Umum"}
+            </span>
+            {req.created_at && (
+              <span className="text-[9px] font-bold text-[var(--ab-text-dim)]/80 uppercase tracking-widest flex items-center gap-1">
+                <Clock size={10} />
+                {formatDate(req.created_at)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Selected Dates */}
+        <div className="flex flex-wrap gap-2">
+          {req.dates?.map((d: string) => (
+            <span
+              key={d}
+              className="text-[10px] font-black text-[var(--ab-text-main)] bg-[var(--ab-bg-main)] px-3 py-1 rounded-lg border border-[var(--ab-border)]"
+            >
+              {d}
+            </span>
+          ))}
+        </div>
+
+        {/* Reason */}
+        <div className="bg-[var(--ab-bg-main)] p-3.5 rounded-2xl border border-[var(--ab-border)]">
+          <p className="text-xs text-[var(--ab-text-dim)] font-bold leading-relaxed italic">
+            &ldquo;{req.reason}&rdquo;
+          </p>
+        </div>
+
+        {/* ─── 3-STEP FUNNEL TRACKER ────────────────────────────────────────── */}
+        <div className="p-4 bg-[var(--ab-bg-main)]/70 rounded-2xl border border-[var(--ab-border)] space-y-3">
+          <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-[var(--ab-text-dim)] pb-1.5 border-b border-[var(--ab-border)]">
+            <span className="flex items-center gap-1">
+              <History size={11} /> Progres Persetujuan (Funnel)
+            </span>
+            <span className="text-[8px] font-bold opacity-75">2-Layer Approval</span>
+          </div>
+
+          <div className="space-y-2.5 text-xs">
+            {/* Step 1: Diajukan */}
+            <div className="flex items-start gap-2.5">
+              <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                <Check size={11} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-[11px] text-[var(--ab-text-main)]">1. Pengajuan Diajukan</span>
+                  <span className="text-[9px] text-[var(--ab-text-dim)] font-bold">{formatDate(req.created_at)}</span>
+                </div>
+                <p className="text-[10px] text-[var(--ab-text-dim)] font-medium">Pengajuan formulir staf</p>
+              </div>
+            </div>
+
+            {/* Step 2: Persetujuan Executive */}
+            <div className="flex items-start gap-2.5">
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 shadow-sm ${
+                req.executive_status === "approved" || isPendingHR || isApproved
+                  ? "bg-emerald-500 text-white"
+                  : isRejected && req.rejection_stage === "executive"
+                  ? "bg-rose-500 text-white"
+                  : "bg-amber-500 text-white animate-pulse"
+              }`}>
+                {req.executive_status === "approved" || isPendingHR || isApproved ? (
+                  <Check size={11} />
+                ) : isRejected && req.rejection_stage === "executive" ? (
+                  <X size={11} />
+                ) : (
+                  <Shield size={10} />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-[11px] text-[var(--ab-text-main)]">2. Persetujuan Executive</span>
+                  <span className="text-[9px] font-bold text-[var(--ab-text-dim)]">
+                    {req.executive_approved_at ? formatDate(req.executive_approved_at) : (isRejected && req.rejection_stage === "executive") ? formatDate(req.rejected_at) : "Menunggu"}
+                  </span>
+                </div>
+                <div className="text-[10px] mt-0.5">
+                  {req.executive_status === "approved" || isPendingHR || isApproved ? (
+                    <p className="text-emerald-600 dark:text-emerald-400 font-bold">
+                      Disetujui oleh <span className="font-black">{req.executive_approved_by_name || "Executive"}</span>
+                    </p>
+                  ) : isRejected && req.rejection_stage === "executive" ? (
+                    <p className="text-rose-600 dark:text-rose-400 font-bold">
+                      Ditolak oleh <span className="font-black">{req.rejected_by || "Executive"}</span>
+                    </p>
+                  ) : (
+                    <p className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                      Sedang Ditinjau oleh Executive
+                    </p>
+                  )}
+                </div>
+                {req.executive_notes && (
+                  <div className="mt-1.5 p-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 rounded-xl text-[10px] italic">
+                    <span className="font-black not-italic block uppercase text-[8px] tracking-wider mb-0.5">Catatan Executive:</span>
+                    &ldquo;{req.executive_notes}&rdquo;
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Step 3: Persetujuan HR Final */}
+            <div className="flex items-start gap-2.5">
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 shadow-sm ${
+                isApproved
+                  ? "bg-emerald-500 text-white"
+                  : isRejected && req.rejection_stage === "hr"
+                  ? "bg-rose-500 text-white"
+                  : isPendingHR
+                  ? "bg-blue-500 text-white animate-pulse"
+                  : "bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+              }`}>
+                {isApproved ? (
+                  <CheckCircle2 size={12} />
+                ) : isRejected && req.rejection_stage === "hr" ? (
+                  <X size={11} />
+                ) : isPendingHR ? (
+                  <Sparkles size={10} />
+                ) : (
+                  <span className="text-[9px] font-black">3</span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-[11px] text-[var(--ab-text-main)]">3. Persetujuan HR (Final)</span>
+                  <span className="text-[9px] font-bold text-[var(--ab-text-dim)]">
+                    {req.hr_approved_at ? formatDate(req.hr_approved_at) : (isRejected && req.rejection_stage === "hr") ? formatDate(req.rejected_at) : isPendingHR ? "Menunggu HR" : "-"}
+                  </span>
+                </div>
+                <div className="text-[10px] mt-0.5">
+                  {isApproved ? (
+                    <p className="text-emerald-600 dark:text-emerald-400 font-bold">
+                      Disetujui Final oleh <span className="font-black">{req.hr_approved_by_name || req.processed_by || "HR"}</span>
+                    </p>
+                  ) : isRejected && req.rejection_stage === "hr" ? (
+                    <p className="text-rose-600 dark:text-rose-400 font-bold">
+                      Ditolak oleh <span className="font-black">{req.rejected_by || "HR"}</span>
+                    </p>
+                  ) : isPendingHR ? (
+                    <p className="text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
+                      Sedang Ditinjau oleh HR
+                    </p>
+                  ) : (
+                    <p className="text-[var(--ab-text-dim)] opacity-60">Menunggu Tahap 1 Disetujui</p>
+                  )}
+                </div>
+                {req.hr_notes && (
+                  <div className="mt-1.5 p-2 bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300 rounded-xl text-[10px] italic">
+                    <span className="font-black not-italic block uppercase text-[8px] tracking-wider mb-0.5">Catatan HR:</span>
+                    &ldquo;{req.hr_notes}&rdquo;
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Rejection Banner */}
+          {isRejected && (
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40 rounded-xl text-rose-700 dark:text-rose-300 text-[10px] space-y-1">
+              <span className="font-black uppercase text-[8px] tracking-wider block text-rose-600 dark:text-rose-400">
+                Alasan Penolakan (Tahap {req.rejection_stage === "executive" ? "Executive" : "HR"} oleh {req.rejected_by || "Admin"}):
+              </span>
+              <p className="italic font-bold">&ldquo;{req.rejection_reason || "-"}&rdquo;</p>
+            </div>
           )}
         </div>
-      </div>
-      <div className="flex flex-wrap gap-2 mb-4">
-        {req.dates?.map((d: string) => (
-          <span
-            key={d}
-            className="text-[10px] font-black text-[var(--ab-text-main)] bg-[var(--ab-bg-main)] px-3 py-1 rounded-lg border border-[var(--ab-border)]"
-          >
-            {d}
-          </span>
-        ))}
-      </div>
-      <div className="bg-[var(--ab-bg-main)] p-4 rounded-2xl border border-[var(--ab-border)]">
-        <p className="text-xs text-[var(--ab-text-dim)] font-bold leading-relaxed italic">
-          &ldquo;{req.reason}&rdquo;
-        </p>
       </div>
     </div>
   );

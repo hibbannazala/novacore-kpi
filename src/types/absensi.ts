@@ -30,7 +30,7 @@ export interface Attendance {
 // ─── Leave Request ────────────────────────────────────────────────────────────
 
 export type LeaveRequestType = "leave" | "sick" | "wfa";
-export type LeaveRequestStatus = "pending" | "approved" | "rejected" | "cancelled";
+export type LeaveRequestStatus = "pending" | "approved_executive" | "approved" | "rejected" | "cancelled";
 
 export interface LeaveRequest {
   id: string;
@@ -45,6 +45,20 @@ export interface LeaveRequest {
   deductedLeave: number;
   cancellationRequested: boolean;
   cancellationReason: string | null;
+  executiveStatus?: "pending" | "approved" | "rejected";
+  executiveApprovedBy?: string | null;
+  executiveApprovedByName?: string | null;
+  executiveApprovedAt?: string | null;
+  executiveNotes?: string | null;
+  hrStatus?: "pending" | "approved" | "rejected";
+  hrApprovedBy?: string | null;
+  hrApprovedByName?: string | null;
+  hrApprovedAt?: string | null;
+  hrNotes?: string | null;
+  rejectionStage?: "executive" | "hr" | null;
+  rejectionReason?: string | null;
+  rejectedBy?: string | null;
+  rejectedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -137,6 +151,20 @@ export function rowToLeaveRequest(row: Record<string, unknown>): LeaveRequest {
     deductedLeave:         (row.deducted_leave as number) ?? 0,
     cancellationRequested: (row.cancellation_requested as boolean) ?? false,
     cancellationReason:    row.cancellation_reason as string | null,
+    executiveStatus:       row.executive_status as any,
+    executiveApprovedBy:   row.executive_approved_by as string | null,
+    executiveApprovedByName: row.executive_approved_by_name as string | null,
+    executiveApprovedAt:   row.executive_approved_at as string | null,
+    executiveNotes:        row.executive_notes as string | null,
+    hrStatus:              row.hr_status as any,
+    hrApprovedBy:          row.hr_approved_by as string | null,
+    hrApprovedByName:      row.hr_approved_by_name as string | null,
+    hrApprovedAt:          row.hr_approved_at as string | null,
+    hrNotes:               row.hr_notes as string | null,
+    rejectionStage:        row.rejection_stage as any,
+    rejectionReason:       row.rejection_reason as string | null,
+    rejectedBy:            row.rejected_by as string | null,
+    rejectedAt:            row.rejected_at as string | null,
     createdAt:             row.created_at as string,
     updatedAt:             row.updated_at as string,
   };

@@ -44,21 +44,35 @@ CREATE TABLE IF NOT EXISTS public.attendance (
 -- ─── 3. Tabel leave_requests ─────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS public.leave_requests (
-  id                     uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id                uuid        NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  type                   text        NOT NULL CHECK (type IN ('leave','sick','wfa')),
-  dates                  text[]      NOT NULL DEFAULT '{}',
-  reason                 text        NOT NULL DEFAULT '',
-  status                 text        NOT NULL DEFAULT 'pending'
-                           CHECK (status IN ('pending','approved','rejected','cancelled')),
-  processed_by           text,
-  processed_at           timestamptz,
-  deducted_sick          int         NOT NULL DEFAULT 0,
-  deducted_leave         int         NOT NULL DEFAULT 0,
-  cancellation_requested bool        NOT NULL DEFAULT false,
-  cancellation_reason    text,
-  created_at             timestamptz NOT NULL DEFAULT now(),
-  updated_at             timestamptz NOT NULL DEFAULT now()
+  id                         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id                    uuid        NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  type                       text        NOT NULL CHECK (type IN ('leave','sick','wfa')),
+  dates                      text[]      NOT NULL DEFAULT '{}',
+  reason                     text        NOT NULL DEFAULT '',
+  status                     text        NOT NULL DEFAULT 'pending'
+                               CHECK (status IN ('pending','approved_executive','approved','rejected','cancelled')),
+  processed_by               text,
+  processed_at               timestamptz,
+  deducted_sick              int         NOT NULL DEFAULT 0,
+  deducted_leave             int         NOT NULL DEFAULT 0,
+  cancellation_requested     bool        NOT NULL DEFAULT false,
+  cancellation_reason        text,
+  executive_status           text        DEFAULT 'pending',
+  executive_approved_by      uuid        REFERENCES public.users(id),
+  executive_approved_by_name text,
+  executive_approved_at      timestamptz,
+  executive_notes            text,
+  hr_status                  text        DEFAULT 'pending',
+  hr_approved_by             uuid        REFERENCES public.users(id),
+  hr_approved_by_name        text,
+  hr_approved_at             timestamptz,
+  hr_notes                   text,
+  rejection_stage            text,
+  rejection_reason           text,
+  rejected_by                text,
+  rejected_at                timestamptz,
+  created_at                 timestamptz NOT NULL DEFAULT now(),
+  updated_at                 timestamptz NOT NULL DEFAULT now()
 );
 
 
@@ -200,8 +214,12 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE OR REPLACE FUNCTION public.process_leave_request(
   p_request_id uuid,
+  p_layer      text,   -- 'executive' | 'hr'
   p_action     text,   -- 'approve' | 'reject'
-  p_admin_name text
+  p_admin_id   uuid,
+  p_admin_name text,
+  p_notes      text DEFAULT NULL,
+  p_reason     text DEFAULT NULL
 ) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   v_req    public.leave_requests%ROWTYPE;
@@ -211,37 +229,112 @@ DECLARE
 BEGIN
   SELECT * INTO v_req FROM public.leave_requests WHERE id = p_request_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Request not found'; END IF;
-  IF v_req.status != 'pending' THEN RAISE EXCEPTION 'Already processed'; END IF;
 
-  IF p_action = 'approve' AND v_req.type IN ('sick','leave') THEN
-    v_days := array_length(v_req.dates, 1);
-    IF v_req.type = 'sick' THEN
-      SELECT LEAST(v_days, sick_quota) INTO v_dsick FROM public.users WHERE id = v_req.user_id;
-      v_dleave := GREATEST(0, v_days - v_dsick);
-    ELSE
-      v_dleave := v_days;
-    END IF;
-    UPDATE public.users
-      SET sick_quota  = sick_quota  - v_dsick,
-          leave_quota = leave_quota - v_dleave
-      WHERE id = v_req.user_id;
+  IF v_req.status IN ('rejected', 'cancelled') THEN
+    RAISE EXCEPTION 'Request has already been %', v_req.status;
   END IF;
 
-  UPDATE public.leave_requests
-    SET status         = CASE WHEN p_action = 'approve' THEN 'approved' ELSE 'rejected' END,
-        processed_by   = p_admin_name,
-        processed_at   = now(),
-        deducted_sick  = v_dsick,
-        deducted_leave = v_dleave
-    WHERE id = p_request_id;
+  -- 1. EXECUTIVE LAYER
+  IF p_layer = 'executive' THEN
+    IF p_action = 'approve' THEN
+      UPDATE public.leave_requests
+      SET status                     = 'approved_executive',
+          executive_status           = 'approved',
+          executive_approved_by      = p_admin_id,
+          executive_approved_by_name = p_admin_name,
+          executive_approved_at      = now(),
+          executive_notes            = p_notes
+      WHERE id = p_request_id;
 
-  INSERT INTO public.absensi_logs (actor, action, target_user_id, details)
-    VALUES (
-      p_admin_name,
-      p_action || '_leave',
-      v_req.user_id,
-      v_req.type || ': ' || array_to_string(v_req.dates, ', ')
-    );
+      INSERT INTO public.absensi_logs (actor, action, target_user_id, details)
+      VALUES (
+        p_admin_name,
+        'executive_approve_leave',
+        v_req.user_id,
+        v_req.type || ' approved by Executive (Notes: ' || COALESCE(p_notes, '-') || '): ' || array_to_string(v_req.dates, ', ')
+      );
+    ELSE -- reject
+      UPDATE public.leave_requests
+      SET status           = 'rejected',
+          executive_status = 'rejected',
+          rejection_stage  = 'executive',
+          rejection_reason = p_reason,
+          rejected_by      = p_admin_name,
+          rejected_at      = now()
+      WHERE id = p_request_id;
+
+      INSERT INTO public.absensi_logs (actor, action, target_user_id, details)
+      VALUES (
+        p_admin_name,
+        'executive_reject_leave',
+        v_req.user_id,
+        v_req.type || ' rejected by Executive (Reason: ' || COALESCE(p_reason, '-') || '): ' || array_to_string(v_req.dates, ', ')
+      );
+    END IF;
+
+  -- 2. HR LAYER (FINAL APPROVAL)
+  ELSIF p_layer = 'hr' THEN
+    IF p_action = 'approve' THEN
+      -- Deduct quotas only on final approval
+      IF v_req.type IN ('sick', 'leave') THEN
+        v_days := array_length(v_req.dates, 1);
+        IF v_req.type = 'sick' THEN
+          SELECT LEAST(v_days, sick_quota) INTO v_dsick FROM public.users WHERE id = v_req.user_id;
+          v_dleave := GREATEST(0, v_days - v_dsick);
+        ELSE
+          v_dleave := v_days;
+        END IF;
+        UPDATE public.users
+        SET sick_quota  = sick_quota  - v_dsick,
+            leave_quota = leave_quota - v_dleave
+        WHERE id = v_req.user_id;
+      END IF;
+
+      -- If executive approval wasn't recorded (e.g. executive directly did final approval), set executive fields too
+      UPDATE public.leave_requests
+      SET status                = 'approved',
+          hr_status             = 'approved',
+          hr_approved_by        = p_admin_id,
+          hr_approved_by_name   = p_admin_name,
+          hr_approved_at        = now(),
+          hr_notes              = p_notes,
+          processed_by          = p_admin_name,
+          processed_at          = now(),
+          deducted_sick         = v_dsick,
+          deducted_leave        = v_dleave,
+          executive_status      = 'approved',
+          executive_approved_by_name = COALESCE(v_req.executive_approved_by_name, p_admin_name),
+          executive_approved_at = COALESCE(v_req.executive_approved_at, now())
+      WHERE id = p_request_id;
+
+      INSERT INTO public.absensi_logs (actor, action, target_user_id, details)
+      VALUES (
+        p_admin_name,
+        'hr_approve_leave',
+        v_req.user_id,
+        v_req.type || ' final approved by HR (Notes: ' || COALESCE(p_notes, '-') || '): ' || array_to_string(v_req.dates, ', ')
+      );
+    ELSE -- reject
+      UPDATE public.leave_requests
+      SET status           = 'rejected',
+          hr_status        = 'rejected',
+          rejection_stage  = 'hr',
+          rejection_reason = p_reason,
+          rejected_by      = p_admin_name,
+          rejected_at      = now()
+      WHERE id = p_request_id;
+
+      INSERT INTO public.absensi_logs (actor, action, target_user_id, details)
+      VALUES (
+        p_admin_name,
+        'hr_reject_leave',
+        v_req.user_id,
+        v_req.type || ' rejected by HR (Reason: ' || COALESCE(p_reason, '-') || '): ' || array_to_string(v_req.dates, ', ')
+      );
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'Invalid layer: %', p_layer;
+  END IF;
 END $$;
 
 
