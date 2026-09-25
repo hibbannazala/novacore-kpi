@@ -20,7 +20,8 @@ import {
 import {
   Check, X, CalendarDays, FileEdit, Smile, Shield, ArrowRight,
   Clock, CheckCircle2, ClipboardCheck, Image as ImageIcon, Eye,
-  Search, Filter, Users, ChevronRight, Sparkles, AlertCircle, Moon
+  Search, Filter, Users, ChevronRight, Sparkles, AlertCircle, Moon,
+  AlertTriangle, History, Info
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -77,7 +78,11 @@ export default function AdminApprovalsPage() {
   // Tabs: "leave" vs "overtime"
   const [activeMainTab, setActiveMainTab] = useState<"leave" | "overtime">("leave");
 
-  // Cuti States
+  // Cuti States & Sub-Tabs
+  const [leaveSubTab, setLeaveSubTab] = useState<"pending" | "cancellation" | "history">("pending");
+  const [historyFilter, setHistoryFilter] = useState<"all" | "approved" | "rejected">("all");
+  const [historySearch, setHistorySearch] = useState("");
+  const [allActiveLeaves, setAllActiveLeaves] = useState<PendingRequest[]>([]);
   const [pendingReqs, setPendingReqs] = useState<PendingRequest[]>([]);
   const [cancelReqs, setCancelReqs] = useState<PendingRequest[]>([]);
   const [historyReqs, setHistoryReqs] = useState<PendingRequest[]>([]);
@@ -195,95 +200,81 @@ export default function AdminApprovalsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    const supabase = createClient();
-
-    const fetchPending = async () => {
-      const { data } = await supabase
+  const fetchLeaves = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
         .from("leave_requests")
-        .select("*, users!user_id(id, name, email, departments(name))")
-        .in("status", ["pending", "approved_executive"])
+        .select("*, users!user_id(id, name, email, department_id, departments(name))")
         .order("created_at", { ascending: true });
 
-      setPendingReqs(
-        (data ?? []).map((r) => {
-          const u = r.users as any;
-          return {
-            id: r.id as string,
-            userId: r.user_id as string,
-            userName: u?.name ?? "Unknown",
-            departmentName: u?.departments?.name ?? "Umum",
-            type: r.type as string,
-            dates: (r.dates as string[]) ?? [],
-            reason: (r.reason as string) ?? "",
-            createdAt: r.created_at as string,
-            status: r.status as string,
-            cancellationRequested: (r.cancellation_requested as boolean) ?? false,
-            cancellationReason: r.cancellation_reason as string | null,
-            deductedSick: (r.deducted_sick as number) ?? 0,
-            deductedLeave: (r.deducted_leave as number) ?? 0,
-            executiveStatus: r.executive_status,
-            executiveApprovedBy: r.executive_approved_by,
-            executiveApprovedByName: r.executive_approved_by_name,
-            executiveApprovedAt: r.executive_approved_at,
-            executiveNotes: r.executive_notes,
-            hrStatus: r.hr_status,
-            hrApprovedBy: r.hr_approved_by,
-            hrApprovedByName: r.hr_approved_by_name,
-            hrApprovedAt: r.hr_approved_at,
-            hrNotes: r.hr_notes,
-            rejectionStage: r.rejection_stage,
-            rejectionReason: r.rejection_reason,
-            rejectedBy: r.rejected_by,
-            rejectedAt: r.rejected_at,
-          };
-        })
+      if (error) {
+        console.error("Error fetching leave requests:", error);
+        return;
+      }
+
+      const mapped: PendingRequest[] = (data ?? []).map((r) => {
+        const u = r.users as any;
+        return {
+          id: r.id as string,
+          userId: r.user_id as string,
+          userName: u?.name ?? "Unknown",
+          departmentName: u?.departments?.name ?? "Umum",
+          type: r.type as string,
+          dates: (r.dates as string[]) ?? [],
+          reason: (r.reason as string) ?? "",
+          createdAt: r.created_at as string,
+          status: r.status as string,
+          cancellationRequested: (r.cancellation_requested as boolean) ?? false,
+          cancellationReason: r.cancellation_reason as string | null,
+          deductedSick: (r.deducted_sick as number) ?? 0,
+          deductedLeave: (r.deducted_leave as number) ?? 0,
+          executiveStatus: r.executive_status,
+          executiveApprovedBy: r.executive_approved_by,
+          executiveApprovedByName: r.executive_approved_by_name,
+          executiveApprovedAt: r.executive_approved_at,
+          executiveNotes: r.executive_notes,
+          hrStatus: r.hr_status,
+          hrApprovedBy: r.hr_approved_by,
+          hrApprovedByName: r.hr_approved_by_name,
+          hrApprovedAt: r.hr_approved_at,
+          hrNotes: r.hr_notes,
+          rejectionStage: r.rejection_stage,
+          rejectionReason: r.rejection_reason,
+          rejectedBy: r.rejected_by,
+          rejectedAt: r.rejected_at,
+        };
+      });
+
+      // Active leaves for conflict detection: pending, approved_executive, approved (not cancelled)
+      const activeLeaves = mapped.filter(
+        (r) => ["pending", "approved_executive", "approved"].includes(r.status) && !r.cancellationRequested
       );
+      setAllActiveLeaves(activeLeaves);
+
+      // Pending requests: pending & approved_executive
+      const pending = mapped.filter((r) => ["pending", "approved_executive"].includes(r.status));
+      setPendingReqs(pending);
+
+      // Cancellation requests: approved with cancellation_requested
+      const cancel = mapped.filter((r) => r.status === "approved" && r.cancellationRequested);
+      setCancelReqs(cancel);
+
+      // History: approved & rejected (ordered newest first)
+      const history = mapped
+        .filter((r) => ["approved", "rejected"].includes(r.status))
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setHistoryReqs(history);
+    } catch (err) {
+      console.error("fetchLeaves exception:", err);
+    } finally {
       setIsLoading(false);
-    };
+    }
+  }, []);
 
-    const fetchCancel = async () => {
-      const { data } = await supabase
-        .from("leave_requests")
-        .select("*, users!user_id(id, name, email, departments(name))")
-        .eq("status", "approved")
-        .eq("cancellation_requested", true);
-
-      setCancelReqs(
-        (data ?? []).map((r) => {
-          const u = r.users as any;
-          return {
-            id: r.id as string,
-            userId: r.user_id as string,
-            userName: u?.name ?? "Unknown",
-            departmentName: u?.departments?.name ?? "Umum",
-            type: r.type as string,
-            dates: (r.dates as string[]) ?? [],
-            reason: (r.reason as string) ?? "",
-            createdAt: r.created_at as string,
-            status: r.status as string,
-            cancellationRequested: true,
-            cancellationReason: r.cancellation_reason as string | null,
-            deductedSick: (r.deducted_sick as number) ?? 0,
-            deductedLeave: (r.deducted_leave as number) ?? 0,
-            executiveStatus: r.executive_status,
-            executiveApprovedBy: r.executive_approved_by,
-            executiveApprovedByName: r.executive_approved_by_name,
-            executiveApprovedAt: r.executive_approved_at,
-            executiveNotes: r.executive_notes,
-            hrStatus: r.hr_status,
-            hrApprovedBy: r.hr_approved_by,
-            hrApprovedByName: r.hr_approved_by_name,
-            hrApprovedAt: r.hr_approved_at,
-            hrNotes: r.hr_notes,
-            rejectionStage: r.rejection_stage,
-            rejectionReason: r.rejection_reason,
-            rejectedBy: r.rejected_by,
-            rejectedAt: r.rejected_at,
-          };
-        })
-      );
-    };
+  useEffect(() => {
+    const supabase = createClient();
 
     const fetchPendingStaff = async () => {
       const { count } = await supabase
@@ -293,64 +284,60 @@ export default function AdminApprovalsPage() {
       setPendingStaffCount(count ?? 0);
     };
 
-    const fetchHistory = async () => {
-      const { data } = await supabase
-        .from("leave_requests")
-        .select("*, users!user_id(id, name, email, departments(name))")
-        .in("status", ["approved", "rejected"])
-        .order("created_at", { ascending: false });
-
-      setHistoryReqs(
-        (data ?? []).map((r) => {
-          const u = r.users as any;
-          return {
-            id: r.id as string,
-            userId: r.user_id as string,
-            userName: u?.name ?? "Unknown",
-            departmentName: u?.departments?.name ?? "Umum",
-            type: r.type as string,
-            dates: (r.dates as string[]) ?? [],
-            reason: (r.reason as string) ?? "",
-            createdAt: r.created_at as string,
-            status: r.status as string,
-            cancellationRequested: (r.cancellation_requested as boolean) ?? false,
-            cancellationReason: r.cancellation_reason as string | null,
-            deductedSick: (r.deducted_sick as number) ?? 0,
-            deductedLeave: (r.deducted_leave as number) ?? 0,
-            executiveStatus: r.executive_status,
-            executiveApprovedBy: r.executive_approved_by,
-            executiveApprovedByName: r.executive_approved_by_name,
-            executiveApprovedAt: r.executive_approved_at,
-            executiveNotes: r.executive_notes,
-            hrStatus: r.hr_status,
-            hrApprovedBy: r.hr_approved_by,
-            hrApprovedByName: r.hr_approved_by_name,
-            hrApprovedAt: r.hr_approved_at,
-            hrNotes: r.hr_notes,
-            rejectionStage: r.rejection_stage,
-            rejectionReason: r.rejection_reason,
-            rejectedBy: r.rejected_by,
-            rejectedAt: r.rejected_at,
-          };
-        })
-      );
-    };
-
-    Promise.all([fetchPending(), fetchCancel(), fetchHistory(), fetchPendingStaff(), fetchOvertime()]);
+    Promise.all([fetchLeaves(), fetchPendingStaff(), fetchOvertime()]);
 
     const ch = supabase
       .channel("admin_approvals")
       .on("postgres_changes", { event: "*", schema: "public", table: "leave_requests" }, () => {
-        fetchPending();
-        fetchCancel();
-        fetchHistory();
+        fetchLeaves();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "overtime_requests" }, fetchOvertime)
       .on("postgres_changes", { event: "*", schema: "public", table: "users" }, fetchPendingStaff)
       .subscribe();
 
     return () => { ch.unsubscribe(); };
-  }, [fetchOvertime]);
+  }, [fetchLeaves, fetchOvertime]);
+
+  // Division Conflict & Queue Calculation Helper
+  const getDivisionConflicts = useCallback((req: PendingRequest) => {
+    if (!req.dates || req.dates.length === 0) return [];
+    const reqDept = req.departmentName || "Umum";
+    const reqTime = new Date(req.createdAt).getTime();
+
+    return allActiveLeaves
+      .filter((other) => {
+        if (other.id === req.id) return false;
+        const otherDept = other.departmentName || "Umum";
+        if (reqDept !== otherDept) return false;
+        return other.dates.some((d) => req.dates.includes(d));
+      })
+      .map((other) => {
+        const overlapping = other.dates.filter((d) => req.dates.includes(d));
+        const otherTime = new Date(other.createdAt).getTime();
+        const isEarlier = otherTime < reqTime;
+        const diffMinutes = Math.round(Math.abs(reqTime - otherTime) / (1000 * 60));
+
+        return {
+          ...other,
+          overlappingDates: overlapping,
+          isEarlier,
+          diffMinutes,
+        };
+      })
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [allActiveLeaves]);
+
+  const formatTimeAgoOrDiff = (diffMinutes: number, isEarlier: boolean) => {
+    if (diffMinutes < 1) return isEarlier ? "beberapa detik lebih dulu" : "beberapa detik setelahnya";
+    if (diffMinutes < 60) return `${diffMinutes} menit ${isEarlier ? "lebih awal" : "setelahnya"}`;
+    const hours = Math.floor(diffMinutes / 60);
+    const mins = diffMinutes % 60;
+    if (hours < 24) {
+      return `${hours} jam ${mins > 0 ? `${mins} mnt ` : ""}${isEarlier ? "lebih awal" : "setelahnya"}`;
+    }
+    const days = Math.floor(hours / 24);
+    return `${days} hari ${isEarlier ? "lebih awal" : "setelahnya"}`;
+  };
 
   const formatMinutes = formatDurationDetail;
 
@@ -614,7 +601,20 @@ export default function AdminApprovalsPage() {
     return acc;
   }, {} as Record<string, PendingRequest[]>);
 
-  const groupedHistory = historyReqs.reduce((acc, req) => {
+  const filteredHistoryReqs = historyReqs.filter((req) => {
+    if (historyFilter === "approved" && req.status !== "approved") return false;
+    if (historyFilter === "rejected" && req.status !== "rejected") return false;
+    if (historySearch.trim()) {
+      const q = historySearch.toLowerCase();
+      const matchName = req.userName.toLowerCase().includes(q);
+      const matchDept = (req.departmentName || "").toLowerCase().includes(q);
+      const matchReason = (req.reason || "").toLowerCase().includes(q);
+      if (!matchName && !matchDept && !matchReason) return false;
+    }
+    return true;
+  });
+
+  const groupedHistory = filteredHistoryReqs.reduce((acc, req) => {
     const dept = req.departmentName || "Umum";
     if (!acc[dept]) acc[dept] = [];
     acc[dept].push(req);
@@ -636,8 +636,6 @@ export default function AdminApprovalsPage() {
           )}
         </div>
       </div>
-
-
 
       {/* Pending Staff Banner */}
       {!isLoading && pendingStaffCount > 0 && (
@@ -663,220 +661,334 @@ export default function AdminApprovalsPage() {
         </button>
       )}
 
-      {/* TAB 1: PERSUTUJUAN CUTI & IZIN */}
+      {/* SUB-TAB SWITCHER: APPROVAL / CANCELLATION / HISTORY */}
+      <div className="flex bg-[var(--ab-bg-surface)] p-1.5 rounded-2xl border border-[var(--ab-border)] w-full sm:w-fit shadow-inner flex-wrap items-center gap-1.5">
+        <button
+          onClick={() => setLeaveSubTab("pending")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+            leaveSubTab === "pending"
+              ? "bg-[var(--ab-primary)] text-white shadow-md"
+              : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)] hover:bg-[var(--ab-bg-main)]"
+          }`}
+        >
+          <Clock size={14} />
+          <span>Persetujuan Cuti</span>
+          {pendingReqs.length > 0 && (
+            <span
+              className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
+                leaveSubTab === "pending"
+                  ? "bg-white text-[var(--ab-primary)]"
+                  : "bg-amber-500 text-white"
+              }`}
+            >
+              {pendingReqs.length}
+            </span>
+          )}
+        </button>
+
+        {cancelReqs.length > 0 && (
+          <button
+            onClick={() => setLeaveSubTab("cancellation")}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+              leaveSubTab === "cancellation"
+                ? "bg-red-600 text-white shadow-md"
+                : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)] hover:bg-[var(--ab-bg-main)]"
+            }`}
+          >
+            <X size={14} />
+            <span>Permohonan Batal</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
+                leaveSubTab === "cancellation" ? "bg-white text-red-600" : "bg-red-500 text-white"
+              }`}
+            >
+              {cancelReqs.length}
+            </span>
+          </button>
+        )}
+
+        <button
+          onClick={() => setLeaveSubTab("history")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+            leaveSubTab === "history"
+              ? "bg-slate-800 dark:bg-slate-700 text-white shadow-md"
+              : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)] hover:bg-[var(--ab-bg-main)]"
+          }`}
+        >
+          <History size={14} />
+          <span>Riwayat Pengajuan</span>
+          {historyReqs.length > 0 && (
+            <span
+              className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
+                leaveSubTab === "history"
+                  ? "bg-white/20 text-white"
+                  : "bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] border border-[var(--ab-border)]"
+              }`}
+            >
+              {historyReqs.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* TAB CONTENT */}
       {activeMainTab === "leave" && (
-        <div className="space-y-8">
-          {/* Pending Requests */}
-          <div className="space-y-8 pb-4">
-            {isLoading ? (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="animate-pulse bg-[var(--ab-bg-surface)] p-6 rounded-[32px] border border-[var(--ab-border)] h-48" />
-                ))}
-              </div>
-            ) : pendingReqs.length === 0 ? (
-              <div className="p-20 text-center ab-animate-scaleIn bg-[var(--ab-bg-surface)] rounded-3xl border border-[var(--ab-border)]">
-                <div className="w-16 h-16 bg-[var(--ab-bg-main)] rounded-[20px] flex items-center justify-center mx-auto mb-4 text-[var(--ab-text-dim)]">
-                  <Smile size={32} />
+        <div className="space-y-6">
+          {/* SUB-TAB 1: PENDING APPROVALS */}
+          {leaveSubTab === "pending" && (
+            <div className="space-y-8 pb-4">
+              {isLoading ? (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="animate-pulse bg-[var(--ab-bg-surface)] p-6 rounded-[32px] border border-[var(--ab-border)] h-48" />
+                  ))}
                 </div>
-                <h4 className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest italic">
-                  Semua pengajuan cuti sudah diproses. Aman!
-                </h4>
-              </div>
-            ) : (
-              Object.entries(groupedPending).map(([deptName, reqs]) => (
-                <div key={deptName} className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <div className="bg-[var(--ab-primary)] w-2 h-6 rounded-full"></div>
-                    <h2 className="text-lg font-black text-[var(--ab-text-main)] uppercase tracking-tight">{deptName}</h2>
-                    <span className="bg-[var(--ab-bg-main)] px-2 py-1 rounded-full text-[10px] font-black text-[var(--ab-text-dim)] border border-[var(--ab-border)]">
-                      {reqs.length} Pengajuan
-                    </span>
+              ) : pendingReqs.length === 0 ? (
+                <div className="p-20 text-center ab-animate-scaleIn bg-[var(--ab-bg-surface)] rounded-3xl border border-[var(--ab-border)]">
+                  <div className="w-16 h-16 bg-[var(--ab-bg-main)] rounded-[20px] flex items-center justify-center mx-auto mb-4 text-[var(--ab-text-dim)]">
+                    <Smile size={32} />
                   </div>
+                  <h4 className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest italic">
+                    Semua pengajuan cuti sudah diproses. Aman!
+                  </h4>
+                </div>
+              ) : (
+                Object.entries(groupedPending).map(([deptName, reqs]) => (
+                  <div key={deptName} className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-[var(--ab-primary)] w-2 h-6 rounded-full"></div>
+                      <h2 className="text-lg font-black text-[var(--ab-text-main)] uppercase tracking-tight">{deptName}</h2>
+                      <span className="bg-[var(--ab-bg-main)] px-2 py-1 rounded-full text-[10px] font-black text-[var(--ab-text-dim)] border border-[var(--ab-border)]">
+                        {reqs.length} Pengajuan
+                      </span>
+                    </div>
+
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {reqs.map((req) => {
-                      const isLayer1 = req.status === "pending";
-                      const isLayer2 = req.status === "approved_executive";
+                      {reqs.map((req) => {
+                        const isLayer1 = req.status === "pending";
+                        const isLayer2 = req.status === "approved_executive";
+                        const conflicts = getDivisionConflicts(req);
 
-                      return (
-                        <div
-                          key={req.id}
-                          className="bg-[var(--ab-bg-surface)] p-5 sm:p-6 rounded-[32px] border border-[var(--ab-border)] shadow-sm flex flex-col justify-between gap-5 relative overflow-hidden"
-                        >
-                          <div className="space-y-4">
-                            {/* Header Badges & Dates */}
-                            <div className="flex justify-between items-start gap-2">
-                              <div className="flex flex-col gap-1.5">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className={`px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${typeStyle(req.type)}`}>
-                                    {typeLabel(req.type)}
-                                  </span>
-                                  {isLayer1 ? (
-                                    <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40 flex items-center gap-1">
-                                      <Shield size={10} className="text-amber-500" /> Tahap 1: Executive
+                        return (
+                          <div
+                            key={req.id}
+                            className="bg-[var(--ab-bg-surface)] p-5 sm:p-6 rounded-[32px] border border-[var(--ab-border)] shadow-sm flex flex-col justify-between gap-5 relative overflow-hidden"
+                          >
+                            <div className="space-y-4">
+                              {/* Header Badges & Dates */}
+                              <div className="flex justify-between items-start gap-2">
+                                <div className="flex flex-col gap-1.5">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className={`px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${typeStyle(req.type)}`}>
+                                      {typeLabel(req.type)}
                                     </span>
-                                  ) : (
-                                    <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/40 flex items-center gap-1">
-                                      <Sparkles size={10} className="text-blue-500" /> Tahap 2: HR Final
-                                    </span>
-                                  )}
-                                  <span className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest flex items-center gap-1">
-                                    <Clock size={10} />
-                                    {new Date(req.createdAt).toLocaleString("id-ID", {
-                                      day: "2-digit",
-                                      month: "2-digit",
-                                      year: "numeric",
-                                      hour: "2-digit",
-                                      minute: "2-digit"
-                                    }).replace(/\./g, ":")}
-                                  </span>
-                                </div>
-                                <h4 className="font-black text-[var(--ab-text-main)] text-base tracking-tight">{req.userName}</h4>
-                              </div>
-                              <div className="text-right shrink-0">
-                                <p className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest leading-none">Durasi</p>
-                                <p className="text-sm font-black mt-0.5" style={{ color: "var(--ab-primary)" }}>
-                                  {req.dates.length} Hari
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Dates & Reason */}
-                            <div className="space-y-2.5">
-                              <div className="flex items-start gap-2 text-[10px] font-bold text-[var(--ab-text-dim)] bg-[var(--ab-bg-main)] p-3 rounded-2xl border border-[var(--ab-border)]">
-                                <CalendarDays size={12} className="mt-0.5 shrink-0" style={{ color: "var(--ab-primary)" }} />
-                                <span className="leading-relaxed">{req.dates.join(", ")}</span>
-                              </div>
-                              <div className="flex items-start gap-2 text-[10px] font-medium text-[var(--ab-text-dim)] italic px-2">
-                                <FileEdit size={12} className="mt-1 text-[var(--ab-text-dim)] shrink-0 opacity-40" />
-                                <span className="line-clamp-2">&ldquo;{req.reason}&rdquo;</span>
-                              </div>
-                            </div>
-
-                            {/* 2-Layer Funnel Status Tracker */}
-                            <div className="p-3.5 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] space-y-2">
-                              <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-[var(--ab-text-dim)] pb-1 border-b border-[var(--ab-border)]">
-                                <span>Status Funnel (2-Layer)</span>
-                                <span className={isLayer1 ? "text-amber-500 font-bold" : "text-blue-500 font-bold"}>
-                                  {isLayer1 ? "Menunggu Executive" : "Menunggu HR (Final)"}
-                                </span>
-                              </div>
-
-                              <div className="space-y-1.5 text-[10px]">
-                                {/* Layer 1 - Executive */}
-                                <div className="flex items-start justify-between gap-2">
-                                  <span className="font-bold text-[var(--ab-text-dim)] flex items-center gap-1.5 shrink-0">
-                                    <span className={`w-2 h-2 rounded-full ${req.executiveStatus === 'approved' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
-                                    1. Executive:
-                                  </span>
-                                  <div className="text-right">
-                                    {req.executiveStatus === 'approved' ? (
-                                      <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                        Disetujui ({req.executiveApprovedByName || "Executive"}{req.executiveApprovedAt ? ` • ${formatDateDisplay(req.executiveApprovedAt)}` : ""})
+                                    {isLayer1 ? (
+                                      <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40 flex items-center gap-1">
+                                        <Shield size={10} className="text-amber-500" /> Tahap 1: Executive
                                       </span>
                                     ) : (
-                                      <span className="font-bold text-amber-600 dark:text-amber-400">
-                                        Menunggu Persetujuan
+                                      <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/40 flex items-center gap-1">
+                                        <Sparkles size={10} className="text-blue-500" /> Tahap 2: HR Final
                                       </span>
                                     )}
+                                    <span className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest flex items-center gap-1">
+                                      <Clock size={10} />
+                                      {formatDateDisplay(req.createdAt)}
+                                    </span>
                                   </div>
+                                  <h4 className="font-black text-[var(--ab-text-main)] text-base tracking-tight">{req.userName}</h4>
                                 </div>
-                                {req.executiveNotes && (
-                                  <div className="text-[9px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 p-2 rounded-xl italic">
-                                    <span className="font-black not-italic block uppercase text-[8px] tracking-wider mb-0.5">Catatan Executive:</span>
-                                    &ldquo;{req.executiveNotes}&rdquo;
-                                  </div>
-                                )}
-
-                                {/* Layer 2 - HR */}
-                                <div className="flex items-start justify-between gap-2 pt-1 border-t border-[var(--ab-border)]">
-                                  <span className="font-bold text-[var(--ab-text-dim)] flex items-center gap-1.5 shrink-0">
-                                    <span className={`w-2 h-2 rounded-full ${req.hrStatus === 'approved' ? 'bg-emerald-500' : isLayer2 ? 'bg-blue-500 animate-pulse' : 'bg-slate-400'}`} />
-                                    2. HR (Final):
-                                  </span>
-                                  <div className="text-right">
-                                    {req.hrStatus === 'approved' ? (
-                                      <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                        Disetujui ({req.hrApprovedByName || "HR"}{req.hrApprovedAt ? ` • ${formatDateDisplay(req.hrApprovedAt)}` : ""})
-                                      </span>
-                                    ) : isLayer2 ? (
-                                      <span className="font-bold text-blue-600 dark:text-blue-400">
-                                        Menunggu Persetujuan Final
-                                      </span>
-                                    ) : (
-                                      <span className="text-[var(--ab-text-dim)] opacity-60">
-                                        Menunggu Tahap 1 Selesai
-                                      </span>
-                                    )}
-                                  </div>
+                                <div className="text-right shrink-0">
+                                  <p className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest leading-none">Durasi</p>
+                                  <p className="text-sm font-black mt-0.5" style={{ color: "var(--ab-primary)" }}>
+                                    {req.dates.length} Hari
+                                  </p>
                                 </div>
                               </div>
-                            </div>
-                          </div>
 
-                          {/* Action Buttons based on Role & Layer */}
-                          <div className="pt-2 border-t border-[var(--ab-border)]">
-                            {isLayer1 ? (
-                              // TAHAP 1: Menunggu Executive
-                              isExecutive ? (
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => {
-                                      setLeaveApproveModal({ req, layer: "executive" });
-                                      setLeaveApproveNotes("");
-                                    }}
-                                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2"
-                                  >
-                                    <Check size={14} /> Setujui (Executive)
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setLeaveRejectModal({ req, layer: "executive" });
-                                      setLeaveRejectReason("");
-                                    }}
-                                    className="flex-1 bg-[var(--ab-bg-main)] text-red-500 border border-[var(--ab-border)] hover:bg-red-500 hover:text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition flex items-center justify-center gap-2"
-                                  >
-                                    <X size={14} /> Tolak
-                                  </button>
+                              {/* Dates & Reason */}
+                              <div className="space-y-2.5">
+                                <div className="flex items-start gap-2 text-[10px] font-bold text-[var(--ab-text-dim)] bg-[var(--ab-bg-main)] p-3 rounded-2xl border border-[var(--ab-border)]">
+                                  <CalendarDays size={12} className="mt-0.5 shrink-0" style={{ color: "var(--ab-primary)" }} />
+                                  <span className="leading-relaxed">{req.dates.join(", ")}</span>
                                 </div>
-                              ) : isHR ? (
-                                <div className="w-full bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 p-3 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-                                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
-                                    <Shield size={14} className="text-amber-600 shrink-0" />
-                                    <span>Menunggu persetujuan role Executive sebelum HR dapat menyetujui.</span>
+                                <div className="flex items-start gap-2 text-[10px] font-medium text-[var(--ab-text-dim)] italic px-2">
+                                  <FileEdit size={12} className="mt-1 text-[var(--ab-text-dim)] shrink-0 opacity-40" />
+                                  <span className="line-clamp-2">&ldquo;{req.reason}&rdquo;</span>
+                                </div>
+                              </div>
+
+                              {/* INSIGHT CUTI DIVISI & ANTREAN PRIORITAS */}
+                              {conflicts.length > 0 ? (
+                                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 dark:bg-amber-950/25 dark:border-amber-700/40 space-y-2.5">
+                                  <div className="flex items-center justify-between gap-2 border-b border-amber-500/20 pb-2">
+                                    <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300">
+                                      <AlertTriangle size={14} className="text-amber-500 shrink-0" />
+                                      <span className="font-black text-[10px] uppercase tracking-wider">
+                                        Insight Cuti Divisi ({conflicts.length} Rekan Serentak)
+                                      </span>
+                                    </div>
+                                    <span className="text-[8.5px] font-black px-2 py-0.5 rounded-full bg-amber-500 text-white uppercase tracking-wider">
+                                      Bentrok Tanggal
+                                    </span>
                                   </div>
-                                  <button
-                                    onClick={() => {
-                                      setLeaveRejectModal({ req, layer: "executive" });
-                                      setLeaveRejectReason("");
-                                    }}
-                                    className="bg-[var(--ab-bg-main)] text-red-500 border border-[var(--ab-border)] hover:bg-red-500 hover:text-white px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest transition shrink-0"
-                                  >
-                                    Tolak
-                                  </button>
+
+                                  <p className="text-[10px] text-amber-900/90 dark:text-amber-200/90 font-medium">
+                                    Ada <span className="font-black">{conflicts.length} rekan</span> di divisi <span className="font-black underline">{req.departmentName}</span> yang juga mengajukan/cuti di tanggal yang sama:
+                                  </p>
+
+                                  <div className="space-y-2">
+                                    {conflicts.map((c, idx) => {
+                                      const isApprovedFinal = c.status === "approved";
+                                      const isApprovedExec = c.status === "approved_executive";
+
+                                      return (
+                                        <div
+                                          key={c.id}
+                                          className="p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/70 border border-amber-500/20 space-y-1.5 text-[10px]"
+                                        >
+                                          <div className="flex flex-wrap items-center justify-between gap-1">
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center font-black text-[9px]">
+                                                #{idx + 1}
+                                              </span>
+                                              <span className="font-black text-[var(--ab-text-main)] text-xs">
+                                                {c.userName}
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              {isApprovedFinal ? (
+                                                <span className="px-2 py-0.5 rounded-md text-[8.5px] font-black uppercase tracking-wider bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                                                  <CheckCircle2 size={10} /> Sudah Disetujui (Final)
+                                                </span>
+                                              ) : isApprovedExec ? (
+                                                <span className="px-2 py-0.5 rounded-md text-[8.5px] font-black uppercase tracking-wider bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 flex items-center gap-1">
+                                                  <Sparkles size={10} /> Lolos Exec (Menunggu HR)
+                                                </span>
+                                              ) : (
+                                                <span className="px-2 py-0.5 rounded-md text-[8.5px] font-black uppercase tracking-wider bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                                                  <Clock size={10} /> Menunggu Exec
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[9.5px] pt-1 border-t border-amber-500/10">
+                                            <div className="text-[var(--ab-text-dim)] font-bold">
+                                              <span className="opacity-70">Tgl Bentrok:</span>{" "}
+                                              <span className="text-amber-600 dark:text-amber-400 font-black">
+                                                {c.overlappingDates.join(", ")}
+                                              </span>
+                                            </div>
+                                            <div className="text-left sm:text-right text-[var(--ab-text-dim)]">
+                                              <span className={`font-black ${c.isEarlier ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                                                {c.isEarlier ? "🏆 Diajukan Lebih Awal" : "⏳ Diajukan Setelah Ini"}
+                                              </span>{" "}
+                                              <span className="text-[8.5px] opacity-75">
+                                                ({formatTimeAgoOrDiff(c.diffMinutes, c.isEarlier)})
+                                              </span>
+                                            </div>
+                                          </div>
+
+                                          <div className="text-[8.5px] text-[var(--ab-text-dim)] flex items-center gap-1 opacity-80">
+                                            <Clock size={9} />
+                                            <span>Waktu Diajukan: {formatDateDisplay(c.createdAt)}</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+
+                                  <div className="text-[9px] font-bold text-amber-700 dark:text-amber-300/95 bg-amber-500/15 p-2 rounded-xl border border-amber-500/20">
+                                    💡 <span className="font-black uppercase tracking-wider">Saran Persetujuan:</span> Pertimbangkan kuota operasional staf pada tanggal tersebut. Dahulukan pengajuan yang masuk lebih awal jika personil terbatas.
+                                  </div>
                                 </div>
                               ) : (
-                                <div className="text-center text-[10px] font-bold text-[var(--ab-text-dim)] py-2">
-                                  Menunggu Persetujuan Executive
+                                <div className="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 dark:bg-emerald-950/20 flex items-center gap-2 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
+                                  <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
+                                  <span>Tidak ada bentrok cuti dengan rekan lain di divisi {req.departmentName || "Umum"} pada tanggal ini (Aman).</span>
                                 </div>
-                              )
-                            ) : (
-                              // TAHAP 2: Menunggu HR Final
-                              (isHR || isExecutive) ? (
-                                <div className="space-y-2">
+                              )}
+
+                              {/* 2-Layer Funnel Status Tracker */}
+                              <div className="p-3.5 bg-[var(--ab-bg-main)] rounded-2xl border border-[var(--ab-border)] space-y-2">
+                                <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-[var(--ab-text-dim)] pb-1 border-b border-[var(--ab-border)]">
+                                  <span>Status Funnel (2-Layer)</span>
+                                  <span className={isLayer1 ? "text-amber-500 font-bold" : "text-blue-500 font-bold"}>
+                                    {isLayer1 ? "Menunggu Executive" : "Menunggu HR (Final)"}
+                                  </span>
+                                </div>
+
+                                <div className="space-y-1.5 text-[10px]">
+                                  {/* Layer 1 - Executive */}
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className="font-bold text-[var(--ab-text-dim)] flex items-center gap-1.5 shrink-0">
+                                      <span className={`w-2 h-2 rounded-full ${req.executiveStatus === 'approved' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                                      1. Executive:
+                                    </span>
+                                    <div className="text-right">
+                                      {req.executiveStatus === 'approved' ? (
+                                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                          Disetujui ({req.executiveApprovedByName || "Executive"}{req.executiveApprovedAt ? ` • ${formatDateDisplay(req.executiveApprovedAt)}` : ""})
+                                        </span>
+                                      ) : (
+                                        <span className="font-bold text-amber-600 dark:text-amber-400">
+                                          Menunggu Persetujuan
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {req.executiveNotes && (
+                                    <div className="text-[9px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 p-2 rounded-xl italic">
+                                      <span className="font-black not-italic block uppercase text-[8px] tracking-wider mb-0.5">Catatan Executive:</span>
+                                      &ldquo;{req.executiveNotes}&rdquo;
+                                    </div>
+                                  )}
+
+                                  {/* Layer 2 - HR */}
+                                  <div className="flex items-start justify-between gap-2 pt-1 border-t border-[var(--ab-border)]">
+                                    <span className="font-bold text-[var(--ab-text-dim)] flex items-center gap-1.5 shrink-0">
+                                      <span className={`w-2 h-2 rounded-full ${req.hrStatus === 'approved' ? 'bg-emerald-500' : isLayer2 ? 'bg-blue-500 animate-pulse' : 'bg-slate-400'}`} />
+                                      2. HR (Final):
+                                    </span>
+                                    <div className="text-right">
+                                      {req.hrStatus === 'approved' ? (
+                                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                          Disetujui ({req.hrApprovedByName || "HR"}{req.hrApprovedAt ? ` • ${formatDateDisplay(req.hrApprovedAt)}` : ""})
+                                        </span>
+                                      ) : isLayer2 ? (
+                                        <span className="font-bold text-blue-600 dark:text-blue-400">
+                                          Menunggu Persetujuan Final
+                                        </span>
+                                      ) : (
+                                        <span className="text-[var(--ab-text-dim)] opacity-60">
+                                          Menunggu Tahap 1 Selesai
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Action Buttons based on Role & Layer */}
+                            <div className="pt-2 border-t border-[var(--ab-border)]">
+                              {isLayer1 ? (
+                                // TAHAP 1: Menunggu Executive
+                                isExecutive ? (
                                   <div className="flex gap-2">
                                     <button
                                       onClick={() => {
-                                        setLeaveApproveModal({ req, layer: "hr" });
+                                        setLeaveApproveModal({ req, layer: "executive" });
                                         setLeaveApproveNotes("");
                                       }}
-                                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+                                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2"
                                     >
-                                      <CheckCircle2 size={14} /> Setujui Final (HR)
+                                      <Check size={14} /> Setujui (Executive)
                                     </button>
                                     <button
                                       onClick={() => {
-                                        setLeaveRejectModal({ req, layer: "hr" });
+                                        setLeaveRejectModal({ req, layer: "executive" });
                                         setLeaveRejectReason("");
                                       }}
                                       className="flex-1 bg-[var(--ab-bg-main)] text-red-500 border border-[var(--ab-border)] hover:bg-red-500 hover:text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition flex items-center justify-center gap-2"
@@ -884,36 +996,88 @@ export default function AdminApprovalsPage() {
                                       <X size={14} /> Tolak
                                     </button>
                                   </div>
-                                  {isExecutive && !isHR && (
-                                    <p className="text-[9px] text-center text-amber-600 dark:text-amber-400 font-bold">
-                                      *Sebagai Executive, Anda memiliki wewenang untuk menyetujui tahap HR secara langsung.
-                                    </p>
-                                  )}
-                                </div>
+                                ) : isHR ? (
+                                  <div className="w-full bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 p-3 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+                                    <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
+                                      <Shield size={14} className="text-amber-600 shrink-0" />
+                                      <span>Menunggu persetujuan role Executive sebelum HR dapat menyetujui.</span>
+                                    </div>
+                                    <button
+                                      onClick={() => {
+                                        setLeaveRejectModal({ req, layer: "executive" });
+                                        setLeaveRejectReason("");
+                                      }}
+                                      className="bg-[var(--ab-bg-main)] text-red-500 border border-[var(--ab-border)] hover:bg-red-500 hover:text-white px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest transition shrink-0"
+                                    >
+                                      Tolak
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="text-center text-[10px] font-bold text-[var(--ab-text-dim)] py-2">
+                                    Menunggu Persetujuan Executive
+                                  </div>
+                                )
                               ) : (
-                                <div className="text-center text-[10px] font-bold text-[var(--ab-text-dim)] py-2">
-                                  Menunggu Persetujuan Final HR
-                                </div>
-                              )
-                            )}
+                                // TAHAP 2: Menunggu HR Final
+                                (isHR || isExecutive) ? (
+                                  <div className="space-y-2">
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => {
+                                          setLeaveApproveModal({ req, layer: "hr" });
+                                          setLeaveApproveNotes("");
+                                        }}
+                                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+                                      >
+                                        <CheckCircle2 size={14} /> Setujui Final (HR)
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setLeaveRejectModal({ req, layer: "hr" });
+                                          setLeaveRejectReason("");
+                                        }}
+                                        className="flex-1 bg-[var(--ab-bg-main)] text-red-500 border border-[var(--ab-border)] hover:bg-red-500 hover:text-white py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition flex items-center justify-center gap-2"
+                                      >
+                                        <X size={14} /> Tolak
+                                      </button>
+                                    </div>
+                                    {isExecutive && !isHR && (
+                                      <p className="text-[9px] text-center text-amber-600 dark:text-amber-400 font-bold">
+                                        *Sebagai Executive, Anda memiliki wewenang untuk menyetujui tahap HR secara langsung.
+                                      </p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="text-center text-[10px] font-bold text-[var(--ab-text-dim)] py-2">
+                                    Menunggu Persetujuan Final HR
+                                  </div>
+                                )
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))
-            )}
-          </div>
+                ))
+              )}
+            </div>
+          )}
 
-          {/* Cancellation Requests */}
-          {cancelReqs.length > 0 && (
-            <div className="space-y-4 mt-8">
-              <div className="flex items-center gap-3">
-                <h2 className="text-xl font-black text-[var(--ab-text-main)] uppercase tracking-tight">Permohonan Batal Cuti</h2>
-              </div>
-              <div className="space-y-8">
-                {Object.entries(groupedCancel).map(([deptName, reqs]) => (
+          {/* SUB-TAB 2: CANCELLATION REQUESTS */}
+          {leaveSubTab === "cancellation" && (
+            <div className="space-y-8 pb-4">
+              {cancelReqs.length === 0 ? (
+                <div className="p-20 text-center ab-animate-scaleIn bg-[var(--ab-bg-surface)] rounded-3xl border border-[var(--ab-border)]">
+                  <div className="w-16 h-16 bg-[var(--ab-bg-main)] rounded-[20px] flex items-center justify-center mx-auto mb-4 text-[var(--ab-text-dim)]">
+                    <Smile size={32} />
+                  </div>
+                  <h4 className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest italic">
+                    Tidak ada permohonan pembatalan cuti.
+                  </h4>
+                </div>
+              ) : (
+                Object.entries(groupedCancel).map(([deptName, reqs]) => (
                   <div key={deptName} className="space-y-4">
                     <div className="flex items-center gap-2">
                       <div className="bg-red-500 w-2 h-6 rounded-full"></div>
@@ -937,13 +1101,7 @@ export default function AdminApprovalsPage() {
                                   </span>
                                   <span className="text-[8px] font-black text-red-400 uppercase tracking-widest flex items-center gap-1">
                                     <Clock size={10} />
-                                    {new Date(req.createdAt).toLocaleString("id-ID", {
-                                      day: "2-digit",
-                                      month: "2-digit",
-                                      year: "numeric",
-                                      hour: "2-digit",
-                                      minute: "2-digit"
-                                    }).replace(/\./g, ":")}
+                                    {formatDateDisplay(req.createdAt)}
                                   </span>
                                 </div>
                                 <h4 className="font-black text-red-900 dark:text-red-100 text-base tracking-tight">{req.userName}</h4>
@@ -978,18 +1136,80 @@ export default function AdminApprovalsPage() {
                       ))}
                     </div>
                   </div>
-                ))}
-              </div>
+                ))
+              )}
             </div>
           )}
-          {/* History Requests */}
-          {historyReqs.length > 0 && (
-            <div className="space-y-4 mt-8">
-              <div className="flex items-center gap-3">
-                <h2 className="text-xl font-black text-[var(--ab-text-main)] uppercase tracking-tight">Riwayat Pengajuan Cuti (Disetujui/Ditolak)</h2>
+
+          {/* SUB-TAB 3: HISTORY REQUESTS */}
+          {leaveSubTab === "history" && (
+            <div className="space-y-6 pb-4">
+              {/* Search & Filter Toolbar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[var(--ab-bg-surface)] p-3.5 rounded-2xl border border-[var(--ab-border)]">
+                <div className="relative flex-1">
+                  <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--ab-text-dim)]" />
+                  <input
+                    type="text"
+                    placeholder="Cari nama karyawan, divisi, atau alasan..."
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    className="ab-input text-xs pl-9 pr-8 py-2 w-full rounded-xl"
+                  />
+                  {historySearch && (
+                    <button
+                      onClick={() => setHistorySearch("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1 bg-[var(--ab-bg-main)] p-1 rounded-xl border border-[var(--ab-border)] self-start sm:self-auto">
+                  <button
+                    onClick={() => setHistoryFilter("all")}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                      historyFilter === "all"
+                        ? "bg-[var(--ab-primary)] text-white shadow-sm"
+                        : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
+                    }`}
+                  >
+                    Semua ({historyReqs.length})
+                  </button>
+                  <button
+                    onClick={() => setHistoryFilter("approved")}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                      historyFilter === "approved"
+                        ? "bg-emerald-600 text-white shadow-sm"
+                        : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
+                    }`}
+                  >
+                    Disetujui ({historyReqs.filter((r) => r.status === "approved").length})
+                  </button>
+                  <button
+                    onClick={() => setHistoryFilter("rejected")}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                      historyFilter === "rejected"
+                        ? "bg-red-600 text-white shadow-sm"
+                        : "text-[var(--ab-text-dim)] hover:text-[var(--ab-text-main)]"
+                    }`}
+                  >
+                    Ditolak ({historyReqs.filter((r) => r.status === "rejected").length})
+                  </button>
+                </div>
               </div>
-              <div className="space-y-8">
-                {Object.entries(groupedHistory).map(([deptName, reqs]) => (
+
+              {filteredHistoryReqs.length === 0 ? (
+                <div className="p-20 text-center ab-animate-scaleIn bg-[var(--ab-bg-surface)] rounded-3xl border border-[var(--ab-border)]">
+                  <div className="w-16 h-16 bg-[var(--ab-bg-main)] rounded-[20px] flex items-center justify-center mx-auto mb-4 text-[var(--ab-text-dim)]">
+                    <Smile size={32} />
+                  </div>
+                  <h4 className="text-[10px] font-black uppercase text-[var(--ab-text-dim)] tracking-widest italic">
+                    Tidak ada riwayat pengajuan cuti yang sesuai filter.
+                  </h4>
+                </div>
+              ) : (
+                Object.entries(groupedHistory).map(([deptName, reqs]) => (
                   <div key={deptName} className="space-y-4">
                     <div className="flex items-center gap-2">
                       <div className="bg-[var(--ab-text-dim)] w-2 h-6 rounded-full"></div>
@@ -1015,18 +1235,18 @@ export default function AdminApprovalsPage() {
                                     <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${typeStyle(req.type)}`}>
                                       {typeLabel(req.type)}
                                     </span>
-                                    <span className={`px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest ${isApproved ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                                      {isApproved ? 'Disetujui' : 'Ditolak'}
+                                    <span
+                                      className={`px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest ${
+                                        isApproved
+                                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                          : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                      }`}
+                                    >
+                                      {isApproved ? "Disetujui" : "Ditolak"}
                                     </span>
                                     <span className="text-[8px] font-black text-[var(--ab-text-dim)] uppercase tracking-widest flex items-center gap-1">
                                       <Clock size={10} />
-                                      {new Date(req.createdAt).toLocaleString("id-ID", {
-                                        day: "2-digit",
-                                        month: "2-digit",
-                                        year: "numeric",
-                                        hour: "2-digit",
-                                        minute: "2-digit"
-                                      }).replace(/\./g, ":")}
+                                      {formatDateDisplay(req.createdAt)}
                                     </span>
                                   </div>
                                   <h4 className="font-black text-[var(--ab-text-main)] text-base tracking-tight">{req.userName}</h4>
@@ -1062,11 +1282,12 @@ export default function AdminApprovalsPage() {
                                   <div className="flex items-center justify-between gap-2">
                                     <span className="font-bold text-[var(--ab-text-dim)]">1. Executive:</span>
                                     <span className="font-bold text-right">
-                                      {req.executiveStatus === 'approved' ? (
+                                      {req.executiveStatus === "approved" ? (
                                         <span className="text-emerald-600 dark:text-emerald-400">
-                                          Disetujui ({req.executiveApprovedByName || "Executive"}{req.executiveApprovedAt ? ` • ${formatDateDisplay(req.executiveApprovedAt)}` : ""})
+                                          Disetujui ({req.executiveApprovedByName || "Executive"}
+                                          {req.executiveApprovedAt ? ` • ${formatDateDisplay(req.executiveApprovedAt)}` : ""})
                                         </span>
-                                      ) : req.rejectionStage === 'executive' ? (
+                                      ) : req.rejectionStage === "executive" ? (
                                         <span className="text-red-500">Ditolak ({req.rejectedBy || "Executive"})</span>
                                       ) : (
                                         <span className="text-slate-400">-</span>
@@ -1086,11 +1307,12 @@ export default function AdminApprovalsPage() {
                                   <div className="flex items-center justify-between gap-2">
                                     <span className="font-bold text-[var(--ab-text-dim)]">2. HR (Final):</span>
                                     <span className="font-bold text-right">
-                                      {req.hrStatus === 'approved' || req.status === 'approved' ? (
+                                      {req.hrStatus === "approved" || req.status === "approved" ? (
                                         <span className="text-emerald-600 dark:text-emerald-400">
-                                          Disetujui Final ({req.hrApprovedByName || "HR"}{req.hrApprovedAt ? ` • ${formatDateDisplay(req.hrApprovedAt)}` : ""})
+                                          Disetujui Final ({req.hrApprovedByName || "HR"}
+                                          {req.hrApprovedAt ? ` • ${formatDateDisplay(req.hrApprovedAt)}` : ""})
                                         </span>
-                                      ) : req.rejectionStage === 'hr' ? (
+                                      ) : req.rejectionStage === "hr" ? (
                                         <span className="text-red-500">Ditolak ({req.rejectedBy || "HR"})</span>
                                       ) : (
                                         <span className="text-slate-400">-</span>
@@ -1109,9 +1331,10 @@ export default function AdminApprovalsPage() {
                                 {isRejected && (
                                   <div className="p-2.5 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/40 rounded-xl text-red-600 dark:text-red-400">
                                     <span className="font-black uppercase text-[8px] tracking-wider block mb-0.5">
-                                      Alasan Penolakan (Tahap {req.rejectionStage === 'executive' ? 'Executive' : 'HR'} oleh {req.rejectedBy || 'Admin'}{req.rejectedAt ? ` • ${formatDateDisplay(req.rejectedAt)}` : ''}):
+                                      Alasan Penolakan (Tahap {req.rejectionStage === "executive" ? "Executive" : "HR"} oleh {req.rejectedBy || "Admin"}
+                                      {req.rejectedAt ? ` • ${formatDateDisplay(req.rejectedAt)}` : ""}):
                                     </span>
-                                    <p className="italic">&ldquo;{req.rejectionReason || '-'}&rdquo;</p>
+                                    <p className="italic">&ldquo;{req.rejectionReason || "-"}&rdquo;</p>
                                   </div>
                                 )}
                               </div>
@@ -1121,8 +1344,8 @@ export default function AdminApprovalsPage() {
                       })}
                     </div>
                   </div>
-                ))}
-              </div>
+                ))
+              )}
             </div>
           )}
         </div>
