@@ -17,6 +17,14 @@ ALTER TABLE public.leave_requests
   ADD COLUMN IF NOT EXISTS rejected_by TEXT,
   ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMPTZ;
 
+-- Update status check constraint to allow 'approved_executive'
+ALTER TABLE public.leave_requests
+  DROP CONSTRAINT IF EXISTS leave_requests_status_check;
+
+ALTER TABLE public.leave_requests
+  ADD CONSTRAINT leave_requests_status_check
+  CHECK (status IN ('pending', 'approved_executive', 'approved', 'rejected', 'cancelled'));
+
 -- Backfill legacy records
 UPDATE public.leave_requests
 SET 
