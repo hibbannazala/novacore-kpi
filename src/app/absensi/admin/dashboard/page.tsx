@@ -142,12 +142,24 @@ export default function AdminDashboardPage() {
   const [overrideAtt,   setOverrideAtt]   = useState<{ userId: string; date: string; type: "WFO" | "WFA"; checkIn: string; checkOut: string }>({ userId: "", date: today, type: "WFO", checkIn: "08:00", checkOut: "17:00" });
   const [overrideLeave, setOverrideLeave] = useState({ userId: "", type: "leave" as "leave" | "sick" | "wfa", startDate: today, endDate: today, reason: "" });
 
+interface OfficeDistanceDetail {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  radius: number;
+  distance: number;
+  isAssigned: boolean;
+  isInside: boolean;
+}
+
   // Detail modal
   const [selectedRow, setSelectedRow]   = useState<DisplayRow | null>(null);
   const [editingLog,  setEditingLog]    = useState<EditingLog | null>(null);
   const [selectedDist, setSelectedDist] = useState<number | null>(null);
   const [selectedOfficeName, setSelectedOfficeName] = useState<string | null>(null);
   const [selectedOfficeRadius, setSelectedOfficeRadius] = useState<number>(100);
+  const [selectedOfficeDistances, setSelectedOfficeDistances] = useState<OfficeDistanceDetail[]>([]);
   const [officeLocations, setOfficeLocations] = useState<{ id: string; name: string; lat: number; lng: number; radius: number }[]>([]);
   const [deptOfficeMap, setDeptOfficeMap] = useState<Map<string, { id: string; name: string; lat: number; lng: number; radius: number }[]>>(new Map());
 
@@ -499,17 +511,30 @@ export default function AdminDashboardPage() {
     const tid = toast.loading("Menyiapkan laporan Excel profesional...");
     try {
       const supabase = createClient();
-      const [attRes, reqsRes] = await Promise.all([
+      const [attRes, reqsRes, offRes, dlRes] = await Promise.all([
         supabase
           .from("attendance")
           .select("user_id, date, type, status, check_in, check_out, late_fine, radius_penalty, location_status, location_in, late_reason, late_reason_status, notes")
           .gte("date", exportStart)
           .lte("date", exportEnd),
         supabase.from("leave_requests").select("user_id, type, dates, reason").eq("status", "approved"),
+        supabase.from("office_locations").select("id, name, lat, lng, radius"),
+        supabase.from("department_locations" as any).select("department_id, office_locations(id, name, lat, lng, radius)"),
       ]);
 
       const attLogs = attRes.data ?? [];
       const reqs    = reqsRes.data ?? [];
+      const expOffices = (offRes.data as any[]) ?? [];
+      const expDeptMap = new Map<string, { id: string; name: string; lat: number; lng: number; radius: number }[]>();
+      if (dlRes.data) {
+        (dlRes.data as any[]).forEach((dl) => {
+          if (dl.department_id && dl.office_locations) {
+            const list = expDeptMap.get(dl.department_id) ?? [];
+            list.push(dl.office_locations);
+            expDeptMap.set(dl.department_id, list);
+          }
+        });
+      }
       const dateRange = buildDateRange(exportStart, exportEnd);
       const todayStr  = today;
       const holSet    = new Set(holidays.map((h) => h.date));
@@ -803,7 +828,7 @@ export default function AdminDashboardPage() {
         { key: "checkIn",    width: 10 },
         { key: "checkOut",   width: 10 },
         { key: "status",     width: 18 },
-        { key: "location",   width: 28 },
+        { key: "location",   width: 45 },
         { key: "lateFine",   width: 12 },
         { key: "lateStatus", width: 16 },
         { key: "reason",     width: 32 },
@@ -811,7 +836,7 @@ export default function AdminDashboardPage() {
 
       const detailHeaders = [
         "No", "Tanggal", "Nama Staf", "Departemen", "Tipe",
-        "Masuk", "Pulang", "Status Kehadiran", "Lokasi Presensi",
+        "Masuk", "Pulang", "Status Kehadiran", "Lokasi Presensi & Jarak Kantor",
         "Menit Telat", "Status Alasan", "Keterangan / Alasan"
       ];
       const dHeaderRow = detailWs.getRow(5);
@@ -842,11 +867,45 @@ export default function AdminDashboardPage() {
             const locIn = log.location_in as any;
             if (isWfa) {
               locText = log.location_status ? `${log.location_status} (WFA)` : "WFA Disetujui";
+            } else if (locIn && typeof locIn === "object" && typeof locIn.lat === "number" && typeof locIn.lng === "number") {
+              const uDeptOffices = (u.deptId && expDeptMap.get(u.deptId)) || [];
+              const assignedIds = new Set(uDeptOffices.map((o: any) => o.id));
+              const allOffs = expOffices.length > 0 ? expOffices : (settings?.officeLat ? [{ id: "def", name: "Kantor Utama", lat: settings.officeLat, lng: settings.officeLng, radius: settings.officeRadius || 100 }] : []);
+
+              if (allOffs.length > 0) {
+                const offDistList = allOffs.map((ol: any) => {
+                  const distVal = calcDist(locIn.lat, locIn.lng, ol.lat, ol.lng);
+                  const isAssigned = assignedIds.has(ol.id);
+                  return {
+                    name: ol.name,
+                    dist: Math.round(distVal),
+                    radius: ol.radius,
+                    isAssigned,
+                    isInside: distVal <= ol.radius,
+                  };
+                }).sort((a, b) => {
+                  if (a.isAssigned && !b.isAssigned) return -1;
+                  if (!a.isAssigned && b.isAssigned) return 1;
+                  return a.dist - b.dist;
+                });
+
+                const formattedOffices = offDistList.map((o) => {
+                  const tag = o.isAssigned ? " [Divisi]" : "";
+                  const insideTag = o.isInside ? " [Dalam Radius]" : "";
+                  return `${o.name}${tag}: ${o.dist}m${insideTag}`;
+                }).join(" | ");
+
+                const baseStatus = log.location_status ?? (offDistList.some(o => o.isInside) ? "Dalam Area" : "Di Luar Area");
+                locText = `${baseStatus} (${formattedOffices})`;
+              } else if (typeof locIn.distance === "number") {
+                const office = locIn.officeName ?? "Kantor";
+                locText = `${log.location_status ?? "Terekam"} (${office}: ${locIn.distance}m)`;
+              }
             } else if (locIn && typeof locIn === "object") {
               const office = locIn.officeName;
               const dist = locIn.distance;
               if (office && typeof dist === "number") {
-                locText = `${log.location_status ?? "Terekam"} (${office} - ${dist}m)`;
+                locText = `${log.location_status ?? "Terekam"} (${office}: ${dist}m)`;
               } else if (typeof dist === "number") {
                 locText = `${log.location_status ?? "Terekam"} (${dist}m)`;
               }
@@ -1236,42 +1295,63 @@ export default function AdminDashboardPage() {
                           let targetOfficeName: string | null = (row.log.locationIn as any)?.officeName ?? null;
                           let targetRadius = 100;
 
-                          // Check if saved distance is valid
-                          const savedDist = (row.log.locationIn as any)?.distance;
-                          if (typeof savedDist === "number" && !isNaN(savedDist) && isFinite(savedDist)) {
-                            dist = savedDist;
-                          }
-
                           if (row.log.locationIn && typeof row.log.locationIn.lat === "number" && typeof row.log.locationIn.lng === "number") {
-                            // Find assigned offices for this user's department
+                            const lat = row.log.locationIn.lat;
+                            const lng = row.log.locationIn.lng;
                             const deptOffices = (row.deptId && deptOfficeMap.get(row.deptId)) || [];
-                            const officesToCheck = deptOffices.length > 0 ? deptOffices : officeLocations;
+                            const assignedIds = new Set(deptOffices.map((o) => o.id));
 
-                            if (officesToCheck.length > 0) {
-                              let minDist = Infinity;
-                              let bestOffice: any = null;
-                              for (const ol of officesToCheck) {
-                                const d = calcDist(row.log.locationIn.lat, row.log.locationIn.lng, ol.lat, ol.lng);
-                                if (d < minDist) {
-                                  minDist = d;
-                                  bestOffice = ol;
-                                }
-                              }
-                              if (bestOffice) {
-                                if (dist === null) dist = minDist;
-                                targetOfficeName = bestOffice.name;
-                                targetRadius = bestOffice.radius;
-                              }
-                            } else if (settings?.officeLat && settings?.officeLng) {
-                              if (dist === null) dist = calcDist(row.log.locationIn.lat, row.log.locationIn.lng, settings.officeLat, settings.officeLng);
-                              targetOfficeName = "Kantor Utama";
-                              targetRadius = settings.officeRadius ?? 100;
+                            let allOffs = officeLocations;
+                            if (allOffs.length === 0 && settings?.officeLat && settings?.officeLng) {
+                              allOffs = [{
+                                id: "default-office",
+                                name: "Kantor Utama",
+                                lat: settings.officeLat,
+                                lng: settings.officeLng,
+                                radius: settings.officeRadius || 100,
+                              }];
+                            }
+
+                            const distList: OfficeDistanceDetail[] = allOffs.map((ol) => {
+                              const d = calcDist(lat, lng, ol.lat, ol.lng);
+                              const isAssigned = assignedIds.has(ol.id);
+                              return {
+                                id: ol.id,
+                                name: ol.name,
+                                lat: ol.lat,
+                                lng: ol.lng,
+                                radius: ol.radius,
+                                distance: Math.round(d),
+                                isAssigned,
+                                isInside: d <= ol.radius,
+                              };
+                            }).sort((a, b) => {
+                              if (a.isAssigned && !b.isAssigned) return -1;
+                              if (!a.isAssigned && b.isAssigned) return 1;
+                              return a.distance - b.distance;
+                            });
+
+                            setSelectedOfficeDistances(distList);
+
+                            const primary = distList.find((d) => d.isAssigned) || distList[0];
+                            if (primary) {
+                              dist = primary.distance;
+                              targetOfficeName = primary.name;
+                              targetRadius = primary.radius;
+                            }
+                          } else {
+                            setSelectedOfficeDistances([]);
+                            const savedDist = (row.log.locationIn as any)?.distance;
+                            if (typeof savedDist === "number" && !isNaN(savedDist) && isFinite(savedDist)) {
+                              dist = savedDist;
                             }
                           }
+
                           setSelectedDist(dist);
                           setSelectedOfficeName(targetOfficeName);
                           setSelectedOfficeRadius(targetRadius);
                         } else {
+                          setSelectedOfficeDistances([]);
                           setSelectedDist(null);
                           setSelectedOfficeName(null);
                           setSelectedOfficeRadius(100);
@@ -1487,7 +1567,72 @@ export default function AdminDashboardPage() {
                             </div>
                           </div>
                         )}
-                        {selectedDist !== null && (
+                        {selectedOfficeDistances.length > 0 ? (
+                          <div className="space-y-2 pt-2 border-t border-[var(--ab-border)]">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">
+                                Jarak Lokasi ke Kantor
+                              </span>
+                              <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded border ${selectedOfficeDistances.some((o) => o.isInside) ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800" : "bg-[var(--ab-bg-surface)] text-[var(--ab-text-dim)] border-[var(--ab-border)]"}`}>
+                                {selectedOfficeDistances.some((o) => o.isInside) ? "✓ Dalam Radius" : "✕ Luar Radius"}
+                              </span>
+                            </div>
+
+                            <div className="space-y-2">
+                              {selectedOfficeDistances.map((off) => {
+                                return (
+                                  <div
+                                    key={off.id}
+                                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${
+                                      off.isAssigned
+                                        ? "bg-[var(--ab-bg-surface)] border-[var(--ab-primary)]/50 shadow-sm"
+                                        : "bg-[var(--ab-bg-surface)]/60 border-[var(--ab-border)]"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${off.isAssigned ? "bg-[var(--ab-primary)]/10 text-[var(--ab-primary)]" : "bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)]"}`}>
+                                        <Building2 size={13} />
+                                      </div>
+                                      <div className="flex flex-col min-w-0">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="text-xs font-black text-[var(--ab-text-main)] truncate">{off.name}</span>
+                                          {off.isAssigned ? (
+                                            <span className="bg-[var(--ab-primary)]/15 text-[var(--ab-primary)] border border-[var(--ab-primary)]/30 px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider">
+                                              Kantor Divisi (Utama)
+                                            </span>
+                                          ) : (
+                                            <span className="bg-[var(--ab-bg-main)] text-[var(--ab-text-dim)] border border-[var(--ab-border)] px-1.5 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider">
+                                              Kantor Lain
+                                            </span>
+                                          )}
+                                        </div>
+                                        <span className="text-[9px] text-[var(--ab-text-dim)] font-medium">
+                                          Radius Maks: {off.radius}m
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="text-right shrink-0 ml-2">
+                                      <span
+                                        className={`text-xs font-black tabular-nums block ${
+                                          off.isInside ? "text-emerald-500" : off.isAssigned ? "text-rose-500" : "text-[var(--ab-text-dim)]"
+                                        }`}
+                                      >
+                                        {off.distance} meter
+                                      </span>
+                                      <span
+                                        className={`text-[8px] font-black uppercase tracking-wider ${
+                                          off.isInside ? "text-emerald-500" : "text-[var(--ab-text-dim)]"
+                                        }`}
+                                      >
+                                        {off.isInside ? "Dalam Radius" : "Di Luar Radius"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : selectedDist !== null && (
                           <div className="flex justify-between items-center">
                             <span className="text-[10px] uppercase font-black tracking-widest text-[var(--ab-text-dim)]">
                               Jarak ke {selectedOfficeName ? selectedOfficeName : "Kantor"}
